@@ -1,0 +1,64 @@
+﻿{# ===== cart_area.html: ตะกร้า (partial ใช้ซ้ำ หน้าเต็ม + AJAX swap) — stepper ±, ลบ, สรุปยอด → checkout ===== #}
+{% load static %}
+{# Partial: พื้นที่ตะกร้าทั้งบล็อก (ใช้ทั้งหน้าเต็มและ AJAX swap) #}
+{% if items %}
+<div class="row g-5">
+    <div class="col-lg-8">
+        <div class="card panel-card--flush">
+            <div class="table-responsive">
+                <table class="table align-middle text-center mb-0 table-cardify">
+                    <thead>
+                        <tr><th>สินค้า</th><th>ราคา</th><th>จำนวน</th><th>รวม</th><th></th></tr>
+                    </thead>
+                    <tbody data-motion="stagger" class="in">
+                        {% for item in items %}
+                        <tr data-row="{{ item.product.id }}">
+                            <td class="text-start" data-label="สินค้า">
+                                <img src="{% static item.product.image %}" alt="{{ item.product.name }}" class="me-3 cart-thumb">
+                                <span class="fw-medium">{{ item.product.name }}</span>
+                            </td>
+                            <td data-label="ราคา">฿ {{ item.product.price|floatformat:2 }}</td>
+                            <td data-label="จำนวน">
+                                <div class="d-inline-flex align-items-center gap-1 cart-stepper" data-id="{{ item.product.id }}" data-max="{{ item.product.stock }}">
+                                    <button type="button" class="btn btn-sm btn-light cart-step" data-delta="-1" aria-label="ลดจำนวน" {% if item.quantity <= 1 %}disabled{% endif %}><i class="bi bi-dash-lg"></i></button>
+                                    <input type="number" name="quantity" value="{{ item.quantity }}" min="1" max="{{ item.product.stock }}"
+                                           class="form-control quantity-control quantity-control--small cart-qty" aria-label="จำนวน">
+                                    <button type="button" class="btn btn-sm btn-light cart-step" data-delta="1" aria-label="เพิ่มจำนวน" {% if item.quantity >= item.product.stock %}disabled{% endif %}><i class="bi bi-plus-lg"></i></button>
+                                </div>
+                            </td>
+                            <td class="fw-bold" data-label="รวม">฿ {{ item.line_total|floatformat:2 }}</td>
+                            <td class="actions-cell" data-label="ลบ">
+                                <a href="{% url 'cart_remove' item.product.id %}" class="btn btn-sm btn-light btn-icon-danger cart-remove" data-id="{{ item.product.id }}" aria-label="ลบสินค้า"><i class="bi bi-trash"></i></a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <a href="{% url 'product' %}" class="link-arrow mt-4 d-inline-block"><i class="bi bi-arrow-left"></i> เลือกสินค้าต่อ</a>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card panel-card--wide cart-summary">
+            <h5 class="mb-4">สรุปยอด</h5>
+            <div class="d-flex justify-content-between mb-2">
+                <span class="text-muted-apple">{{ items|length }} รายการในตะกร้า</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2">
+                <span class="text-muted-apple">ยอดรวมทั้งหมด</span>
+                <span class="total-price">฿ {{ total|floatformat:2 }}</span>
+            </div>
+            <hr class="apple-divider my-3">
+            <a href="{% url 'checkout' %}" class="btn btn-primary btn-lg w-100 mb-2"><i class="bi bi-bag-check me-1"></i> ดำเนินการสั่งซื้อ</a>
+        </div>
+    </div>
+</div>
+{% else %}
+<div class="empty-state">
+    <i class="bi bi-bag"></i>
+    <h3 class="mt-4">ตะกร้าของคุณว่างเปล่า</h3>
+    <p class="lead-apple mb-4">เลือกสินค้าที่คุณชื่นชอบแล้วใส่ตะกร้าได้เลย</p>
+    <a href="{% url 'product' %}" class="btn btn-primary btn-lg">เลือกซื้อสินค้า</a>
+</div>
+{% endif %}

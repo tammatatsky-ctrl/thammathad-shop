@@ -1,0 +1,87 @@
+﻿{# ===== customer_detail.html: รายละเอียดลูกค้าสำหรับพนักงาน — ข้อมูลบัญชี + ออเดอร์ทั้งหมดของลูกค้า ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="col-lg-9 mx-auto">
+            <nav class="breadcrumbs mb-4" aria-label="Breadcrumb" data-motion="reveal">
+                <a href="{% url 'customer_list' %}">ลูกค้า</a>
+                <i class="bi bi-chevron-right"></i>
+                <span class="breadcrumbs-here">{{ customer.get_full_name|default:customer.username }}</span>
+            </nav>
+
+            <div class="card panel-card--wide mb-4" data-motion="reveal">
+                <h4 class="mb-3"><i class="bi bi-person-circle me-2"></i>{{ customer.get_full_name|default:customer.username }}</h4>
+                <div class="row g-3 text-start">
+                    <div class="col-md-6">
+                        <p class="text-muted-apple small mb-1">อีเมล</p>
+                        <p class="fw-medium mb-3">{{ customer.username }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="text-muted-apple small mb-1">เบอร์โทรศัพท์</p>
+                        <p class="fw-medium mb-3">{{ profile.phone|default:"—" }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="text-muted-apple small mb-1">สมัครเมื่อ</p>
+                        <p class="fw-medium mb-3">{{ customer.date_joined|date:"d/m/Y H:i" }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="text-muted-apple small mb-1">ที่อยู่</p>
+                        <p class="fw-medium mb-3">{{ profile.address|default:"—" }}</p>
+                    </div>
+                </div>
+            </div>
+
+            {% if addresses %}
+            <div class="card panel-card--wide mb-4" data-motion="reveal">
+                <h6 class="mb-3"><i class="bi bi-geo-alt me-2"></i>ที่อยู่จัดส่ง ({{ addresses|length }} รายการ)</h6>
+                <div class="row g-3">
+                    {% for a in addresses %}
+                    <div class="col-md-6">
+                        <div class="card h-100 p-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <strong>{{ a.label }}</strong>
+                                {% if a.is_default %}<span class="badge bg-primary">ค่าเริ่มต้น</span>{% endif %}
+                            </div>
+                            <p class="small text-muted-apple mb-1">{{ a.receiver_name }} — {{ a.phone }}</p>
+                            <p class="small mb-0">{{ a.detail }} ต.{{ a.subdistrict }} อ.{{ a.district }} จ.{{ a.province }} {{ a.zipcode }}</p>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+
+            <div class="card panel-card--wide" data-motion="reveal">
+                <h6 class="mb-3"><i class="bi bi-receipt me-2"></i>ประวัติสั่งซื้อ ({{ orders|length }} ออเดอร์)</h6>
+                <table class="table table-sm text-center mb-0 table-cardify">
+                    <thead><tr><th>#</th><th>สินค้า</th><th>ยอดรวม</th><th>สถานะ</th><th>วันที่</th></tr></thead>
+                    <tbody>
+                        {% for o in orders %}
+                        <tr>
+                            <td class="fw-bold" data-label="ออเดอร์">
+                                <a href="{% url 'order_detail' o.id %}">#{{ o.id }}</a>
+                            </td>
+                            <td class="text-start" data-label="สินค้า">
+                                {{ o.items.all.0.product.name }}{% if o.items.all|length > 1 %} +{{ o.items.all|length|add:"-1" }}{% endif %}
+                            </td>
+                            <td class="fw-bold" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>
+                            <td data-label="สถานะ">
+                                <span class="badge {% if o.status == 'pending' %}bg-warning{% elif o.status == 'paid' %}badge-success{% elif o.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">
+                                    {{ o.get_status_display }}
+                                </span>
+                            </td>
+                            <td data-label="วันที่">{{ o.created_at|date:"d/m/Y" }}</td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="5" class="text-muted-apple py-3">ยังไม่มีออเดอร์</td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

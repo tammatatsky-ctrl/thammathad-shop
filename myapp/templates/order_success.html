@@ -1,0 +1,140 @@
+﻿{# ===== order_success.html: หน้าหลังสั่งซื้อ (จุดจ่ายเงินของลูกค้า) — ตาม payment_method: COD / bank (เลขบัญชี+copy+แจ้ง 1 คลิก) / promptpay (QR+open app) + สลิป OCR + confetti ===== #}
+{% extends "basetemplate.html" %}
+
+{% block content %}
+<section class="page-section" data-motion="reveal" data-dir="zoom">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-7 text-center">
+                <div class="success-mark">
+                    <i class="bi bi-check-lg"></i>
+                </div>
+                <h1 class="page-title page-title--small mb-3">สั่งซื้อสำเร็จ</h1>
+                <p class="lead-apple mb-4">ขอบคุณคุณ {{ order.customer_name }} สำหรับคำสั่งซื้อ</p>
+
+                <div class="card panel-card--wide mx-auto mb-4 order-number-card">
+                    <p class="text-muted-apple mb-1 small">หมายเลขออเดอร์ของคุณ</p>
+                    <p class="order-number">#{{ order.id }}</p>
+                </div>
+
+                <div class="card panel-card--tight mx-auto text-center mb-4 promptpay-card">
+                    {% if order.payment_method == 'cod' %}
+                    <h6 class="mb-3"><i class="bi bi-truck me-1"></i>เก็บเงินปลายทาง</h6>
+                    <i class="bi bi-cash-coin display-4 text-success d-block my-3"></i>
+                    <p class="mb-2">เตรียมเงินสด ฿ {{ order.total|floatformat:2 }} ให้พนักงานจัดส่ง</p>
+                    <p class="text-muted-apple small">ร้านจะโทรยืนยันออเดอร์ก่อนจัดส่ง</p>
+                    <hr class="apple-divider my-3">
+                    {% elif order.status != 'pending' %}
+                    <h6 class="mb-3"><i class="bi bi-check-circle text-success me-1"></i>ชำระเงินแล้ว</h6>
+                    <p class="text-muted-apple small">ขอบคุณครับ ร้านกำลังดำเนินการจัดส่ง</p>
+                    <hr class="apple-divider my-3">
+                    {% elif order.payment_method == 'bank' %}
+                    <h6 class="mb-3"><i class="bi bi-bank me-1"></i>โอนเข้าบัญชีธนาคาร</h6>
+                    <p class="fw-medium mb-1">ธ.กสิกรไทย — {{ promptpay_display }}</p>
+                    <p class="text-muted-apple small mb-2">ชื่อบัญชี: นายธรรมธัช รูปไธสง · ยอด ฿ {{ order.total|floatformat:2 }}</p>
+                    <div class="d-flex justify-content-center gap-2 mb-3 flex-wrap">
+                        <button type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ promptpay_display }}">
+                            <i class="bi bi-clipboard me-1"></i>คัดลอกเลขบัญชี
+                        </button>
+                        <button type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ order.total|stringformat:'f' }}">
+                            <i class="bi bi-clipboard me-1"></i>คัดลอกยอด
+                        </button>
+                    </div>
+                    <form method="POST" action="{% url 'payment_quick' %}" class="mb-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="order_id" value="{{ order.id }}">
+                        <input type="hidden" name="phone" value="{{ order.phone }}">
+                        <input type="hidden" name="back" value="{% url 'order_success' order.id %}">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-check2-circle me-1"></i> ฉันโอนยอดเต็มแล้ว — แจ้งชำระ 1 คลิก
+                        </button>
+                    </form>
+                    {% else %}
+                        {% if qr %}
+                        <h6 class="mb-3"><i class="bi bi-qr-code me-1"></i>สแกนจ่ายด้วยพร้อมเพย์</h6>
+                        <img src="{{ qr }}" alt="QR พร้อมเพย์" class="promptpay-img mx-auto d-block mb-2">
+                        <p class="text-muted-apple small mb-2">พร้อมเพย์ {{ promptpay_display }} · ยอดชำระ ฿ {{ order.total|floatformat:2 }}</p>
+                        <div class="d-flex justify-content-center gap-2 mb-3 flex-wrap">
+                            <button type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ promptpay_display }}">
+                                <i class="bi bi-clipboard me-1"></i>คัดลอกเลข
+                            </button>
+                            <button type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ order.total|stringformat:'f' }}">
+                                <i class="bi bi-clipboard me-1"></i>คัดลอกยอด
+                            </button>
+                            {% if pp_payload %}
+                            <a class="btn btn-sm btn-light pp-app-btn" href="promptpay://{{ pp_payload }}"
+                               title="ลองเปิดแอปธนาคาร (ขึ้นกับว่าแอปรองรับ)">
+                                <i class="bi bi-phone me-1"></i>เปิดแอป
+                            </a>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    <form method="POST" action="{% url 'payment_quick' %}" class="mb-2">
+                        {% csrf_token %}
+                        <input type="hidden" name="order_id" value="{{ order.id }}">
+                        <input type="hidden" name="phone" value="{{ order.phone }}">
+                        <input type="hidden" name="back" value="{% url 'order_success' order.id %}">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-check2-circle me-1"></i> ฉันโอนยอดเต็มแล้ว — แจ้งชำระ 1 คลิก
+                        </button>
+                    </form>
+                    {% endif %}
+                </div>
+
+                {% if order.payment_method != 'cod' and slip_enabled %}
+                <div class="mx-auto mb-4 promptpay-card">
+                    {% include 'slip_upload.html' %}
+                </div>
+                {% endif %}
+
+                <p class="text-muted-apple mb-5">กรุณาจดหมายเลขนี้ไว้เพื่อติดตามสถานะและแจ้งชำระเงิน</p>
+
+                <div class="card panel-card--tight mx-auto text-start mb-4 order-summary-card">
+                    <h6 class="mb-3"><i class="bi bi-receipt me-2"></i>สรุปคำสั่งซื้อ</h6>
+                    <div data-motion="stagger">
+                        {% for item in order.items.all %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted-apple">{{ item.product.name }} × {{ item.quantity }}</span>
+                            <span>฿ {{ item.price|floatformat:2 }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <hr class="apple-divider my-3">
+                    <div class="d-flex justify-content-between">
+                        <strong>ยอดรวม</strong>
+                        <strong class="total-price">฿ {{ order.total|floatformat:2 }}</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mt-2">
+                        <span class="text-muted-apple small">สถานะ</span>
+                        <span class="badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">{{ order.get_status_display }}</span>
+                    </div>
+                </div>
+
+                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                    <a href="{% url 'order_tracking' %}" class="btn btn-light btn-lg"><i class="bi bi-box-seam me-1"></i> ติดตามสินค้า</a>
+                    <a href="{% url 'product' %}" class="btn btn-light btn-lg">กลับสู่ร้านค้า</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{# confetti — pure feedback ของหน้า success (ไม่ขึ้นกับ Motion toggle) #}
+<script>
+(function () {
+    var colors = ['#0071e3', '#34c759', '#ff9500', '#ff3b30', '#af52de'];
+    for (var i = 0; i < 60; i++) {
+        var c = document.createElement('div');
+        c.style.cssText = 'position:fixed;left:' + (50 + (Math.random()-.5)*15) + '%;top:35%;width:7px;height:11px;background:' + colors[i%colors.length] + ';z-index:9999;pointer-events:none;border-radius:2px;';
+        c.animate([
+            { transform: 'translate(0,0) rotate(0)', opacity: 1 },
+            { transform: 'translate(' + ((Math.random()-.5)*500) + 'px,' + (Math.random()*350+150) + 'px) rotate(' + (Math.random()*720) + 'deg)', opacity: 0 }
+        ], { duration: 1800 + Math.random()*800, easing: 'cubic-bezier(.28,.11,.32,1)' });
+        document.body.appendChild(c);
+        setTimeout((function (el) { return function () { el.remove(); }; })(c), 2700);
+    }
+})();
+</script>
+{% endblock %}

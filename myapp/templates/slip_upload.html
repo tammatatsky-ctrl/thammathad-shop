@@ -1,0 +1,22 @@
+{# ===== slip_upload.html: partial อัปโหลดสลิป OCR (หน้า success/tracking) — แสดงเมื่อ slip_enabled + order ยัง pending + ไม่ใช่ COD; handler #slipForm อยู่ใน motion-core ===== #}
+{% load static %}
+{% if slip_enabled and order.status == 'pending' and order.payment_method != 'cod' %}
+<div class="card panel-card mb-4 slip-card">
+    <h5 class="mb-2"><i class="bi bi-magic me-2 text-primary"></i>ส่งสลิปเร็ว (อ่านอัตโนมัติ)</h5>
+    <p class="text-muted-apple small mb-3">แนบรูปสลิปโอนเงิน ระบบจะอ่านยอด+วันที่และบันทึกให้เอง</p>
+    <form id="slipForm" enctype="multipart/form-data">
+        {% csrf_token %}
+        <input type="hidden" name="order_id" value="{{ order.id }}">
+        <input type="hidden" name="phone" value="{{ order.phone }}">
+        <label class="dropzone d-block text-center" for="slipInput">
+            <i class="bi bi-cloud-arrow-up display-6 d-block mb-2"></i>
+            <span id="slipLabel">คลิกเลือกรูปสลิป (JPG/PNG/WebP ≤5MB)</span>
+            <input type="file" name="slip" id="slipInput" accept=".jpg,.jpeg,.png,.webp" class="d-none" required>
+        </label>
+        <button type="submit" class="btn btn-primary w-100 mt-3" id="slipBtn">
+            <i class="bi bi-stars me-1"></i> ตรวจสลิปอัตโนมัติ
+        </button>
+    </form>
+    <div id="slipResult" class="mt-3"></div>
+</div>
+{% endif %}

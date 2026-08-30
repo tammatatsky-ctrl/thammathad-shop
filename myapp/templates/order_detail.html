@@ -1,0 +1,101 @@
+﻿{# ===== order_detail.html: รายละเอียดออเดอร์ (staff) — ปุ่มเปลี่ยนสถานะเฉพาะขั้นถัดไปตามบันได OrderStatusService (paid ตั้งไม่ได้) + ประวัติแจ้งชำระ ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="col-lg-9 mx-auto">
+            <nav class="breadcrumbs mb-4" aria-label="Breadcrumb" data-motion="reveal">
+                <a href="{% url 'order_manage' %}">จัดการออเดอร์</a>
+                <i class="bi bi-chevron-right"></i>
+                <span class="breadcrumbs-here">ออเดอร์ #{{ order.id }}</span>
+            </nav>
+
+            <div class="card panel-card--wide mb-4" data-motion="reveal">
+                <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
+                    <div>
+                        <h3 class="mb-1">ออเดอร์ #{{ order.id }}</h3>
+                        <p class="text-muted-apple small mb-0">{{ order.customer_name }} — {{ order.created_at|date:"d/m/Y H:i" }}</p>
+                        {% if order.user %}
+                        <small class="text-muted-apple">บัญชี: {{ order.user.username }}</small>
+                        {% endif %}
+                    </div>
+                    <span class="badge status-badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %} fs-6">
+                        {{ order.get_status_display }}
+                    </span>
+                </div>
+
+                {% if allowed_statuses %}
+                <form method="POST" action="{% url 'order_status' order.id %}" class="mb-4">
+                    {% csrf_token %}
+                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                        <label class="form-label fw-bold mb-0 me-2">เปลี่ยนสถานะ:</label>
+                        <select name="status" class="form-select form-select-sm" style="width:auto">
+                            {% for val, label in allowed_statuses %}
+                            <option value="{{ val }}">{{ label }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-primary"><i class="bi bi-check-circle me-1"></i>อัปเดต</button>
+                    </div>
+                </form>
+                {% else %}
+                <div class="mb-4">
+                    {% if order.status == 'pending' %}
+                    <p class="text-muted-apple small mb-0"><i class="bi bi-info-circle me-1"></i>ขั้นถัดไป "ชำระแล้ว" ขึ้นอัตโนมัติเมื่อลูกค้าจ่ายเงินครบยอด</p>
+                    {% else %}
+                    <p class="text-muted-apple small mb-0"><i class="bi bi-check2-all me-1"></i>สถานะถึงขั้นสุดท้ายแล้ว ไม่ต้องเลื่อนต่อ</p>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                <div class="mb-4">
+                    <p class="text-muted-apple small mb-2">วิธีชำระ: <span class="badge badge-light border">{{ order.get_payment_method_display }}</span></p>
+                </div>
+
+                <h6 class="mb-3"><i class="bi bi-receipt me-2"></i>รายการสินค้า</h6>
+                {% for item in items %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span class="text-muted-apple">{{ item.product.name }} × {{ item.quantity }}</span>
+                    <span>฿ {{ item.price|floatformat:2 }}</span>
+                </div>
+                {% endfor %}
+                <hr class="apple-divider my-3">
+                <div class="d-flex justify-content-between">
+                    <strong>ยอดรวม</strong>
+                    <strong class="summary-total">฿ {{ order.total|floatformat:2 }}</strong>
+                </div>
+
+                <hr class="apple-divider my-4">
+                <h6 class="mb-3"><i class="bi bi-geo-alt me-2"></i>ที่อยู่จัดส่ง</h6>
+                <p class="text-muted-apple small mb-0">{{ order.address }}</p>
+                <p class="text-muted-apple small"><i class="bi bi-phone me-1"></i>{{ order.phone }}</p>
+            </div>
+
+            {% if payments %}
+            <div class="card panel-card--wide mb-4" data-motion="reveal">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="mb-0"><i class="bi bi-cash-stack me-2"></i>ประวัติการชำระ</h6>
+                    <span class="badge {% if remaining > 0 %}bg-warning{% else %}badge-success{% endif %}">
+                        {% if remaining > 0 %}คงเหลือ ฿ {{ remaining|floatformat:2 }}{% else %}ชำระครบแล้ว{% endif %}
+                    </span>
+                </div>
+                <table class="table table-sm text-center mb-0 table-cardify">
+                    <thead><tr><th>วันที่บันทึก</th><th>ยอด</th><th>วันที่โอน</th><th>หมายเหตุ</th></tr></thead>
+                    <tbody>
+                        {% for p in payments %}
+                        <tr>
+                            <td data-label="บันทึก">{{ p.created_at|date:"d/m H:i" }}</td>
+                            <td class="fw-bold" data-label="ยอด">฿ {{ p.amount|floatformat:2 }}</td>
+                            <td data-label="โอน">{{ p.transfer_date|date:"d/m/Y"|default:"—" }}</td>
+                            <td class="text-start" data-label="หมายเหตุ"><small>{{ p.note|default:"—" }}</small></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

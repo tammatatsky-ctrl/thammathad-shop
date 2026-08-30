@@ -1,0 +1,285 @@
+﻿{# ===== employee_list.html: จัดการพนักงาน — live search (AJAX fetch + ตัวกรอง + sort) · ตารางอยู่ใน employee_rows.html · เพิ่ม/ส่งออก CSV ===== #}
+{% extends 'adminbase.html' %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-5" data-motion="reveal">
+            <div>
+                <p class="eyebrow mb-2"><i class="bi bi-person-gear"></i> ระบบจัดการ</p>
+                <h1 class="page-title mb-0">พนักงาน</h1>
+            </div>
+            {% if user.is_staff %}
+                <div class="d-flex gap-2">
+                    <a href="{% url 'employee_export' %}" class="btn btn-light lens-btn"><i class="bi bi-filetype-csv me-1"></i> ส่งออก CSV</a>
+                    <a href="{% url 'employee_create' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> เพิ่มพนักงานใหม่</a>
+                </div>
+            {% else %}
+                <a href="{% url 'staff_login' %}?next={{ request.path|urlencode }}" class="btn btn-outline-primary"><i class="bi bi-shield-lock me-1"></i> เข้าสู่ระบบเพื่อจัดการ</a>
+            {% endif %}
+        </div>
+
+        {# ตัวกรองส่งผ่าน GET แบบ realtime → view รับแล้ว render employee_rows.html กลับมา (สล็อต count/rows/pagination) #}
+        <div class="card panel-card--tight mb-4" data-motion="reveal" data-dir="zoom">
+            <form method="GET" id="empSearchForm" class="emp-search-form">
+                <div class="row g-2 align-items-center">
+                    <div class="col-lg-5">
+                        <div class="input-group emp-search-group">
+                            <span class="input-group-text emp-search-icon">
+                                <i class="bi bi-search"></i>
+                                <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                            </span>
+                            <input type="text" name="q" value="{{ query }}" class="form-control" id="empSearchInput" placeholder="ค้นหาจาก รหัสพนักงาน / ชื่อ / แผนก ..." autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="department" class="form-select" aria-label="กรองตามแผนก">
+                            <option value="">ทุกแผนก</option>
+                            {% for dep in departments %}
+                                <option value="{{ dep }}" {% if department == dep %}selected{% endif %}>{{ dep }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="gender" class="form-select" aria-label="กรองตามเพศ">
+                            <option value="">ทุกเพศ</option>
+                            <option value="M" {% if gender == 'M' %}selected{% endif %}>ชาย</option>
+                            <option value="F" {% if gender == 'F' %}selected{% endif %}>หญิง</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="status" class="form-select" aria-label="กรองตามสถานะ">
+                            <option value="">ทุกสถานะ</option>
+                            <option value="active" {% if status == 'active' %}selected{% endif %}>ทำงานอยู่</option>
+                            <option value="leave" {% if status == 'leave' %}selected{% endif %}>ลาพัก</option>
+                            <option value="resigned" {% if status == 'resigned' %}selected{% endif %}>ลาออกแล้ว</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="sort" class="form-select" aria-label="เรียงลำดับ">
+                            <option value="newest" {% if sort == 'newest' %}selected{% endif %}>เพิ่มล่าสุด</option>
+                            <option value="name" {% if sort == 'name' %}selected{% endif %}>เรียงตามชื่อ</option>
+                            <option value="salary_desc" {% if sort == 'salary_desc' %}selected{% endif %}>เงินเดือนสูง→ต่ำ</option>
+                            <option value="salary_asc" {% if sort == 'salary_asc' %}selected{% endif %}>เงินเดือนต่ำ→สูง</option>
+                            <option value="tenure" {% if sort == 'tenure' %}selected{% endif %}>อายุงานมากสุด</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-1 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-fill emp-submit">ค้นหา</button>
+                        <button type="button" id="empClear" class="btn btn-light emp-clear d-none" title="ล้างตัวกรองทั้งหมด"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                </div>
+                <div class="form-hint mt-2 emp-live-hint"><i class="bi bi-lightning-charge"></i> ผลค้นหาอัปเดตทันทีขณะพิมพ์</div>
+            </form>
+        </div>
+
+        <p class="text-muted-apple mb-4" id="empCountWrap">
+            {% if has_filter %}
+                พบ <strong class="result-count">{{ total }}</strong> คน{% if query %} ที่ตรงกับ "{{ query }}"{% endif %}
+            {% else %}
+                พนักงานทั้งหมด <strong class="result-count">{{ total }}</strong> คน
+            {% endif %}
+        </p>
+
+        <div class="card panel-card--flush" data-motion="reveal" data-dir="zoom">
+            <div class="table-responsive">
+                <table class="table align-middle text-center mb-0 table-cardify">
+                    <thead>
+                        <tr>
+                            <th>รูป</th><th>รหัสพนักงาน</th><th>ชื่อ-นามสกุล</th><th>เพศ</th>
+                            <th>แผนก</th><th>เบอร์โทร</th><th>อีเมล</th><th>สถานะ</th><th>เงินเดือน</th><th>วันเริ่มงาน</th>
+                            {% if user.is_staff %}<th>จัดการ</th>{% endif %}
+                        </tr>
+                    </thead>
+                    <tbody data-motion="stagger" id="empTableBody" class="live-fade">
+                        {% for employee in page_obj %}
+                        <tr>
+                            <td data-label="รูป">
+                                {% if employee.avatar %}
+                                    <img src="{{ employee.avatar.url }}" alt="{{ employee.name }}" width="40" height="40" class="rounded-circle emp-avatar table-avatar">
+                                {% else %}
+                                    <div class="rounded-circle d-inline-flex align-items-center justify-content-center emp-avatar table-avatar placeholder-avatar"><i class="bi bi-person"></i></div>
+                                {% endif %}
+                            </td>
+                            <td class="fw-bold employee-code" data-label="รหัส">{{ employee.emp_code }}</td>
+                            <td class="fw-medium text-start" data-label="ชื่อ-นามสกุล">{{ employee.name }}</td>
+                            <td class="text-muted-apple" data-label="เพศ">{{ employee.get_gender_display }}</td>
+                            <td data-label="แผนก"><span class="badge bg-info-subtle department-badge">{{ employee.department }}</span></td>
+                            <td class="text-muted-apple small" data-label="เบอร์โทร">{{ employee.phone|default:"—" }}</td>
+                            <td class="text-muted-apple small" data-label="อีเมล">{{ employee.email|default:"—" }}</td>
+                            <td data-label="สถานะ"><span class="emp-status status-{{ employee.status }}">{{ employee.get_status_display }}</span></td>
+                            <td class="fw-bold" data-label="เงินเดือน">฿ {{ employee.salary|floatformat:2 }}</td>
+                            <td class="text-muted-apple small" data-label="วันเริ่มงาน">{{ employee.hire_date|date:"d/m/Y" }}</td>
+                            {% if user.is_staff %}
+                                <td class="actions-cell" data-label="จัดการ">
+                                    <a href="{% url 'employee_update' employee.pk %}" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil me-1"></i> แก้ไข</a>
+                                    <form method="POST" action="{% url 'employee_delete' employee.pk %}" class="d-inline" data-confirm="ต้องการลบข้อมูลพนักงานคนนี้ใช่หรือไม่ การลบไม่สามารถย้อนกลับได้">
+                                        {% csrf_token %}
+                                        <template class="confirm-details">
+                                            <div class="gc-row"><span class="gc-label">รหัสพนักงาน</span><span class="gc-value">{{ employee.emp_code }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">ชื่อ-นามสกุล</span><span class="gc-value">{{ employee.name }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">แผนก</span><span class="gc-value">{{ employee.department }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">เบอร์โทร</span><span class="gc-value">{{ employee.phone|default:"—" }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">อีเมล</span><span class="gc-value">{{ employee.email|default:"—" }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">สถานะ</span><span class="gc-value">{{ employee.get_status_display }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">เงินเดือน</span><span class="gc-value">฿ {{ employee.salary|floatformat:2 }}</span></div>
+                                            <div class="gc-row"><span class="gc-label">วันที่เริ่มงาน</span><span class="gc-value">{{ employee.hire_date|date:"d/m/Y" }}</span></div>
+                                        </template>
+                                        <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i> ลบ</button>
+                                    </form>
+                                </td>
+                            {% endif %}
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="{% if user.is_staff %}11{% else %}10{% endif %}" class="text-center py-5 text-muted-apple">
+                            <i class="bi bi-inbox empty-state-icon"></i>
+                            <h5 class="mt-3">{% if has_filter %}ไม่พบพนักงานที่ตรงกับการค้นหาหรือตัวกรอง{% else %}ยังไม่มีข้อมูลพนักงานในระบบ{% endif %}</h5>
+                        </td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="empPagination">
+            {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="mt-5 d-flex justify-content-between align-items-center flex-wrap gap-2" data-motion="reveal">
+                <span class="text-muted-apple small">หน้า {{ page_obj.number }} จาก {{ page_obj.paginator.num_pages }}</span>
+                <ul class="pagination mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if department %}&department={{ department|urlencode }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}"><i class="bi bi-chevron-left"></i></a></li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if num == page_obj.number %}
+                            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                        {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ num }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if department %}&department={{ department|urlencode }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}">{{ num }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if department %}&department={{ department|urlencode }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}"><i class="bi bi-chevron-right"></i></a></li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<style>
+.emp-search-form .input-group-text { border-radius: 14px 0 0 14px; }
+.emp-search-form + * table { min-width: 0; }
+#empTableBody, .table-responsive table { min-width: 1120px; }
+.table-responsive { scrollbar-width: none; -ms-overflow-style: none; }
+.table-responsive::-webkit-scrollbar { display: none; }
+.emp-search-icon { gap: 6px; min-width: 46px; justify-content: center; }
+.emp-search-icon .spinner-border { position: absolute; }
+.emp-search-form.is-searching .bi-search { opacity: .25; }
+.emp-search-form.is-searching .spinner-border { display: inline-flex !important; color: var(--apple-blue); }
+/* โหมด JS: ซ่อนปุ่มค้นหา (ไม่ต้องกด พิมแล้วได้เลย) ขยายปุ่มล้างเต็ม */
+.emp-search-form.js-live .emp-submit { display: none; }
+.emp-search-form.js-live .emp-clear { display: inline-flex !important; align-items: center; justify-content: center; flex: 1; }
+.emp-live-hint { opacity: .85; }
+.table-cardify tr { animation: rowIn .45s var(--ease-apple) backwards; }
+.table-cardify tr:nth-child(1) { animation-delay: .02s; } .table-cardify tr:nth-child(2) { animation-delay: .07s; }
+.table-cardify tr:nth-child(3) { animation-delay: .12s; } .table-cardify tr:nth-child(4) { animation-delay: .17s; }
+.table-cardify tr:nth-child(5) { animation-delay: .22s; }
+@keyframes rowIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+.emp-avatar { transition: transform .35s cubic-bezier(.28,.11,.32,1); }
+.table-cardify tr:hover .emp-avatar { transform: scale(1.12); }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('empSearchForm');
+    if (!form || !window.fetch) return;
+    form.classList.add('js-live');
+
+    var input = document.getElementById('empSearchInput');
+    var selects = form.querySelectorAll('select[name]');
+    var clearBtn = document.getElementById('empClear');
+    var tbody = document.getElementById('empTableBody');
+    var countWrap = document.getElementById('empCountWrap');
+    var pagWrap = document.getElementById('empPagination');
+    var timer = null, seq = 0;
+
+    function currentQS(page) {
+        var p = new URLSearchParams();
+        if (input.value.trim()) p.set('q', input.value.trim());
+        selects.forEach(function (s) {
+            var v = s.value;
+            if (!v) return;
+            if (s.name === 'sort' && v === 'newest') return;
+            p.set(s.name, v);
+        });
+        if (page && page > 1) p.set('page', page);
+        var qs = p.toString();
+        return qs;
+    }
+    function run(page) {
+        var my = ++seq;
+        var qs = currentQS(page);
+        form.classList.add('is-searching');
+        tbody.classList.add('searching');
+        fetch(location.pathname + (qs ? '?' + qs : ''), { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error(r.status);
+                return r.text();
+            })
+            .then(function (html) {
+                if (my !== seq) return; /* response เก่า ไม่เอา */
+                var tpl = document.createElement('template');
+                tpl.innerHTML = html;
+                var rows = tpl.content.querySelector('[data-slot="rows"]');
+                var count = tpl.content.querySelector('[data-slot="count"]');
+                var pag = tpl.content.querySelector('[data-slot="pagination"]');
+                if (rows) tbody.innerHTML = rows.innerHTML;
+                if (count) countWrap.innerHTML = count.innerHTML;
+                if (pag) pagWrap.innerHTML = pag.outerHTML;
+                else pagWrap.innerHTML = '';
+                history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+                form.classList.remove('is-searching');
+                tbody.classList.remove('searching');
+                toggleClear();
+            })
+            .catch(function () { form.classList.remove('is-searching'); tbody.classList.remove('searching'); });
+    }
+    function toggleClear() {
+        var active = input.value.trim() || form.querySelector('[name=department]').value ||
+            form.querySelector('[name=gender]').value || form.querySelector('[name=status]').value ||
+            form.querySelector('[name=sort]').value !== 'newest';
+        clearBtn.classList.toggle('d-none', !active);
+    }
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { run(1); }, 250);
+    });
+    selects.forEach(function (s) { s.addEventListener('change', function () { run(1); }); });
+    pagWrap.addEventListener('click', function (e) {
+        var a = e.target.closest ? e.target.closest('a.page-link') : null;
+        if (!a || a.parentElement.classList.contains('disabled')) return;
+        e.preventDefault();
+        var page = new URL(a.getAttribute('href'), location.href).searchParams.get('page');
+        run(parseInt(page || '1', 10));
+        var card = tbody.closest('.card');
+        if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' });
+    });
+    clearBtn.addEventListener('click', function () {
+        input.value = '';
+        selects.forEach(function (s) { s.value = s.name === 'sort' ? 'newest' : ''; });
+        run(1);
+        input.focus();
+    });
+    toggleClear();
+})();
+</script>
+{% endblock %}

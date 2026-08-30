@@ -1,0 +1,261 @@
+﻿{# ===== checkout.html: หน้าสั่งซื้อ — เลือกที่อยู่จากสมุด (saved-addr chip ไป fill ฟอร์ม) + cascade อำเภอ/ตำบล · วิธีจ่าย (PromptPay/bank/COD) · POST = สร้าง Order+หักสต็อกใน transaction ===== #}
+{% extends "basetemplate.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <nav class="breadcrumbs mb-4" aria-label="Breadcrumb">
+                    <a href="{% url 'index' %}">หน้าแรก</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <a href="{% url 'cart' %}">ตะกร้า</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <span class="breadcrumbs-here">สั่งซื้อ</span>
+                </nav>
+                <p class="eyebrow mb-2"><i class="bi bi-bag-check"></i> เช็คเอาท์</p>
+                <div class="d-flex justify-content-between align-items-end flex-wrap gap-2 mb-1">
+                    <h1 class="page-title" data-motion="reveal">ดำเนินการสั่งซื้อ</h1>
+                    {% if not user.is_authenticated %}
+                    <a href="{% url 'account_login' %}?next={{ request.path|urlencode }}" class="small link-arrow">
+                        <i class="bi bi-person"></i> มีบัญชี? เข้าสู่ระบบเพื่อกรอกอัตโนมัติ</a>
+                    {% else %}
+                    <span class="text-muted-apple small"><i class="bi bi-person-check me-1"></i>{{ user.get_full_name|default:user.username }}</span>
+                    {% endif %}
+                </div>
+
+                {% if items %}
+                <div class="row g-5">
+                    <div class="col-lg-7" data-motion="reveal" data-dir="left">
+                        <div class="card panel-card">
+                            <h4 class="mb-4"><i class="bi bi-geo-alt me-2"></i>ข้อมูลการจัดส่ง</h4>
+                            <form method="POST" id="checkoutForm">
+                                {% csrf_token %}
+                                <input type="hidden" name="address_id" id="addressId" value="">
+
+                                {% if saved_addresses %}
+                                <div class="saved-address-block mb-4">
+                                    <label class="form-label"><i class="bi bi-journal-bookmark me-1"></i>เลือกที่อยู่จัดส่งจากสมุดที่อยู่</label>
+                                    <div class="saved-addr-list">
+                                        {% for a in saved_addresses %}
+                                        <button type="button"
+                                                class="saved-addr addr-chip {% if a.is_default %}is-default{% endif %}"
+                                                data-id="{{ a.id }}"
+                                                data-name="{{ a.receiver_name }}"
+                                                data-phone="{{ a.phone }}"
+                                                data-detail="{{ a.detail }}"
+                                                data-province="{{ a.province }}"
+                                                data-district="{{ a.district }}"
+                                                data-subdistrict="{{ a.subdistrict }}"
+                                                data-zipcode="{{ a.zipcode }}">
+                                            <span class="sa-radio" aria-hidden="true"></span>
+                                            <span class="sa-body">
+                                                <span class="sa-head">{{ a.label }}{% if a.is_default %} <span class="badge badge-success">ค่าเริ่มต้น</span>{% endif %}
+                                                    <strong class="ms-1">{{ a.receiver_name }}</strong> · {{ a.phone }}</span>
+                                                <small class="text-muted-apple">{{ a.detail }} {{ a.subdistrict }} {{ a.district }} {{ a.province }} {{ a.zipcode }}</small>
+                                            </span>
+                                            <i class="bi bi-pencil-fill sa-edit" title="ใช้และแก้ไขภายหลังได้ในหน้าบัญชี"></i>
+                                        </button>
+                                        {% endfor %}
+                                        <button type="button" class="saved-addr addr-chip-manual">
+                                            <span class="sa-radio"></span>
+                                            <span class="sa-body"><strong><i class="bi bi-plus-circle me-1"></i>กรอกที่อยู่ใหม่</strong></span>
+                                        </button>
+                                    </div>
+                                </div>
+                                {% endif %}
+
+                                <div class="mb-4">
+                                    <label class="form-label">ชื่อผู้รับ</label>
+                                    <input type="text" name="customer_name" id="fName" class="form-control" placeholder="ชื่อ-นามสกุล" required
+                                           {% if form_name %}value="{{ form_name }}"{% elif prefill %}value="{{ prefill.name }}"{% endif %}>
+                                </div>
+                                <div class="mb-4">
+                                    <label class="form-label">เบอร์โทรศัพท์</label>
+                                    <input type="tel" name="phone" id="fPhone" class="form-control" placeholder="เช่น 062-287-4291" required
+                                           pattern="^0\d{8,9}$" title="เบอร์ไทย 0XXXXXXXXX (9-10 หลัก)" inputmode="numeric"
+                                           {% if form_phone %}value="{{ form_phone }}"{% elif prefill %}value="{{ prefill.phone }}"{% endif %}>
+                                    <div class="form-hint"><i class="bi bi-info-circle"></i> ใช้ติดต่อและยืนยันตัวตนเวลาติดตามพัสดุ</div>
+                                </div>
+
+                                <h5 class="mt-4 mb-3"><i class="bi bi-geo-alt me-2"></i>ที่อยู่จัดส่ง</h5>
+                                <div class="mb-3">
+                                    <label class="form-label">บ้านเลขที่ / หมู่ / ซอย / ถนน</label>
+                                    <textarea name="detail" id="fDetail" rows="2" class="form-control" required
+                                              placeholder="เช่น 99/9 หมู่ 4 ซ.สุขุมวิท 71">{% if form_detail %}{{ form_detail }}{% elif prefill %}{{ prefill.detail|default:prefill.address }}{% endif %}</textarea>
+                                </div>
+                                <div class="row g-2 mb-2 thai-address-block">
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label">จังหวัด *</label>
+                                        <select name="province" id="selProvince" class="form-select" required data-selected="{% if f_province %}{{ f_province }}{% elif prefill %}{{ prefill.province }}{% endif %}">
+                                            <option value="">— เลือกจังหวัด —</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label">อำเภอ/เขต *</label>
+                                        <select name="district" id="selDistrict" class="form-select" required data-selected="{% if f_district %}{{ f_district }}{% elif prefill %}{{ prefill.district }}{% endif %}" disabled>
+                                            <option value="">— เลือกจังหวัดก่อน —</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label">ตำบล/แขวง *</label>
+                                        <select name="subdistrict" id="selSubdistrict" class="form-select" required data-selected="{% if f_subdistrict %}{{ f_subdistrict }}{% elif prefill %}{{ prefill.subdistrict }}{% endif %}" disabled>
+                                            <option value="">— เลือกอำเภอก่อน —</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6 mb-2">
+                                        <label class="form-label">รหัสไปรษณีย์</label>
+                                        <input type="text" name="zipcode" id="inpZipcode" class="form-control" readonly
+                                               placeholder="อัตโนมัติจากตำบล"
+                                               {% if f_zipcode %}value="{{ f_zipcode }}"{% elif prefill %}value="{{ prefill.zipcode }}"{% endif %}>
+                                    </div>
+                                </div>
+
+                                {# วิธีจ่าย: promptpay → หน้า success ขึ้น QR · bank → เลขบัญชี+ส่งสลิป · cod → จ่ายปลายทาง — route ตามค่า payment_method #}
+                                <h5 class="mt-4 mb-3"><i class="bi bi-wallet2 me-2"></i>เลือกวิธีชำระเงิน</h5>
+                                <div class="pay-methods mb-3">
+                                    <label class="pay-method {% if form_method != 'bank' and form_method != 'cod' %}selected{% endif %}">
+                                        <input type="radio" name="payment_method" value="promptpay"
+                                               {% if form_method != 'bank' and form_method != 'cod' %}checked{% endif %}>
+                                        <i class="bi bi-qr-code"></i>
+                                        <span class="pm-body"><strong>พร้อมเพย์ / QR</strong>
+                                        <small>สแกนจ่ายทันที — ขึ้น QR หลังสั่งซื้อ</small></span>
+                                        <i class="bi bi-check-circle-fill pm-check"></i>
+                                    </label>
+                                    <label class="pay-method {% if form_method == 'bank' %}selected{% endif %}">
+                                        <input type="radio" name="payment_method" value="bank"
+                                               {% if form_method == 'bank' %}checked{% endif %}>
+                                        <i class="bi bi-bank"></i>
+                                        <span class="pm-body"><strong>โอนผ่านธนาคาร</strong>
+                                        <small>โอนแล้วส่งสลิปในหน้าถัดไป</small></span>
+                                        <i class="bi bi-check-circle-fill pm-check"></i>
+                                    </label>
+                                    <label class="pay-method {% if form_method == 'cod' %}selected{% endif %}">
+                                        <input type="radio" name="payment_method" value="cod"
+                                               {% if form_method == 'cod' %}checked{% endif %}>
+                                        <i class="bi bi-truck"></i>
+                                        <span class="pm-body"><strong>เก็บเงินปลายทาง</strong>
+                                        <small>จ่ายเงินสดเมื่อได้รับสินค้า</small></span>
+                                        <i class="bi bi-check-circle-fill pm-check"></i>
+                                    </label>
+                                </div>
+
+                                {% if user.is_authenticated %}
+                                <div class="form-check mb-4">
+                                    <input type="checkbox" class="form-check-input" id="saveInfo" name="save_info" checked>
+                                    <label class="form-check-label small" for="saveInfo">จำชื่อ/เบอร์/ที่อยู่ ไว้สั่งคราวหน้า</label>
+                                </div>
+                                {% endif %}
+
+                                <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-check2-circle me-1"></i> ยืนยันการสั่งซื้อ</button>
+                            </form>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-5" data-motion="reveal" data-dir="right">
+                        <div class="card panel-card--wide">
+                            <h5 class="mb-4"><i class="bi bi-receipt me-2"></i>สรุปคำสั่งซื้อ</h5>
+                            <div data-motion="stagger">
+                                {% for item in items %}
+                                <div class="d-flex justify-content-between mb-3">
+                                    <span class="text-muted-apple">{{ item.product.name }} × {{ item.quantity }}</span>
+                                    <span class="fw-medium">฿ {{ item.line_total|floatformat:2 }}</span>
+                                </div>
+                                {% endfor %}
+                            </div>
+                            <hr class="apple-divider my-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <strong>ยอดรวม</strong>
+                                <strong class="total-price">฿ {{ total|floatformat:2 }}</strong>
+                            </div>
+                            <a href="{% url 'cart' %}" class="btn btn-light w-100 mt-4"><i class="bi bi-arrow-left"></i> แก้ไขตะกร้า</a>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="empty-state" data-motion="reveal" data-dir="zoom">
+                    <i class="bi bi-bag"></i>
+                    <h3 class="mt-4">ตะกร้าของคุณว่างเปล่า</h3>
+                    <a href="{% url 'product' %}" class="btn btn-primary btn-lg mt-3">เลือกซื้อสินค้า</a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/thai-address.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    if (window.ThaiAddress && document.getElementById('selProvince')) {
+        ThaiAddress.init({
+            province: '#selProvince', district: '#selDistrict',
+            subdistrict: '#selSubdistrict', zipcode: '#inpZipcode',
+            dataUrl: '{% static "data/thai-address.json" %}',
+        });
+    }
+    /* saved address cards -> fill form + set address_id */
+    var form = document.getElementById('checkoutForm');
+    if (!form) return;
+    function markActive(chip) {
+        document.querySelectorAll('.saved-addr').forEach(function (c) { c.classList.remove('active'); });
+        if (chip) chip.classList.add('active');
+    }
+    function applyChip(chip, done) {
+        var d = chip.dataset;
+        document.getElementById('addressId').value = d.id;
+        document.getElementById('fName').value = d.name || '';
+        document.getElementById('fPhone').value = d.phone || '';
+        document.getElementById('fDetail').value = d.detail || '';
+        var ps = document.getElementById('selProvince');
+        Array.prototype.forEach.call(ps.options, function (o) {
+            if (o.value === d.province) ps.value = o.value;
+        });
+        ps.dispatchEvent(new Event('change'));
+        setTimeout(function () {
+            var ds = document.getElementById('selDistrict');
+            Array.prototype.forEach.call(ds.options, function (o) {
+                if (o.value === d.district) ds.value = o.value;
+            });
+            ds.dispatchEvent(new Event('change'));
+            setTimeout(function () {
+                var ts = document.getElementById('selSubdistrict');
+                Array.prototype.forEach.call(ts.options, function (o) {
+                    if (o.value === d.subdistrict) ts.value = o.value;
+                });
+                ts.dispatchEvent(new Event('change'));
+                setTimeout(function () {
+                    document.getElementById('inpZipcode').value = d.zipcode || '';
+                    if (done) done();
+                }, 70);
+            }, 70);
+        }, 70);
+    }
+    document.querySelectorAll('.addr-chip').forEach(function (chip) {
+        chip.addEventListener('click', function () {
+            markActive(chip);
+            applyChip(chip);
+        });
+    });
+    /* auto-select ที่อยู่ค่าเริ่มต้นตอนเปิดหน้า */
+    var defChip = document.querySelector('.addr-chip.is-default') ||
+                  document.querySelector('.addr-chip');
+    if (defChip) { markActive(defChip); applyChip(defChip); }
+    var manualBtn = document.querySelector('.addr-chip-manual');
+    if (manualBtn) manualBtn.addEventListener('click', function () {
+        document.getElementById('addressId').value = '';
+        ['fName','fPhone','fDetail'].forEach(function (id) { document.getElementById(id).value = ''; });
+        ['selProvince','selDistrict','selSubdistrict'].forEach(function (id) {
+            var el = document.getElementById(id);
+            el.value = '';
+        });
+        var z = document.getElementById('inpZipcode'); if (z) z.value = '';
+        markActive(manualBtn);
+        document.getElementById('fName').focus();
+    });
+});
+</script>
+{% endblock %}

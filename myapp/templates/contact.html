@@ -1,0 +1,45 @@
+﻿{# ===== contact.html: ติดต่อผู้จัดทำ + แผนที่ ===== #}
+{% extends 'basetemplate.html' %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div data-motion="reveal" class="text-center">
+                    <p class="eyebrow mb-2"><i class="bi bi-telephone"></i> ติดต่อเรา</p>
+                    <h1 class="page-title">ติดต่อสอบถาม</h1>
+                </div>
+
+                <div class="card panel-card--large" data-motion="reveal">
+                    <div data-motion="stagger">
+                        <div class="contact-row d-flex align-items-center gap-3 py-3">
+                            <div class="icon-circle icon-circle--inline"><i class="bi bi-person"></i></div>
+                            <div><p class="text-muted-apple small mb-0">ผู้จัดทำ</p><p class="mb-0 fw-medium">นายธรรมธัช รูปไธสง</p></div>
+                        </div>
+                        <div class="contact-row d-flex align-items-center gap-3 py-3">
+                            <div class="icon-circle icon-circle--inline"><i class="bi bi-envelope"></i></div>
+                            <div><p class="text-muted-apple small mb-0">อีเมล</p><p class="mb-0 fw-medium">671320104@live.kpru.ac.th</p></div>
+                        </div>
+                        <div class="contact-row d-flex align-items-center gap-3 py-3">
+                            <div class="icon-circle icon-circle--inline"><i class="bi bi-phone"></i></div>
+                            <div><p class="text-muted-apple small mb-0">เบอร์โทรศัพท์</p><p class="mb-0 fw-medium">062-287-4291</p></div>
+                        </div>
+                        <div class="contact-row d-flex align-items-center gap-3 py-3">
+                            <div class="icon-circle icon-circle--inline"><i class="bi bi-geo-alt"></i></div>
+                            <div><p class="text-muted-apple small mb-0">ที่อยู่</p><p class="mb-0 fw-medium">สาขาวิทยาการคอมพิวเตอร์ มหาวิทยาลัยราชภัฏกำแพงเพชร</p></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card panel-card--large mt-4 map-card" data-motion="reveal" data-dir="zoom">
+                    <iframe class="map-frame"
+                            src="https://maps.google.com/maps?q=Kamphaeng%20Phet%20Rajabhat%20University&z=15&output=embed"
+                            loading="lazy" allowfullscreen referrerpolicy="no-referrer-when-downgrade"
+                            title="แผนที่ร้าน"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

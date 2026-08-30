@@ -1,0 +1,44 @@
+﻿{# ===== order_manage_rows.html: partial แถวออเดอร์ — สถานะ badge pending/wait/paid/shipped/… ===== #}
+{% load static %}
+<table class="table align-middle text-center mb-0 table-cardify">
+    <thead>
+        <tr><th>#</th><th>ลูกค้า</th><th>เบอร์</th><th>ยอดรวม</th><th>สถานะ</th><th>วันที่</th><th></th></tr>
+    </thead>
+    <tbody data-motion="stagger" class="in">
+        {% for o in orders %}
+        <tr>
+            <td class="fw-bold" data-label="ออเดอร์">#{{ o.id }}</td>
+            <td class="text-start" data-label="ลูกค้า">{{ o.customer_name }}</td>
+            <td data-label="เบอร์">{{ o.phone }}</td>
+            <td class="fw-bold" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>
+            <td data-label="สถานะ">
+                <span class="badge {% if o.status == 'pending' %}bg-warning{% elif o.status == 'paid' %}badge-success{% elif o.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">
+                    {{ o.get_status_display }}
+                </span>
+            </td>
+            <td data-label="วันที่">{{ o.created_at|date:"d/m/Y H:i" }}</td>
+            <td><a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-light"><i class="bi bi-eye"></i></a></td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="7" class="text-muted-apple py-4">ไม่มีออเดอร์</td></tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-3 d-flex justify-content-center">
+    <ul class="pagination">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">&laquo;</a></li>
+        {% endif %}
+        {% for p in page_obj.paginator.page_range %}
+        <li class="page-item {% if p == page_obj.number %}active{% endif %}">
+            <a class="page-link" href="?page={{ p }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}&q={{ query|urlencode }}&status={{ selected_status|urlencode }}">&raquo;</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

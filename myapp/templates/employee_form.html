@@ -1,0 +1,292 @@
+﻿{# ===== employee_form.html: เพิ่ม/แก้ไขพนักงาน — emp_code สร้างอัตโนมัติ (next_code) ถ้ายังไม่มีใน form ===== #}
+{% extends "adminbase.html" %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <p class="eyebrow mb-2"><i class="bi bi-person-gear"></i> ระบบจัดการ</p>
+        <h1 class="page-title page-title--small">
+            {% if employee %}<i class="bi bi-pencil-square"></i> แก้ไขข้อมูลพนักงาน{% else %}<i class="bi bi-stars"></i> เพิ่มข้อมูลพนักงาน{% endif %}
+        </h1>
+
+        {% if form.errors %}
+            <div class="alert alert-danger d-flex align-items-center gap-2 mt-3">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <div>กรุณาตรวจสอบข้อมูลที่ทำเครื่องหมายสีแดงให้ถูกต้อง</div>
+            </div>
+        {% endif %}
+
+        <div class="row g-4 mt-1" data-motion="reveal" data-dir="zoom">
+            <!-- ฟอร์ม -->
+            <div class="col-lg-8">
+                <div class="card panel-card">
+                    <form method="POST" enctype="multipart/form-data" novalidate id="employeeForm">
+                        {% csrf_token %}
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="{{ form.emp_code.id_for_label }}">{{ form.emp_code.label }}</label>
+                                {{ form.emp_code }}
+                                {% if employee %}
+                                    <div class="form-hint"><i class="bi bi-lock"></i> รหัสซ้ำกันไม่ได้ แก้ไขได้เฉพาะรูปแบบ EMP###</div>
+                                {% else %}
+                                    <div class="form-hint"><i class="bi bi-magic"></i> ระบบรันเลขให้อัตโนมัติ — เว้นว่างเพื่อรันเลขเอง หรือแก้ไขได้</div>
+                                {% endif %}
+                                {% for error in form.emp_code.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="{{ form.name.id_for_label }}">{{ form.name.label }}</label>
+                                {{ form.name }}
+                                {% for error in form.name.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="{{ form.gender.id_for_label }}">{{ form.gender.label }}</label>
+                                {{ form.gender }}
+                                {% for error in form.gender.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="{{ form.department.id_for_label }}">{{ form.department.label }}</label>
+                                {{ form.department }}
+                                <datalist id="departmentList">
+                                    <option value="บุคคล"></option><option value="ไอที"></option>
+                                    <option value="การตลาด"></option><option value="การเงิน"></option><option value="ขาย"></option>
+                                </datalist>
+                                {% for error in form.department.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="{{ form.phone.id_for_label }}">{{ form.phone.label }}</label>
+                                {{ form.phone }}
+                                {% for error in form.phone.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label" for="{{ form.email.id_for_label }}">{{ form.email.label }}</label>
+                                {{ form.email }}
+                                {% for error in form.email.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="{{ form.status.id_for_label }}">{{ form.status.label }}</label>
+                                {{ form.status }}
+                                {% for error in form.status.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="{{ form.salary.id_for_label }}">{{ form.salary.label }}</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">฿</span>
+                                    {{ form.salary }}
+                                </div>
+                                <div class="form-hint"><i class="bi bi-cash-coin"></i> พรีวิว: <span id="salaryPreview">0.00</span> บาท</div>
+                                {% for error in form.salary.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="{{ form.hire_date.id_for_label }}">{{ form.hire_date.label }}</label>
+                                {{ form.hire_date }}
+                                {% for error in form.hire_date.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="{{ form.address.id_for_label }}">{{ form.address.label }}</label>
+                            {{ form.address }}
+                            {% for error in form.address.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label"><i class="bi bi-image me-1"></i>{{ form.avatar.label }}</label>
+                            <div class="d-flex align-items-center gap-3 mb-2">
+                                {% if employee and employee.avatar %}
+                                    <img src="{{ employee.avatar.url }}" alt="{{ employee.name }}" class="avatar-preview rounded-circle" id="avatarPreview">
+                                    <small class="text-muted-apple">มีรูปเดิม — เลือกไฟล์ใหม่หากต้องการเปลี่ยน</small>
+                                {% endif %}
+                            </div>
+                            {{ form.avatar }}
+                            <div class="form-hint"><i class="bi bi-info-circle"></i> รองรับ JPG / PNG — พรีวิวจะแสดงทันทีเมื่อเลือกไฟล์</div>
+                            {% for error in form.avatar.errors %}<div class="text-danger small mt-1"><i class="bi bi-exclamation-triangle"></i> {{ error }}</div>{% endfor %}
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                                <i class="bi bi-cloud-arrow-up me-1"></i>
+                                {% if employee %}บันทึกการแก้ไข{% else %}เพิ่มพนักงาน{% endif %}
+                            </button>
+                            <a href="{% url 'employee_list' %}" class="btn btn-light lens-btn">ยกเลิก</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- พรีวิวสด -->
+            <div class="col-lg-4">
+                <div class="emp-aside">
+                    <div class="card panel-card text-center">
+                        <p class="eyebrow mb-3"><i class="bi bi-eye"></i> พรีวิวข้อมูล</p>
+                        <div class="d-flex justify-content-center mb-3" id="pvAvatarWrap">
+                            {% if employee and employee.avatar %}
+                                <img src="{{ employee.avatar.url }}" alt="" class="avatar-xl" id="pvAvatar">
+                            {% else %}
+                                <span class="avatar-initial" id="pvInitial">?</span>
+                            {% endif %}
+                        </div>
+                        <h5 class="mb-1" id="pvName">{{ employee.name|default:"ชื่อ-นามสกุล" }}</h5>
+                        <div class="text-muted-apple small mb-3" id="pvCode">{{ employee.emp_code|default:"EMP###" }}</div>
+                        <div class="text-start">
+                            <div class="emp-preview-row"><span class="emp-preview-label">เพศ</span><span class="emp-preview-value" id="pvGender">{{ employee.get_gender_display|default:"—" }}</span></div>
+                            <div class="emp-preview-row"><span class="emp-preview-label">แผนก</span><span class="emp-preview-value" id="pvDept">{{ employee.department|default:"—" }}</span></div>
+                            <div class="emp-preview-row"><span class="emp-preview-label">เบอร์โทร</span><span class="emp-preview-value" id="pvPhone">{{ employee.phone|default:"—" }}</span></div>
+                            <div class="emp-preview-row"><span class="emp-preview-label">อีเมล</span><span class="emp-preview-value" id="pvEmail">{{ employee.email|default:"—" }}</span></div>
+                            <div class="emp-preview-row"><span class="emp-preview-label">สถานะ</span><span class="emp-preview-value" id="pvStatus">{{ employee.get_status_display|default:"ทำงานอยู่" }}</span></div>
+                            <div class="emp-preview-row"><span class="emp-preview-label">เงินเดือน</span><span class="emp-preview-value" id="pvSalary">{{ employee.salary|floatformat:2|default:"0.00" }}</span></div>
+                            <div class="emp-preview-row"><span class="emp-preview-label">เริ่มงาน</span><span class="emp-preview-value" id="pvDate">{{ employee.hire_date|date:"d/m/Y"|default:"—" }}</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('employeeForm');
+    if (!form) return;
+
+    /* ---- พรีวิวสด ---- */
+    var g = function (id) { return document.getElementById(id); };
+    var pv = {
+        code: g('pvCode'), name: g('pvName'), gender: g('pvGender'),
+        dept: g('pvDept'), salary: g('pvSalary'), date: g('pvDate'),
+        phone: g('pvPhone'), email: g('pvEmail'), status: g('pvStatus'),
+        initial: g('pvInitial'), avatar: g('pvAvatar')
+    };
+    var salaryPreview = g('salaryPreview');
+    function fmtSalary(v) {
+        var n = parseFloat(v);
+        if (!isFinite(n) || n < 0) return '0.00';
+        return n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function bindLive(name, fn) {
+        var el = form.querySelector('[data-live="' + name + '"]');
+        if (!el) return;
+        var evt = (el.tagName === 'SELECT' || el.type === 'date' || el.type === 'file') ? 'change' : 'input';
+        el.addEventListener(evt, fn);
+        fn();
+    }
+    function updateInitial() {
+        if (!pv.initial) return;
+        var v = form.querySelector('[data-live="name"]').value.trim();
+        if (v) { pv.initial.textContent = v.charAt(0); }
+        else { pv.initial.innerHTML = '<i class="bi bi-person-fill"></i>'; }
+    }
+    function updateAvatarFromInput() {
+        var input = g('id_avatar');
+        if (!input || !input.files || !input.files[0]) return;
+        var url = URL.createObjectURL(input.files[0]);
+        if (pv.avatar) { pv.avatar.src = url; }
+        else if (pv.initial) {
+            var img = document.createElement('img');
+            img.id = 'pvAvatar'; img.className = 'avatar-xl'; img.src = url; img.alt = '';
+            pv.initial.parentNode.replaceChild(img, pv.initial);
+            pv.avatar = img; pv.initial = null;
+        }
+        var side = g('avatarPreview');
+        if (side) { side.src = url; }
+        else {
+            var wrap = input.closest('.mb-4').querySelector('.d-flex');
+            if (wrap) {
+                var s = document.createElement('img');
+                s.id = 'avatarPreview'; s.src = url; s.className = 'avatar-preview rounded-circle';
+                s.alt = '';
+                wrap.appendChild(s);
+                var note = wrap.querySelector('small');
+                if (!note) {
+                    note = document.createElement('small');
+                    note.className = 'text-muted-apple';
+                    note.textContent = 'พรีวิวรูปใหม่';
+                    wrap.appendChild(note);
+                }
+            }
+        }
+    }
+    bindLive('code', function () {
+        var v = form.querySelector('[data-live="code"]').value.trim();
+        pv.code.textContent = v || 'EMP###';
+    });
+    bindLive('name', function () {
+        var el = form.querySelector('[data-live="name"]');
+        var v = el.value.trim();
+        pv.name.textContent = v || 'ชื่อ-นามสกุล';
+        updateInitial();
+    });
+    bindLive('gender', function () {
+        var el = form.querySelector('[data-live="gender"]');
+        var txt = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '';
+        pv.gender.textContent = el.value ? txt : '—';
+    });
+    bindLive('department', function () {
+        var v = form.querySelector('[data-live="department"]').value.trim();
+        pv.dept.textContent = v || '—';
+    });
+    bindLive('phone', function () {
+        var v = form.querySelector('[data-live="phone"]').value.trim();
+        pv.phone.textContent = v || '—';
+    });
+    bindLive('email', function () {
+        var v = form.querySelector('[data-live="email"]').value.trim();
+        pv.email.textContent = v || '—';
+    });
+    bindLive('status', function () {
+        var el = form.querySelector('[data-live="status"]');
+        var txt = el.options[el.selectedIndex] ? el.options[el.selectedIndex].text : '';
+        pv.status.textContent = el.value ? txt : 'ทำงานอยู่';
+    });
+    bindLive('salary', function () {
+        var v = fmtSalary(form.querySelector('[data-live="salary"]').value);
+        pv.salary.textContent = v;
+        if (salaryPreview) salaryPreview.textContent = v;
+    });
+    bindLive('hire_date', function () {
+        var v = form.querySelector('[data-live="hire_date"]').value;
+        if (!v) { pv.date.textContent = '—'; return; }
+        var p = v.split('-');
+        pv.date.textContent = p.length === 3 ? p[2] + '/' + p[1] + '/' + p[0] : v;
+    });
+    var avatarInput = g('id_avatar');
+    if (avatarInput) avatarInput.addEventListener('change', updateAvatarFromInput);
+
+    /* ---- มาร์กช่องที่ error เป็นสีแดง + เลื่อนไปช่องแรก ---- */
+    var invalid = [];
+    form.querySelectorAll('.text-danger').forEach(function (err) {
+        var field = err.closest('.mb-3, .mb-4');
+        if (!field) return;
+        var ctrl = field.querySelector('.form-control, .form-select');
+        if (ctrl && !ctrl.disabled) { ctrl.classList.add('is-invalid'); invalid.push(ctrl); }
+    });
+    if (invalid.length) {
+        invalid[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        invalid[0].focus({ preventScroll: true });
+    }
+
+    /* ---- ปุ่มบันทึก: กันกดซ้ำ + สถานะกำลังบันทึก ---- */
+    form.addEventListener('submit', function () {
+        var btn = g('submitBtn');
+        if (btn.classList.contains('btn-loading')) return;
+        btn.classList.add('btn-loading');
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...';
+    });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,136 @@
+/* ===== FX MOD CSS: reveal/stagger/hero-entrance/heading ===== */
+/* ---- reveal on scroll (Apple physics) ---- */
+[data-motion="reveal"] {
+  opacity: 0;
+  transform: translateY(36px);
+  transition:
+    opacity 1s var(--ease-apple),
+    transform 1s var(--ease-apple);
+  will-change: transform, opacity;
+}
+[data-motion="reveal"].in {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+[data-motion="reveal"][data-dir="left"] {
+  transform: translateX(-44px);
+}
+[data-motion="reveal"][data-dir="right"] {
+  transform: translateX(44px);
+}
+[data-motion="reveal"][data-dir="left"].in,
+[data-motion="reveal"][data-dir="right"].in {
+  transform: none;
+}
+[data-motion="reveal"][data-dir="zoom"] {
+  transform: scale(0.92);
+}
+[data-motion="reveal"][data-dir="zoom"].in {
+  transform: scale(1);
+}
+[data-motion="stagger"] > * {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity 0.9s var(--ease-apple),
+    transform 0.9s var(--ease-apple);
+  transition-delay: var(--d, 0s);
+  will-change: transform, opacity;
+}
+[data-motion="stagger"].in > * {
+  opacity: 1;
+  transform: none;
+  will-change: auto;
+}
+/* hero เปิดฉากไล่ชั้นนุ่มๆ + badge เด้งสปริง (เล่นเสมอ — bypass reduce motion) */
+.hero-card > * {
+  opacity: 0;
+  transform: translateY(26px);
+  animation: heroIn 1s var(--ease-apple-out) forwards;
+}
+.hero-card > *:nth-child(1) {
+  animation-delay: 0.08s;
+}
+.hero-card > *:nth-child(2) {
+  animation-delay: 0.18s;
+}
+.hero-card > *:nth-child(3) {
+  animation-delay: 0.3s;
+}
+.hero-card > *:nth-child(4) {
+  animation-delay: 0.42s;
+}
+@keyframes heroIn {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.cart-badge {
+  animation: badgePop 0.55s var(--ease-apple-out) 0.5s backwards;
+}
+@keyframes badgePop {
+  0% {
+    transform: scale(0);
+  }
+  60% {
+    transform: scale(1.3);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+/* ---- เส้นใต้หัวข้อวาดตัวเองเมื่อหน้าโหลด ---- */
+.section-heading,
+.page-title {
+  position: relative;
+  padding-bottom: 14px;
+}
+.section-heading::after,
+.page-title::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 64px;
+  border-radius: 2px;
+  background: linear-gradient(90deg, var(--apple-blue), #64d2ff);
+  transform: scaleX(0);
+  transform-origin: 0 50%;
+  transition: transform 0.9s var(--ease-apple-out) 0.35s;
+}
+body.loaded .section-heading::after,
+body.loaded .page-title::after {
+  transform: scaleX(1);
+}
+/* หัวข้อกึ่งกลาง (text-center ทั้งบนตัวและบน parent): จัดเส้นใต้ให้อยู่กลางเสมอ */
+.text-center .section-heading::after,
+.text-center .page-title::after,
+.section-heading.text-center::after,
+.page-title.text-center::after {
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+}
+html[data-motion="off"] [data-motion="reveal"],
+html[data-motion="off"] [data-motion="stagger"] > * {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+}
+html[data-motion="off"] [data-motion="reveal"].in,
+html[data-motion="off"] [data-motion="stagger"].in > * {
+  will-change: auto;
+}
+html[data-motion="off"] .hero-card > * {
+  opacity: 1 !important;
+  transform: none !important;
+  animation: none !important;
+}
+html[data-motion="off"] .cart-badge {
+  animation: none !important;
+}

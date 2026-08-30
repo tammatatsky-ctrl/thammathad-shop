@@ -1,0 +1,290 @@
+/* ===== FX MOD CSS: glass (เลนส์แก้ว + bgLight) ===== */
+/* ตัวหนังสือบนเลนส์ตามโหมด: สว่าง = เข้มบนขาว, มืด = ขาวบนดำ */
+.liquid-glass .hero-title,
+.liquid-glass .hero-lead,
+.liquid-glass .eyebrow,
+.liquid-glass .hero-actions {
+  position: relative;
+  z-index: 5; /* อยู่เหนือชั้นแสงเมาส์ (::before z4) — ตัวอักษรคมชัดเสมอ */
+}
+.liquid-glass .hero-title,
+.liquid-glass .hero-lead {
+  color: #1d1d1f;
+  text-shadow: none;
+}
+.liquid-glass .eyebrow {
+  color: var(--apple-blue);
+  text-shadow: none;
+}
+html[data-theme="dark"] .liquid-glass .hero-title,
+html[data-theme="dark"] .liquid-glass .hero-lead,
+html[data-theme="dark"] .liquid-glass .eyebrow {
+  color: #f5f5f7;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
+}
+.liquid-glass .btn-primary {
+  box-shadow: 0 10px 24px -8px rgba(0, 40, 120, 0.5);
+}
+/* แสงเมาส์บนพื้นหลังทั้งหน้า: ชั้น fixed ใต้เนื้อหา วิ่งตามเมาส์ทั้งจอ */
+#bgLight {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      340px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(105, 115, 130, calc(var(--bg-spec, 0) * 0.5)),
+      rgba(105, 115, 130, calc(var(--bg-spec, 0) * 0.2)) 40%,
+      transparent 70%
+    ),
+    radial-gradient(
+      780px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(105, 115, 130, calc(var(--bg-bloom, 0) * 0.16)),
+      transparent 70%
+    );
+  mix-blend-mode: multiply;
+}
+html[data-theme="dark"] #bgLight {
+  background:
+    radial-gradient(
+      340px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.3)),
+      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.12)) 40%,
+      transparent 70%
+    ),
+    radial-gradient(
+      780px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(255, 255, 255, calc(var(--bg-bloom, 0) * 0.14)),
+      transparent 70%
+    );
+  mix-blend-mode: screen;
+}
+.liquid-mesh {
+  position: absolute;
+  inset: -15%;
+  z-index: 1;
+  pointer-events: none;
+  /* โหมดสว่าง: ขาวล้วน นิ่ง ไม่มีลาย ไม่ขยับ */
+  background: linear-gradient(180deg, #ffffff 0%, #f7f8fa 55%, #ecedf0 100%);
+}
+/* =========================================
+3. เลนส์แก้ว Liquid Glass (ถอดแบบ iOS 18 Control Center)
+========================================= */
+.liquid-glass {
+  position: relative;
+  z-index: 2;
+  border-radius: 48px;
+
+  /* เนื้อแก้วใสโปร่ง เห็นคลื่นทะลุชัดแบบเลนส์จริง */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.11) 0%,
+    rgba(255, 255, 255, 0.01) 45%,
+    rgba(255, 255, 255, 0.05) 100%
+  ) !important;
+
+  /* เบลอผ่านเลนส์ให้มีมิติความลึก (ตาม HIG materials) */
+  backdrop-filter: blur(8px) saturate(160%) contrast(110%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(160%) contrast(110%) !important;
+
+  /* ขอบบางโทนเข้มบนพื้นขาว (hairline rim) */
+  border: 1px solid rgba(0, 0, 0, 0.1) !important;
+  border-top: 1.5px solid rgba(0, 0, 0, 0.16) !important;
+  border-left: 1.5px solid rgba(0, 0, 0, 0.13) !important;
+
+  /* มิติแสงและเงาสันแก้วแปรผันตามพิกัดเมาส์ (Dynamic Specular Bevel Shadow) */
+  box-shadow:
+    inset var(--hi-offset-x, 0px) var(--hi-offset-y, 1.5px) 2px
+      rgba(255, 255, 255, 0.9),
+    inset var(--shadow-offset-x, 0px) var(--shadow-offset-y, -1.5px) 3px
+      rgba(0, 0, 0, 0.08),
+    inset 10px 0 14px -8px rgba(0, 0, 0, 0.07),
+    inset -10px 0 14px -8px rgba(0, 0, 0, 0.07),
+    inset 0 10px 14px -8px rgba(255, 255, 255, 0.85),
+    inset 0 -12px 16px -10px rgba(0, 0, 0, 0.05),
+    inset 0 -4px 10px -4px rgba(0, 0, 0, 0.1),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.35),
+    var(--cast-x, 0px) var(--cast-y, 24px) 48px -12px
+      rgba(0, 0, 0, calc(0.12 + var(--cast-i, 0) * 0.04)) !important;
+
+  transition: transform 0.3s var(--ease-apple);
+  will-change: transform;
+}
+
+/* Specular Glare Core: แสงทรงกลมสีขาววาวออกจากพิกัดเมาส์ */
+/* แสงสเปกคูลาร์สมจริง: แกนจ้าคม + บลูมฟุ้งนุ่ม ที่ตำแหน่งเมาส์ (clip ตาม border-radius การ์ด) */
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      180px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(105, 115, 130, var(--spec-o, 0)) 0%,
+      rgba(105, 115, 130, calc(var(--spec-o, 0) * 0.4)) 40%,
+      transparent 72%
+    ),
+    radial-gradient(
+      520px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(160, 168, 180, calc(var(--bloom-o, 0) * 0.22)) 0%,
+      rgba(160, 168, 180, calc(var(--bloom-o, 0) * 0.09)) 45%,
+      transparent 68%
+    );
+  mix-blend-mode: multiply;
+}
+
+/* Chromium: ใช้ SVG filter ใน backdrop-filter — คลื่นหลังเลนส์หักเหบิดจริง (Safari/FF ได้ blur 8px ตามฐาน) */
+@supports (backdrop-filter: url(#liquid-distort)) {
+  .liquid-glass {
+    backdrop-filter: url(#liquid-distort) blur(3px) saturate(150%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(160%) contrast(110%) !important;
+  }
+  html[data-theme="dark"] .liquid-glass {
+    backdrop-filter: url(#liquid-distort) blur(3px) saturate(140%) !important;
+    -webkit-backdrop-filter: blur(8px) saturate(150%) contrast(110%) !important;
+  }
+}
+
+/* Prism Rim Sheen: ขอบแก้วหนาแบบ WWDC25 — caustic หมุนตามแหล่งแสง (--ring-angle) */
+.liquid-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 4px;
+  background:
+    /* Chromatic aberration: ขอบแก้วแยก R-lead B-trail ตามทิศแสง */
+    linear-gradient(
+      var(--ring-angle, 180deg),
+      rgba(255, 105, 97, calc(var(--chroma, 0) * 0.55)) 0.7px,
+      rgba(255, 105, 97, calc(var(--chroma, 0) * 0.55)) 1.3px,
+      rgba(120, 190, 255, calc(var(--chroma, 0) * 0.45)) 2px,
+      rgba(120, 190, 255, calc(var(--chroma, 0) * 0.45)) 2.8px,
+      transparent 3.4px
+    ),
+    /* WWDC25 prism rim base */
+    linear-gradient(
+        var(--ring-angle, 180deg),
+        rgba(0, 0, 0, 0.3) 0px,
+        rgba(0, 0, 0, 0.3) 1px,
+        rgba(255, 255, 255, 0.7) 1px,
+        rgba(255, 255, 255, 0.7) 1.8px,
+        rgba(0, 0, 0, 0.14) 1.8px,
+        rgba(0, 0, 0, 0.1) 2.6px,
+        rgba(0, 0, 0, 0.05) 3.4px,
+        rgba(0, 0, 0, 0.03) 4px
+      );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  filter: url(#liquid-distort);
+  pointer-events: none;
+  z-index: 3;
+  opacity: calc(0.7 + var(--rim-o, 0) * 0.3);
+}
+
+/* =========================================
+4. จูนแสงสำหรับ Dark Mode (เลนส์ใสรมดำ)
+========================================= */
+html[data-theme="dark"] .liquid-glass {
+  /* เนื้อแก้วใสรมดำพรีเมียม */
+  background: linear-gradient(
+    135deg,
+    rgba(58, 58, 60, 0.35) 0%,
+    rgba(28, 28, 30, 0.2) 45%,
+    rgba(44, 44, 46, 0.28) 100%
+  ) !important;
+  backdrop-filter: blur(8px) saturate(150%) contrast(110%) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(150%) contrast(110%) !important;
+
+  /* ขอบสันแก้วหรี่ลงแต่ยังคงมิติแบบเลนส์ */
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-top: 1.5px solid rgba(255, 255, 255, 0.32) !important;
+  border-left: 1.5px solid rgba(255, 255, 255, 0.2) !important;
+  box-shadow:
+    inset var(--hi-offset-x, 0px) var(--hi-offset-y, 1.5px) 2px
+      rgba(255, 255, 255, 0.22),
+    inset var(--shadow-offset-x, 0px) var(--shadow-offset-y, -1.5px) 3px
+      rgba(0, 0, 0, 0.35),
+    inset 10px 0 14px -8px rgba(255, 255, 255, 0.1),
+    inset -10px 0 14px -8px rgba(255, 255, 255, 0.1),
+    inset 0 10px 14px -8px rgba(255, 255, 255, 0.14),
+    inset 0 -12px 16px -10px rgba(180, 200, 255, 0.06),
+    inset 0 -4px 10px -4px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.08),
+    var(--cast-x, 0px) var(--cast-y, 28px) 56px -14px rgba(0, 0, 0, 0.55) !important;
+}
+html[data-theme="dark"] .liquid-glass::before {
+  /* แสงสมจริงโหมดมืด: แกนขาว + บลูมขาวนวล (screen บนพื้นดำ) */
+  background:
+    radial-gradient(
+      180px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.9)) 0%,
+      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.36)) 40%,
+      transparent 72%
+    ),
+    radial-gradient(
+      520px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(255, 255, 255, calc(var(--bloom-o, 0) * 0.35)) 0%,
+      rgba(255, 255, 255, calc(var(--bloom-o, 0) * 0.12)) 45%,
+      transparent 68%
+    );
+  mix-blend-mode: screen;
+}
+html[data-theme="dark"] .liquid-glass::after {
+  /* ขอบ WWDC25 โหมดมืด: chromatic fringe + หรี่จ้า */
+  background:
+    linear-gradient(
+      var(--ring-angle, 180deg),
+      rgba(255, 90, 80, calc(var(--chroma, 0) * 0.65)) 0.7px,
+      rgba(255, 90, 80, calc(var(--chroma, 0) * 0.65)) 1.3px,
+      rgba(100, 180, 255, calc(var(--chroma, 0) * 0.55)) 2px,
+      rgba(100, 180, 255, calc(var(--chroma, 0) * 0.55)) 2.8px,
+      transparent 3.4px
+    ),
+    linear-gradient(
+      var(--ring-angle, 180deg),
+      rgba(255, 255, 255, 0.35) 0px,
+      rgba(255, 255, 255, 0.35) 1px,
+      rgba(0, 0, 0, 0.45) 1px,
+      rgba(0, 0, 0, 0.45) 1.8px,
+      rgba(255, 255, 255, 0.3) 1.8px,
+      rgba(180, 200, 255, 0.2) 2.6px,
+      rgba(255, 255, 255, 0.04) 3.4px,
+      rgba(255, 255, 255, 0.02) 4px
+    );
+}
+html[data-theme="dark"] .liquid-mesh {
+  /* โหมดมืด: ดำล้วน นิ่ง ไม่มีลาย ไม่ขยับ */
+  background: linear-gradient(180deg, #161618 0%, #0a0a0b 55%, #000000 100%);
+}
+/* แสงเมาส์ส่องพื้นหลัง: จุดนุมนุ่มตามตำแหน่งเมาส์ (จางที่ขอบ hero) */
+.liquid-mesh::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(
+    620px circle at var(--bg-x, 50%) var(--bg-y, 50%),
+    rgba(110, 118, 130, calc(var(--bg-o, 0) * 0.1)) 0%,
+    rgba(110, 118, 130, calc(var(--bg-o, 0) * 0.04)) 42%,
+    transparent 70%
+  );
+}
+html[data-theme="dark"] .liquid-mesh::before {
+  background: radial-gradient(
+    620px circle at var(--bg-x, 50%) var(--bg-y, 50%),
+    rgba(255, 255, 255, calc(var(--bg-o, 0) * 0.1)) 0%,
+    rgba(255, 255, 255, calc(var(--bg-o, 0) * 0.04)) 42%,
+    transparent 70%
+  );
+}

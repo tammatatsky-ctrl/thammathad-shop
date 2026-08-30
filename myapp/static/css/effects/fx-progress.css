@@ -1,0 +1,17 @@
+/* ===== FX MOD CSS: scrollProgress ===== */
+/* แถบความคืบหน้าแก้วบางใต้ขอบบน */
+#scrollProgress {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  z-index: 1041;
+  background: linear-gradient(90deg, var(--apple-blue), #64d2ff);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  pointer-events: none;
+}
+html[data-motion="off"] #scrollProgress {
+  transition: none !important;
+}

@@ -1,0 +1,23 @@
+/* ===== FX MOD CSS: card-parallax (center-pop) ===== */
+/* การ์ด parallax ตาม scroll — ใช้ --p-y จาก JS รวมกับ --h-y ตอน hover ไม่ชนกัน
+           (transition แยก: parallax ตอบสนองทันที ไม่หน่วงตาม scroll) */
+.apple-tile[data-card-parallax] {
+  transform: translate3d(0, var(--p-y, 0px), 0) translateY(var(--h-y, 0px))
+    scale(var(--p-z, 1));
+  transition:
+    transform 0.35s var(--ease-apple),
+    background-color 0.35s var(--ease-apple),
+    color 0.35s var(--ease-apple),
+    border-color 0.35s var(--ease-apple);
+}
+.apple-tile[data-card-parallax]:hover {
+  --h-y: -4px;
+  border-color: var(--gray-border);
+}
+.apple-tile[data-card-parallax]:active {
+  --h-y: -2px;
+}
+html[data-motion="off"] [data-card-parallax] {
+  --p-y: 0px !important;
+  transform: translateY(var(--h-y, 0px)) !important;
+}

@@ -1,0 +1,16 @@
+/* ===== FX MOD CSS: img-blur-up ===== */
+/* ---- รูปโหลดแล้วเบลอ→ชัด (blur-up) ---- */
+.img-blur-up {
+  filter: blur(14px);
+  opacity: 0.5;
+  transform: scale(1.03);
+  transition:
+    filter 0.8s var(--ease-apple),
+    opacity 0.8s var(--ease-apple),
+    transform 0.8s var(--ease-apple);
+}
+.img-blur-up.img-loaded {
+  filter: none;
+  opacity: 1;
+  transform: none;
+}

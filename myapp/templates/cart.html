@@ -1,0 +1,94 @@
+﻿{# ===== cart.html: ตะกร้า — include cart_area.html + AJAX (stepper/lบ/refresh) POST-only + CSRF token ตั้งให้ JS ===== #}
+{% extends 'basetemplate.html' %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <p class="eyebrow mb-2"><i class="bi bi-bag"></i> ตะกร้าสินค้า</p>
+                <h1 class="page-title" data-motion="reveal">ตะกร้าของคุณ</h1>
+
+                <div id="cartArea" class="cart-area{% if items %} is-loaded{% endif %}">
+                    {% include 'cart_area.html' %}
+                </div>
+                {# CSRF token ตัวนี้เป็นตัวเดียวที่ JS อ่านใช้ POST (debounce 350ms รอหยุดกด → cart_update) #}
+                {% if items %}{% csrf_token %}{% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var box = document.getElementById('cartArea');
+    if (!box || !window.fetch) return;
+    var csrf = (document.querySelector('[name=csrfmiddlewaretoken]') || {}).value || '';
+    var t = null, seq = 0;
+
+    function refresh() {
+        var my = ++seq;
+        fetch('{% url 'cart' %}?partial=1', { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (my !== seq) return;
+                box.innerHTML = data.html;
+                box.classList.add('is-loaded');
+                var nav = document.getElementById('navCartCount');
+                if (nav) {
+                    nav.textContent = data.count > 0 ? data.count : '';
+                    nav.hidden = data.count <= 0;
+                }
+            })
+            .catch(function () {});
+    }
+
+    function post(url, params) {
+        params.append('csrfmiddlewaretoken', csrf);
+        return fetch(url, {
+            method: 'POST',
+            body: new URLSearchParams(params),
+            headers: { 'X-Requested-With': 'fetch' },
+        }).then(refresh);
+    }
+
+    box.addEventListener('click', function (e) {
+        var step = e.target.closest('.cart-step');
+        if (step && !step.disabled) {
+            var wrap = step.closest('.cart-stepper');
+            var input = wrap.querySelector('.cart-qty');
+            var cur = parseInt(input.value, 10) || 1;
+            var next = Math.min(
+                Math.max(1, cur + parseInt(step.dataset.delta, 10) || 1),
+                parseInt(wrap.dataset.max, 10) || 1
+            );
+            input.value = next;
+            clearTimeout(t);
+            t = setTimeout(function () {
+                post('{% url 'cart_update' 0 %}'.replace('/0/', '/' + wrap.dataset.id + '/'),
+                     new URLSearchParams([['quantity', String(next)]]));
+            }, 350);
+            return;
+        }
+        var rm = e.target.closest('.cart-remove');
+        if (rm) {
+            e.preventDefault();
+            post('{% url 'cart_remove' 0 %}'.replace('/0/', '/' + rm.dataset.id + '/'),
+                 new URLSearchParams());
+        }
+    });
+
+    box.addEventListener('change', function (e) {
+        var input = e.target.closest('.cart-qty');
+        if (!input) return;
+        var id = input.closest('.cart-stepper').dataset.id;
+        post('{% url 'cart_update' 0 %}'.replace('/0/', '/' + id + '/'),
+             new URLSearchParams([['quantity', input.value]]));
+    });
+})();
+</script>
+{% endblock %}

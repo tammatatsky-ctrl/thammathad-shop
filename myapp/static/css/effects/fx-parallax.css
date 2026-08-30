@@ -1,0 +1,4 @@
+/* ===== FX MOD CSS: data-motion=parallax ===== */
+html[data-motion="off"] [data-motion="parallax"] {
+  transform: none !important;
+}

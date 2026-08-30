@@ -1,0 +1,90 @@
+﻿{# ===== address_form.html: เพิ่ม/แก้ที่อยู่ — cascade จังหวัด→อำเภอ→ตำบล→รหัสไปรษณีย์ ผ่าน thai-address.js (data-selected restore ค่าโหมดแก้) ===== #}
+{% extends 'basetemplate.html' %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-7" data-motion="reveal" data-dir="zoom">
+                <p class="eyebrow mb-2"><i class="bi bi-geo-alt"></i> สมุดที่อยู่</p>
+                <h1 class="page-title mb-4">{% if address %}แก้ไขที่อยู่{% else %}เพิ่มที่อยู่ใหม่{% endif %}</h1>
+                <div class="card panel-card">
+                    {% if error %}<div class="alert alert-danger py-2 small">{{ error }}</div>{% endif %}
+                    <form method="POST" id="addrForm">
+                        {% csrf_token %}
+                        <div class="row">
+                            <div class="col-md-5 mb-3">
+                                <label class="form-label">ชื่อที่อยู่</label>
+                                <input type="text" name="label" class="form-control"
+                                       placeholder="บ้าน / ที่ทำงาน / คอนโด" value="{{ address.label|default:'บ้าน' }}">
+                            </div>
+                            <div class="col-md-7 mb-3">
+                                <label class="form-label">ชื่อผู้รับ</label>
+                                <input type="text" name="receiver_name" class="form-control" required
+                                       value="{{ address.receiver_name|default:user.get_full_name }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">เบอร์โทรศัพท์</label>
+                            <input type="tel" name="phone" class="form-control" required
+                                   pattern="^0\d{8,9}$" title="0XXXXXXXXX"
+                                   value="{{ address.phone|default:'' }}" inputmode="numeric">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">บ้านเลขที่ / หมู่ / ซอย / ถนน</label>
+                            <textarea name="detail" rows="2" class="form-control" required
+                                      placeholder="เช่น 99/9 หมู่ 4 ซ.สุขุมวิท 71">{{ address.detail|default:'' }}</textarea>
+                        </div>
+
+                        <!-- Cascade: จังหวัด → อำเภอ → ตำบล → ไปรษณีย์ -->
+                        <div class="row g-2 mb-1">
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">จังหวัด *</label>
+                                <select name="province" id="selProvince" class="form-select" required data-selected="{{ geo.province }}">
+                                    <option value="">— เลือกจังหวัด —</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">อำเภอ/เขต *</label>
+                                <select name="district" id="selDistrict" class="form-select" required data-selected="{{ geo.district }}" disabled>
+                                    <option value="">— เลือกจังหวัดก่อน —</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">ตำบล/แขวง *</label>
+                                <select name="subdistrict" id="selSubdistrict" class="form-select" required data-selected="{{ geo.subdistrict }}" disabled>
+                                    <option value="">— เลือกอำเภอก่อน —</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6 mb-2">
+                                <label class="form-label">รหัสไปรษณีย์</label>
+                                <input type="text" name="zipcode" id="inpZipcode" class="form-control" readonly required
+                                       placeholder="อัตโนมัติจากตำบล" value="{{ geo.zipcode }}">
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 mt-2">
+                            <i class="bi bi-check2 me-1"></i> {% if address %}บันทึกการแก้ไข{% else %}เพิ่มที่อยู่{% endif %}
+                        </button>
+                    </form>
+                </div>
+                <p class="mt-3"><a href="{% url 'account' %}" class="link-arrow"><i class="bi bi-arrow-left"></i> กลับหน้าบัญชี</a></p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/thai-address.js' %}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    ThaiAddress.init({
+        province: '#selProvince', district: '#selDistrict',
+        subdistrict: '#selSubdistrict', zipcode: '#inpZipcode',
+        dataUrl: '{% static "data/thai-address.json" %}',
+    });
+});
+</script>
+{% endblock %}

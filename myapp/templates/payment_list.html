@@ -1,0 +1,35 @@
+﻿{# ===== payment_list.html: พนักงาน — ประวัติการชำระเงิน (ยอดแจ้งสะสม) + รวมยอด + ส่งออก CSV ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+                <p class="eyebrow mb-1"><i class="bi bi-cash-stack"></i> การเงิน</p>
+                <h2 class="page-title mb-0" data-motion="reveal">ประวัติการชำระเงิน</h2>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                <span class="text-muted-apple">รวม ฿ {{ total_amount|floatformat:2 }}</span>
+                <a href="{% url 'payment_export' %}" class="btn btn-sm btn-light"><i class="bi bi-download me-1"></i>ส่งออก CSV</a>
+            </div>
+        </div>
+
+        <div class="card panel-card--wide mb-4" data-motion="reveal">
+            <form method="GET" class="row g-2 align-items-end">
+                <div class="col-md-9">
+                    <input type="search" name="q" class="form-control" placeholder="ค้นหา ชื่อ/เบอร์/เลขออเดอร์/หมายเหตุ..." value="{{ query }}">
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>ค้นหา</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="paymentTableArea" class="table-responsive">
+            {% include "payment_list_rows.html" %}
+        </div>
+    </div>
+</section>
+{% endblock %}

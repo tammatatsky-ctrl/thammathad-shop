@@ -1,0 +1,59 @@
+﻿{# ===== product_grid.html: partial ผลลัพธ์สินค้า (render หน้าเต็ม + AJAX ?partial=1) — การ์ด card-expand/morph hooks + pagination รักษา q/cat/sort ===== #}
+{% load static %}
+{% load shop_extras %}
+{# Partial: ผลลัพธ์สินค้า (ใช้ทั้ง render ปกติ และ AJAX ?partial=1) #}
+{% if query or active_cat %}
+<p class="text-muted-apple small mb-4" data-motion="reveal">
+    พบ {{ paginator.count }} รายการ{% if query %} สำหรับ "{{ query }}"{% endif %}{% if active_cat %} ในหมวด "{{ active_cat }}"{% endif %}
+    — <a href="{% url 'product' %}" class="link-arrow">ล้างตัวกรอง</a>
+</p>
+{% endif %}
+
+<div class="row g-4" data-motion="stagger">
+    {% for product in all_products %}
+    {# การ์ด = card-expand[data-expand][data-card-parallax] → fx-morph (คลิกขยายเป็น modal) + fx-card-pop (ลอยกลางจอ) #}
+    <div class="col-md-4">
+        <div class="apple-tile apple-card-glow card-expand h-100 d-flex flex-column" data-card-parallax data-expand data-detail-url="{% url 'product_detail' product.id %}">
+            <a href="{% url 'product_detail' product.id %}" class="product-img-wrap skeleton-img">
+                <img src="{% static product.image %}" alt="{{ product.name }}" class="product-img mb-4" loading="lazy" onload="this.closest('.skeleton-img').classList.add('is-loaded')">
+            </a>
+            {% if product.category %}<p class="catalog-tag mb-1">{{ product.category }}</p>{% endif %}
+            <h5 class="mb-1"><a href="{% url 'product_detail' product.id %}" class="text-decoration-none product-link">{{ product.name }}</a></h5>
+            <p class="text-muted-apple small mb-2 product-description">{{ product.description }}</p>
+            <p class="product-price product-price--emphasis">฿ {{ product.price|floatformat:2 }}</p>
+            {% with u=product.price|usd %}{% if u %}<p class="text-muted-apple small mb-2 usd-price">{{ u }}</p>{% endif %}{% endwith %}
+            <p class="text-muted-apple small mb-3">คงเหลือ {{ product.stock }} ชิ้น</p>
+            <div class="mt-auto d-flex gap-2 justify-content-center">
+                <a href="{% url 'product_detail' product.id %}" class="btn btn-primary btn-sm">ดูสินค้า</a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12 text-center py-5 text-muted-apple">
+        <i class="bi bi-inbox empty-state-icon"></i>
+        <h4 class="mt-3">ไม่พบสินค้าที่ค้นหา</h4>
+        <p class="mb-3">ลองเปลี่ยนคำค้นหา หรือดูสินค้าทั้งหมด</p>
+        <a href="{% url 'product' %}" class="btn btn-primary btn-sm">ดูสินค้าทั้งหมด</a>
+    </div>
+    {% endfor %}
+</div>
+
+{% if is_paginated %}
+<nav class="apple-pagination mt-5" aria-label="หน้าสินค้า">
+    <ul class="pagination justify-content-center mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}{% if active_cat %}&amp;cat={{ active_cat|urlencode }}{% endif %}&amp;sort={{ sort }}">&lsaquo;</a></li>
+        {% endif %}
+        {% for num in paginator.page_range %}
+        {% if num == page_obj.number %}
+        <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+        {% elif num > page_obj.number|add:-3 and num < page_obj.number|add:3 %}
+        <li class="page-item"><a class="page-link" href="?page={{ num }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}{% if active_cat %}&amp;cat={{ active_cat|urlencode }}{% endif %}&amp;sort={{ sort }}">{{ num }}</a></li>
+        {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}{% if active_cat %}&amp;cat={{ active_cat|urlencode }}{% endif %}&amp;sort={{ sort }}">&rsaquo;</a></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

@@ -1,0 +1,110 @@
+﻿{# ===== product.html: แคตตาล็อก (ค้นหา/หมวด/เรียง) — catalog pills + AJAX ?partial=1: เจอหัวส่ง fetch 350ms ปรับ #catalogResults ===== #}
+{% extends 'basetemplate.html' %}
+{% load static %}
+
+{% block content %}
+<section class="page-section--compact">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4" data-motion="reveal">
+            <div>
+                <p class="eyebrow mb-2">ร้านค้า</p>
+                <h1 class="page-title mb-0">สินค้าทั้งหมด</h1>
+            </div>
+            <form method="GET" action="{% url 'product' %}" class="catalog-search" role="search">
+                <i class="bi bi-search catalog-search-icon"></i>
+                <input type="search" name="q" value="{{ query }}" class="form-control catalog-search-input"
+                       placeholder="ค้นหาสินค้า..." autocomplete="off" id="catalogQ" aria-label="ค้นหาสินค้า">
+                {% if active_cat %}<input type="hidden" name="cat" value="{{ active_cat }}">{% endif %}
+                <input type="hidden" name="sort" value="{{ sort }}">
+            </form>
+        </div>
+
+        <div class="catalog-pills mb-4" data-motion="reveal">
+            <a href="{% url 'product' %}?sort={{ sort }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}"
+               class="catalog-pill {% if not active_cat %}catalog-pill--on{% endif %}">ทั้งหมด</a>
+            {% for cat in categories %}
+            <a href="{% url 'product' %}?cat={{ cat|urlencode }}&amp;sort={{ sort }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}"
+               class="catalog-pill {% if active_cat == cat %}catalog-pill--on{% endif %}">{{ cat }}</a>
+            {% endfor %}
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <label for="catalogSort" class="text-muted-apple small mb-0">เรียงตาม</label>
+                <select id="catalogSort" class="form-select form-select-sm catalog-sort">
+                    <option value="newest" {% if sort == 'newest' %}selected{% endif %}>ใหม่สุด</option>
+                    <option value="name" {% if sort == 'name' %}selected{% endif %}>ชื่อ A-Z</option>
+                    <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>ราคาน้อย → มาก</option>
+                    <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>ราคามาก → น้อย</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="catalogResults" class="catalog-results">
+            {% include 'product_grid.html' %}
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var q = document.getElementById('catalogQ');
+    var sort = document.getElementById('catalogSort');
+    var box = document.getElementById('catalogResults');
+    if (!q || !box || !window.fetch) return;
+    var base = window.location.pathname;
+    var t = null, ctrl = null, seq = 0;
+
+    function currentQS() {
+        var p = new URLSearchParams(window.location.search);
+        var v = q.value.trim();
+        v ? p.set('q', v) : p.delete('q');
+        if (sort) { sort.value ? p.set('sort', sort.value) : p.delete('sort'); }
+        p.delete('page');
+        return p.toString();
+    }
+
+    function reveal(box) {
+        box.querySelectorAll('[data-motion="stagger"]').forEach(function (st) {
+            Array.prototype.forEach.call(st.children, function (c, i) {
+                c.style.setProperty('--d', Math.min(i * 70, 420) + 'ms');
+            });
+        });
+        requestAnimationFrame(function () {
+            box.querySelectorAll('[data-motion="reveal"],[data-motion="stagger"]').forEach(function (el) { el.classList.add('in'); });
+        });
+    }
+
+    function refresh() {
+        var my = ++seq;
+        var qs = currentQS();
+        var url = base + (qs ? '?' + qs : '');
+        if (ctrl) ctrl.abort();
+        if ('AbortController' in window) ctrl = new AbortController();
+        box.classList.add('is-searching');
+        fetch(url + (qs ? '&' : '?') + 'partial=1', { signal: ctrl ? ctrl.signal : undefined })
+            .then(function (r) { if (!r.ok) throw new Error(r.status); return r.text(); })
+            .then(function (html) {
+                if (my !== seq) return;
+                box.innerHTML = html;
+                box.classList.remove('is-searching');
+                reveal(box);
+                history.replaceState(null, '', url);
+            })
+            .catch(function (e) {
+                if (my !== seq || (e && e.name === 'AbortError')) return;
+                box.classList.remove('is-searching');
+            });
+    }
+
+    q.addEventListener('input', function () {
+        clearTimeout(t);
+        t = setTimeout(refresh, 350);
+    });
+    q.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') e.preventDefault();
+    });
+    if (sort) sort.addEventListener('change', refresh);
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,39 @@
+﻿{# ===== order_manage.html: พนักงาน — จัดการออเดอร์ (ค้นหา + กรองสถานะตามบันได) — แถวอยู่ใน order_manage_rows.html ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+                <p class="eyebrow mb-1"><i class="bi bi-receipt"></i> จัดการออเดอร์</p>
+                <h2 class="page-title mb-0" data-motion="reveal">ออเดอร์ทั้งหมด</h2>
+            </div>
+            <span class="text-muted-apple">ทั้งหมด {{ total }} ออเดอร์</span>
+        </div>
+
+        <div class="card panel-card--wide mb-4" data-motion="reveal">
+            <form method="GET" class="row g-2 align-items-end" id="orderFilter">
+                <div class="col-md-5">
+                    <input type="search" name="q" class="form-control" placeholder="ค้นหา ชื่อ/เบอร์/เลขออเดอร์..." value="{{ query }}">
+                </div>
+                <div class="col-md-3">
+                    <select name="status" class="form-select" onchange="this.form.submit()">
+                        {% for val, label in status_choices %}
+                        <option value="{{ val }}" {% if val == selected_status %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>ค้นหา</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="orderTableArea" class="table-responsive">
+            {% include "order_manage_rows.html" %}
+        </div>
+    </div>
+</section>
+{% endblock %}

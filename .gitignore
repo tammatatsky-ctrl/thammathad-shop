@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Django
+*.log
+staticfiles/
+
+# Secrets — ห้าม commit เด็ดขาด (DJANGO_SECRET_KEY / API keys)
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# อื่นๆ
+mywebsite.zip
+pa_update.zip
+*.zip
+.DS_Store

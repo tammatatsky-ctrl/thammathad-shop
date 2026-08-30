@@ -1,0 +1,128 @@
+﻿{# ===== product_detail.html: รายละเอียดสินค้า — เพิ่มตะกร้า (POST กันเกินสต็อก) · ราคา USD (|usd) · zoom/lightbox · related ===== #}
+{% extends 'basetemplate.html' %}
+{% load static %}
+{% load shop_extras %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <nav class="breadcrumbs mb-4" aria-label="Breadcrumb" data-motion="reveal">
+            <a href="{% url 'index' %}">หน้าแรก</a>
+            <i class="bi bi-chevron-right"></i>
+            <a href="{% url 'product' %}">ร้านค้า</a>
+            {% if product.category %}
+            <i class="bi bi-chevron-right"></i>
+            <a href="{% url 'product' %}?cat={{ product.category|urlencode }}">{{ product.category }}</a>
+            {% endif %}
+            <i class="bi bi-chevron-right"></i>
+            <span class="breadcrumbs-here">{{ product.name|truncatechars:32 }}</span>
+        </nav>
+
+        <div class="row justify-content-center">
+            <div class="col-lg-10">
+                <div class="row g-5 align-items-center" data-motion="reveal" data-dir="zoom">
+                    <div class="col-md-6">
+                        <div class="apple-tile product-detail-media zoomable-media" id="zoomBox" title="คลิกเพื่อขยายรูป">
+                            <img src="{% static product.image %}" class="product-img-square product-detail-image" alt="{{ product.name }}" id="prodImg">
+                            <span class="zoom-hint"><i class="bi bi-arrows-fullscreen"></i> ขยายรูป</span>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        {% if product.category %}<p class="catalog-tag mb-2">{{ product.category }}</p>{% endif %}
+                        <h1 class="page-title page-title--small mb-3">{{ product.name }}</h1>
+                        <p class="lead-apple mb-4">{{ product.description }}</p>
+
+                        <div class="mb-3">
+                            <span class="product-detail-price">฿ {{ product.price|floatformat:2 }}</span>
+                            {% with u=product.price|usd %}{% if u %}<span class="text-muted-apple small ms-2 usd-price">{{ u }}</span>{% endif %}{% endwith %}
+                        </div>
+                        <p class="text-muted-apple small mb-4">
+                            {% if product.stock > 0 %}
+                                <i class="bi bi-check-circle-fill status-icon-success"></i>
+                                เหลือ {{ product.stock }} ชิ้น พร้อมจัดส่ง
+                            {% else %}
+                                <i class="bi bi-x-circle-fill status-icon-danger"></i>
+                                สินค้าหมดชั่วคราว
+                            {% endif %}
+                        </p>
+
+                        <form method="POST" action="{% url 'cart_add' product.id %}" class="d-flex align-items-center gap-3 mb-4">
+                            {% csrf_token %}
+                            <input type="number" name="quantity" value="1" min="1" max="{{ product.stock }}" class="form-control quantity-control" {% if product.stock == 0 %}disabled{% endif %}>
+                            <button type="submit" class="btn btn-primary btn-lg" {% if product.stock == 0 %}disabled{% endif %}><i class="bi bi-bag-plus me-1"></i> เพิ่มลงตะกร้า</button>
+                        </form>
+
+                        <a href="{% url 'product' %}" class="link-arrow"><i class="bi bi-arrow-left"></i> กลับสู่ร้านค้า</a>
+                    </div>
+                </div>
+
+                {% if related %}
+                <div class="related-section mt-5 pt-4" data-motion="reveal">
+                    <h2 class="section-heading section-heading--sm mb-4">สินค้าที่คุณอาจสนใจ</h2>
+                    <div class="row g-4" data-motion="stagger">
+                        {% for rp in related %}
+                        <div class="col-md-4">
+                            <a href="{% url 'product_detail' rp.id %}" class="related-card apple-card-glow">
+                                <img src="{% static rp.image %}" alt="{{ rp.name }}" class="related-img" loading="lazy">
+                                <div class="related-body">
+                                    <p class="related-name mb-1">{{ rp.name }}</p>
+                                    <p class="related-price mb-0">฿ {{ rp.price|floatformat:2 }}</p>
+                                </div>
+                            </a>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+{# Lightbox ขยายรูป — ควบคุมใน extra_js ด้านล่าง (Escape/คลิก backdrop ปิด) #}
+<div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-label="รูปสินค้าขยาย">
+    <button type="button" class="lightbox-close" id="lightboxClose" aria-label="ปิด"><i class="bi bi-x-lg"></i></button>
+    <img src="" alt="" id="lightboxImg">
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var img = document.getElementById('prodImg');
+    var box = document.getElementById('zoomBox');
+    if (img && box) {
+        box.addEventListener('mousemove', function (e) {
+            var r = box.getBoundingClientRect();
+            var x = ((e.clientX - r.left) / r.width - 0.5) * 16;
+            var y = ((e.clientY - r.top) / r.height - 0.5) * 16;
+            img.style.transform = 'scale(1.06) translate(' + x + 'px,' + y + 'px)';
+        });
+        box.addEventListener('mouseleave', function () { img.style.transform = ''; });
+    }
+
+    /* Lightbox */
+    var lb = document.getElementById('lightbox');
+    var lbImg = document.getElementById('lightboxImg');
+    var lbClose = document.getElementById('lightboxClose');
+    function openLb() {
+        if (!lb || !img) return;
+        lbImg.src = img.src;
+        lbImg.alt = img.alt;
+        lb.classList.add('is-open');
+        lb.setAttribute('aria-hidden', 'false');
+        document.body.style.overflow = 'hidden';
+    }
+    function closeLb() {
+        if (!lb) return;
+        lb.classList.remove('is-open');
+        lb.setAttribute('aria-hidden', 'true');
+        document.body.style.overflow = '';
+    }
+    if (box) box.addEventListener('click', openLb);
+    if (lb) lb.addEventListener('click', function (e) { if (e.target === lb) closeLb(); });
+    if (lbClose) lbClose.addEventListener('click', closeLb);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLb(); });
+})();
+</script>
+{% endblock %}

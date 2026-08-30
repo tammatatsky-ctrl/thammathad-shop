@@ -1,0 +1,92 @@
+﻿{# ===== index.html: หน้าแรกโซนผู้ใช้ — hero Liquid Glass (.liquid-glass) + ฟีเจอร์ + สินค้าแนะนำ (featured) ===== #}
+{% extends 'basetemplate.html' %}
+{% load static %}
+
+{% block content %}
+{# Hero: Liquid Glass — .hero-card ถูก core ใส่ .hero-in ให้ตอน load (bypasses Motion — entrance สำคัญ) #}
+<section class="hero-shell glass-canvas" data-motion="reveal">
+    <div class="container hero-container">
+        <div class="liquid-mesh" aria-hidden="true"></div>
+        <div class="liquid-glass hero-card text-center">
+            <p class="eyebrow mb-3">THAMMATHAD SHOP</p>
+            <h1 class="hero-title">
+                อุปกรณ์ไอที<br>คุณภาพเยี่ยม
+            </h1>
+            <p class="lead-apple hero-lead mx-auto">
+                จำหน่ายอุปกรณ์คอมพิวเตอร์และไอที คีย์บอร์ด เมาส์ หูฟัง คุณภาพส่งตรงถึงมือคุณ
+            </p>
+            <div class="hero-actions d-flex justify-content-center gap-3 flex-wrap">
+                <a class="btn btn-primary btn-lg" href="{% url 'product' %}">ดูสินค้าทั้งหมด</a>
+                <a class="btn btn-light btn-lg" href="{% url 'cart' %}"><i class="bi bi-bag me-1"></i> ดูตะกร้า</a>
+            </div>
+        </div>
+    </div>
+</section>
+
+<hr class="apple-divider">
+
+<!-- ฟีเจอร์ -->
+<section class="page-section">
+    <div class="container">
+        <div class="text-center mb-5" data-motion="reveal">
+            <h2 class="section-heading">บริการของเรา</h2>
+            <p class="lead-apple">อุปกรณ์ไอทีครบครัน บริการหลังการขายดีเยี่ยม</p>
+        </div>
+        <div class="row g-4" data-motion="stagger">
+            <div class="col-md-4">
+                <div class="apple-tile h-100">
+                    <div class="icon-circle"><i class="bi bi-truck"></i></div>
+                    <h5 class="mb-2">จัดส่งทั่วประเทศ</h5>
+                    <p class="text-muted-apple mb-3">จัดส่งรวดเร็ว พร้อมบริการติดตามสถานะสินค้าทุก<br>ออเดอร์</p>
+                    <a href="{% url 'order_tracking' %}" class="link-arrow">ติดตามสินค้า</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="apple-tile h-100">
+                    <div class="icon-circle"><i class="bi bi-credit-card"></i></div>
+                    <h5 class="mb-2">ชำระเงินง่าย</h5>
+                    <p class="text-muted-apple mb-3">สแกน QR พร้อมเพย์ หรือเลือกโอน/ปลายทางได้ที่หน้าสั่งซื้อ</p>
+                    <a href="{% url 'product' %}" class="link-arrow">เริ่มช้อปเลย</a>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="apple-tile h-100">
+                    <div class="icon-circle"><i class="bi bi-bag-heart"></i></div>
+                    <h5 class="mb-2">สั่งซื้อง่าย</h5>
+                    <p class="text-muted-apple mb-3">เลือกใส่ตะกร้าแล้วสั่งซื้อได้เลย ไม่ต้องสมัครสมาชิก</p>
+                    <a href="{% url 'cart' %}" class="link-arrow">ดูตะกร้า</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- สินค้าแนะนำ -->
+<section class="page-section section-muted">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-end mb-5 flex-wrap gap-2" data-motion="reveal">
+            <div>
+                <p class="eyebrow mb-2"><i class="bi bi-star-fill"></i> แนะนำ</p>
+                <h2 class="section-heading">สินค้าโดดเด่น</h2>
+            </div>
+            <a href="{% url 'product' %}" class="link-arrow">ดูทั้งหมด</a>
+        </div>
+        <div class="row g-4" data-motion="stagger">
+            {% for product in featured %}
+            <div class="col-md-4">
+                <a href="{% url 'product_detail' product.id %}" class="text-decoration-none">
+                    <div class="apple-tile apple-card-glow h-100">
+                        <img src="{% static product.image %}" alt="{{ product.name }}" class="product-img mb-4">
+                        <h5 class="mb-2 product-name">{{ product.name }}</h5>
+                        <p class="product-price">฿ {{ product.price|floatformat:2 }}</p>
+                        <span class="link-arrow">ดูเพิ่มเติม</span>
+                    </div>
+                </a>
+            </div>
+            {% empty %}
+            <div class="col-12 text-center text-muted-apple py-5">ยังไม่มีสินค้าแนะนำ</div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endblock %}

@@ -1,0 +1,56 @@
+﻿{# ===== account_register.html: สมัครลูกค้า — ข้อมูลเก็บไว้เติมอัตโนมัติตอนสั่งครั้งถัดไป ===== #}
+{% extends 'basetemplate.html' %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-6" data-motion="reveal" data-dir="zoom">
+                <p class="eyebrow mb-2 text-center"><i class="bi bi-person-plus"></i> บัญชีลูกค้า</p>
+                <h1 class="page-title text-center mb-1">สมัครสมาชิก</h1>
+                <p class="text-center text-muted-apple small mb-4">กรอกครั้งเดียว — สั่งซื้อครั้งหน้ากรอกให้อัตโนมัติ + เห็นออเดอร์ของตัวเองทุกใบ</p>
+                <div class="card panel-card">
+                    {% if error %}<div class="alert alert-danger py-2 small">{{ error }}</div>{% endif %}
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                        <div class="mb-3">
+                            <label class="form-label">ชื่อ-นามสกุล</label>
+                            <input type="text" name="name" class="form-control" required value="{{ v_name|default:'' }}">
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">อีเมล (ใช้เข้าสู่ระบบ)</label>
+                                <input type="email" name="email" class="form-control" required value="{{ v_email|default:'' }}">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">เบอร์โทรศัพท์</label>
+                                <input type="tel" name="phone" class="form-control" required
+                                       pattern="^0\d{8,9}$" title="เบอร์ไทย 0XXXXXXXXX" value="{{ v_phone|default:'' }}">
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">ที่อยู่จัดส่ง</label>
+                            <textarea name="address" rows="2" class="form-control" required>{{ v_address|default:'' }}</textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">รหัสผ่าน</label>
+                                <input type="password" name="password1" class="form-control" required minlength="6">
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label">ยืนยันรหัสผ่าน</label>
+                                <input type="password" name="password2" class="form-control" required minlength="6">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-person-check me-1"></i> สมัครบัญชี</button>
+                    </form>
+                </div>
+                <p class="text-center text-muted-apple mt-3 small">
+                    มีบัญชีแล้ว? <a href="{% url 'account_login' %}" class="link-arrow">เข้าสู่ระบบ</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

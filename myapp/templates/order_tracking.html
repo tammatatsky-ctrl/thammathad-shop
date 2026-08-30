@@ -1,0 +1,226 @@
+﻿{# ===== order_tracking.html: ติดตามสถานะ — โหมดบัญชี (ออเดอร์ตัวเอง) / guest (ค้นหา id+เบอร์) · บันไดสถานะ 4 ขั้น · ประวัติแจ้งชำระ (+ ยอดคงเหลือ) · แจ้งจ่าย 1 คลิก + slip OCR ===== #}
+{% extends "basetemplate.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-9">
+                <nav class="breadcrumbs mb-4" aria-label="Breadcrumb">
+                    <a href="{% url 'index' %}">หน้าแรก</a>
+                    <i class="bi bi-chevron-right"></i>
+                    <span class="breadcrumbs-here">ติดตามสินค้า</span>
+                </nav>
+                <p class="eyebrow mb-2"><i class="bi bi-box-seam"></i> ติดตามสถานะ</p>
+                <h1 class="page-title" data-motion="reveal">ติดตามสินค้า</h1>
+
+                {% if is_account_mode %}
+                {# โหมดบัญชี: คลิกออเดอร์ตัวเองได้ทันที (ลิงก์ ?order=..&phone=..) #}
+                <div class="card panel-card--wide mb-5" data-motion="reveal" data-dir="zoom">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                        <h5 class="mb-0"><i class="bi bi-person-badge me-2 text-primary"></i>ออเดอร์ของคุณ</h5>
+                        <a href="{% url 'account' %}" class="small link-arrow">จัดการบัญชี</a>
+                    </div>
+                    {% if my_orders %}
+                    <div class="row g-3 my-order-grid">
+                        {% for o in my_orders %}
+                        <a class="col-md-6 text-decoration-none"
+                           href="?order={{ o.id }}&phone={{ o.phone|urlencode }}">
+                            <div class="apple-tile h-100 p-3 d-flex align-items-center gap-3 my-order-tile">
+                                <span class="order-id-chip">#{{ o.id }}</span>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="fw-medium text-truncate">{{ o.items.all.0.product.name }}{% if o.items.all|length > 1 %} +{{ o.items.all|length|add:"-1" }} ชิ้น{% endif %}</div>
+                                    <small class="text-muted-apple">฿ {{ o.total|floatformat:2 }} · {{ o.created_at|date:"d/m/Y" }}</small>
+                                </div>
+                                <span class="badge {% if o.status == 'pending' %}bg-warning{% elif o.status == 'paid' %}badge-success{% elif o.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">
+                                    {{ o.get_status_display }}</span>
+                                <i class="bi bi-chevron-right text-muted-apple"></i>
+                            </div>
+                        </a>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <p class="text-muted-apple small mb-0">ยังไม่มีออเดอร์ — <a href="{% url 'product' %}" class="link-arrow">เริ่มช้อป</a></p>
+                    {% endif %}
+                </div>
+
+                <details class="mb-4">
+                    <summary class="text-muted-apple small" style="cursor:pointer;">ค้นหาด้วยหมายเลขออเดอร์ + เบอร์โทร (สำหรับออเดอร์ของคนอื่น/ไม่มีบัญชี)</summary>
+                    <div class="card panel-card--wide mt-3">
+                        <form method="POST" class="row g-3 align-items-end">
+                            {% csrf_token %}
+                            <div class="col-md-4">
+                                <label class="form-label">หมายเลขออเดอร์</label>
+                                <input type="text" name="order_id" class="form-control" placeholder="เช่น 1" required>
+                            </div>
+                            <div class="col-md-5">
+                                <label class="form-label">เบอร์โทรศัพท์ที่ใช้สั่ง</label>
+                                <input type="tel" name="phone" class="form-control" placeholder="0XXXXXXXXX" required pattern="^0\d{8,9}$" inputmode="numeric">
+                            </div>
+                            <div class="col-md-3 d-grid">
+                                <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i> ค้นหา</button>
+                            </div>
+                        </form>
+                    </div>
+                </details>
+                {% else %}
+                {# โหมด guest: ต้องกรอกหมายเลขออเดอร์ + เบอร์โทรที่ใช้สั่ง ===== #}
+                <div class="card panel-card--wide mb-5" data-motion="reveal" data-dir="zoom">
+                    <p class="text-muted-apple small mb-3"><i class="bi bi-info-circle me-1"></i>
+                        กรอก<b>หมายเลขออเดอร์</b> (ได้จากหน้า "สั่งซื้อสำเร็จ") และ<b>เบอร์โทรที่ใช้สั่ง</b> —
+                        มีบัญชี? <a href="{% url 'account_login' %}?next={{ request.path|urlencode }}" class="link-arrow">เข้าสู่ระบบ</a> แล้วคลิกออเดอร์ได้เลย ไม่ต้องพิมพ์</p>
+                    <form method="POST" class="row g-3 align-items-end">
+                        {% csrf_token %}
+                        <div class="col-md-4">
+                            <label class="form-label">หมายเลขออเดอร์</label>
+                            <input type="text" name="order_id" class="form-control" placeholder="เช่น 1" required inputmode="numeric">
+                        </div>
+                        <div class="col-md-5">
+                            <label class="form-label">เบอร์โทรศัพท์ที่ใช้สั่ง</label>
+                            <input type="tel" name="phone" class="form-control" placeholder="0XXXXXXXXX (ขีด/ไม่มีขีดก็ได้)" required pattern="^0\d{8,9}$" inputmode="numeric">
+                        </div>
+                        <div class="col-md-3 d-grid">
+                            <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i> ค้นหา</button>
+                        </div>
+                    </form>
+                </div>
+                {% endif %}
+
+                {% if order %}
+                <div class="card panel-card" data-motion="reveal" data-dir="zoom">
+                    <div class="d-flex justify-content-between align-items-start mb-4 flex-wrap gap-2">
+                        <div>
+                            <h3 class="mb-1 d-flex align-items-center gap-2">
+                                ออเดอร์ #{{ order.id }}
+                                <button type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ order.id }}" title="คัดลอกเลขออเดอร์"><i class="bi bi-clipboard"></i></button>
+                            </h3>
+                            <p class="text-muted-apple small mb-0">คุณ {{ order.customer_name }} — {{ order.created_at|date:"d/m/Y H:i" }}</p>
+                        </div>
+                        <span class="badge status-badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">{{ order.get_status_display }}</span>
+                    </div>
+
+                    <div class="mb-4 d-flex flex-wrap gap-3 align-items-center">
+                        {% for item in order.items.all %}
+                        <img src="{% static item.product.image %}" alt="{{ item.product.name }}" class="track-thumb" title="{{ item.product.name }}">
+                        {% endfor %}
+                        <span class="badge badge-light border">{{ order.get_payment_method_display }}</span>
+                    </div>
+
+                    {# แถบสถานะ: 4 ขั้น ตรงกับบันได OrderStatusService (สั่ง→จ่าย→ส่ง→ได้รับ); --fill คำนวณจาก .done ใน extra_js #}
+                    <div class="mb-5">
+                        <p class="text-muted-apple small mb-4 tracking-label">สถานะการจัดส่ง</p>
+                        <div class="d-flex justify-content-between position-relative track">
+                            <div class="track-line"></div>
+                            <div class="text-center flex-fill track-step {% if order.status == 'pending' or order.status == 'paid' or order.status == 'shipped' or order.status == 'delivered' %}done{% endif %}">
+                                <div class="track-dot"><i class="bi bi-bag-check"></i></div>
+                                <small class="d-block mt-2 text-muted-apple">สั่งซื้อแล้ว</small>
+                            </div>
+                            <div class="text-center flex-fill track-step {% if order.status == 'paid' or order.status == 'shipped' or order.status == 'delivered' %}done{% endif %}">
+                                <div class="track-dot"><i class="bi bi-credit-card"></i></div>
+                                <small class="d-block mt-2 text-muted-apple">ชำระเงินแล้ว</small>
+                            </div>
+                            <div class="text-center flex-fill track-step {% if order.status == 'shipped' or order.status == 'delivered' %}done{% endif %}">
+                                <div class="track-dot"><i class="bi bi-truck"></i></div>
+                                <small class="d-block mt-2 text-muted-apple">จัดส่งแล้ว</small>
+                            </div>
+                            <div class="text-center flex-fill track-step {% if order.status == 'delivered' %}done{% endif %}">
+                                <div class="track-dot"><i class="bi bi-house-check"></i></div>
+                                <small class="d-block mt-2 text-muted-apple">ได้รับสินค้าแล้ว</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="apple-divider mb-4">
+
+                    <h6 class="mb-3"><i class="bi bi-receipt me-2"></i>รายการสินค้า</h6>
+                    <div data-motion="stagger">
+                        {% for item in order.items.all %}
+                        <div class="d-flex justify-content-between mb-2">
+                            <span class="text-muted-apple">{{ item.product.name }} × {{ item.quantity }}</span>
+                            <span>฿ {{ item.price|floatformat:2 }}</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <hr class="apple-divider my-3">
+                    <div class="d-flex justify-content-between">
+                        <strong>ยอดรวม</strong>
+                        <strong class="summary-total">฿ {{ order.total|floatformat:2 }}</strong>
+                    </div>
+
+                    <p class="text-muted-apple small mt-4 mb-0">
+                        <i class="bi bi-geo-alt"></i> ที่อยู่จัดส่ง: {{ order.address }}<br>
+                        <i class="bi bi-phone"></i> เบอร์ติดต่อ: {{ order.phone }}
+                    </p>
+
+                    {% if payments %}
+                    <hr class="apple-divider my-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h6 class="mb-0"><i class="bi bi-cash-stack me-2"></i>ประวัติการแจ้งชำระ</h6>
+                        {% if order.status == 'pending' and remaining > 0 %}
+                        <span class="badge bg-warning">คงเหลือ ฿ {{ remaining|floatformat:2 }}</span>
+                        {% elif order.status == 'paid' %}
+                        <span class="badge badge-success">ชำระครบแล้ว</span>
+                        {% endif %}
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm text-center mb-2 table-cardify">
+                            <thead><tr><th>แจ้งเมื่อ</th><th>ยอดที่แจ้ง</th><th>วันที่โอน</th><th>หมายเหตุ</th></tr></thead>
+                            <tbody>
+                                {% for p in payments %}
+                                <tr>
+                                    <td data-label="แจ้งเมื่อ">{{ p.created_at|date:"d/m H:i" }}</td>
+                                    <td class="fw-bold" data-label="ยอด">฿ {{ p.amount|floatformat:2 }}</td>
+                                    <td data-label="วันที่โอน">{{ p.transfer_date|date:"d/m/Y"|default:"—" }}</td>
+                                    <td class="text-start" data-label="หมายเหตุ"><small>{{ p.note|default:"—" }}</small></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% if order.status == 'pending' and remaining > 0 %}
+                    <form method="POST" action="{% url 'payment_quick' %}" class="mt-3">
+                        {% csrf_token %}
+                        <input type="hidden" name="order_id" value="{{ order.id }}">
+                        <input type="hidden" name="phone" value="{{ order.phone }}">
+                        <input type="hidden" name="back" value="{% url 'order_tracking' %}?order={{ order.id }}&phone={{ order.phone|urlencode }}">
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-check2-circle me-1"></i> ฉันโอนส่วนที่เหลือ ฿ {{ remaining|floatformat:2 }} แล้ว — แจ้ง 1 คลิก
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% endif %}
+
+                    <div class="mt-4">
+                        {% include 'slip_upload.html' %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+.track { padding-top: 6px; }
+.track-line { position: absolute; top: 24px; left: 12.5%; right: 12.5%; height: 2px; background: var(--gray-border); z-index: 0; }
+.track-line::after { content: ''; position: absolute; left: 0; top: 0; height: 100%; width: 0; background: var(--apple-blue); transition: width 1.2s var(--ease-apple) .3s; }
+.track.in .track-line::after { width: var(--fill, 0%); }
+.track-dot { width: 48px; height: 48px; margin: 0 auto; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; background: var(--surface); color: var(--muted); border: 2px solid var(--gray-border); transition: transform .4s var(--ease-apple), background .4s var(--ease-apple), color .4s var(--ease-apple); position: relative; z-index: 1; }
+.track-step.done .track-dot { background: var(--apple-blue); color: #fff; border-color: var(--apple-blue); transform: scale(1.08); }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    var track = document.querySelector('.track');
+    if (!track) return;
+    var done = track.querySelectorAll('.track-step.done').length;
+    var total = track.querySelectorAll('.track-step').length;
+    track.style.setProperty('--fill', (total > 1 ? ((done-1)/(total-1))*100 : 0) + '%');
+    var obs = new IntersectionObserver(function (en) { if (en[0].isIntersecting) { track.classList.add('in'); obs.disconnect(); } }, { threshold: .3 });
+    obs.observe(track);
+})();
+</script>
+{% endblock %}

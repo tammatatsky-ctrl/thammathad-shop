@@ -1,0 +1,290 @@
+﻿{# ===== product_manage.html: จัดการสินค้า — live search (AJAX) + ปรับสต็อก ± (AJAX POST ห้ามติดลบ) · แถวอยู่ใน product_rows.html ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+{% csrf_token %}
+<section class="page-section">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-5" data-motion="reveal">
+            <div>
+                <p class="eyebrow mb-2"><i class="bi bi-sliders"></i> โซนผู้ดูแล</p>
+                <h1 class="page-title mb-0">จัดการสินค้า</h1>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{% url 'product' %}" class="btn btn-light lens-btn"><i class="bi bi-globe me-1"></i> ดูหน้าร้านค้า</a>
+                <a href="{% url 'product_add' %}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> เพิ่มสินค้าใหม่</a>
+            </div>
+        </div>
+
+        {# ตัวกรอง GET realtime → view คืน product_rows.html (AJAX) · csrf_token ข้างบนกันไว้ให้ JS ปรับสต็อก ===== #}
+        <div class="card panel-card--tight mb-4" data-motion="reveal" data-dir="zoom">
+            <form method="GET" id="prodSearchForm" class="prod-search-form">
+                <div class="row g-2 align-items-center">
+                    <div class="col-lg-5">
+                        <div class="input-group prod-search-group">
+                            <span class="input-group-text prod-search-icon">
+                                <i class="bi bi-search"></i>
+                                <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+                            </span>
+                            <input type="text" name="q" value="{{ query }}" class="form-control" id="prodSearchInput" placeholder="ค้นหาจาก ชื่อสินค้า / รายละเอียด ..." autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="show" class="form-select" aria-label="กรองตามสถานะหน้าร้าน">
+                            <option value="">ทุกสถานะหน้าร้าน</option>
+                            <option value="active" {% if show == 'active' %}selected{% endif %}>แสดง</option>
+                            <option value="hidden" {% if show == 'hidden' %}selected{% endif %}>ซ่อน</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="stock" class="form-select" aria-label="กรองตามสต็อก">
+                            <option value="">ทุกสต็อก</option>
+                            <option value="in" {% if stock == 'in' %}selected{% endif %}>มีสินค้า</option>
+                            <option value="out" {% if stock == 'out' %}selected{% endif %}>หมดสต็อก</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-2">
+                        <select name="sort" class="form-select" aria-label="เรียงลำดับ">
+                            <option value="newest" {% if sort == 'newest' %}selected{% endif %}>เพิ่มล่าสุด</option>
+                            <option value="name" {% if sort == 'name' %}selected{% endif %}>เรียงตามชื่อ</option>
+                            <option value="price_desc" {% if sort == 'price_desc' %}selected{% endif %}>ราคาสูง→ต่ำ</option>
+                            <option value="price_asc" {% if sort == 'price_asc' %}selected{% endif %}>ราคาต่ำ→สูง</option>
+                            <option value="stock_asc" {% if sort == 'stock_asc' %}selected{% endif %}>ใกล้หมดก่อน</option>
+                        </select>
+                    </div>
+                    <div class="col-6 col-lg-1 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-fill prod-submit">ค้นหา</button>
+                        <button type="button" id="prodClear" class="btn btn-light prod-clear d-none" title="ล้างตัวกรองทั้งหมด"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                </div>
+                <div class="form-hint mt-2"><i class="bi bi-lightning-charge"></i> ผลค้นหาอัปเดตทันทีขณะพิมพ์</div>
+            </form>
+        </div>
+
+        <p class="text-muted-apple mb-4" id="prodCountWrap">
+            {% if has_filter %}
+                พบ <strong class="result-count">{{ total }}</strong> รายการ{% if query %} ที่ตรงกับ "{{ query }}"{% endif %}
+            {% else %}
+                สินค้าทั้งหมด <strong class="result-count">{{ total }}</strong> รายการ (รวมที่ซ่อนจากหน้าร้าน)
+            {% endif %}
+        </p>
+
+        <div class="card panel-card--flush" data-motion="reveal" data-dir="zoom">
+            <div class="table-responsive">
+                <table class="table align-middle text-center mb-0 table-cardify">
+                    <thead>
+                        <tr>
+                             <th>รูป</th><th>ชื่อสินค้า</th><th>ราคา</th><th>คงเหลือ</th><th>ปรับสต็อก</th>
+                            <th>สถานะหน้าร้าน</th><th>จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody data-motion="stagger" id="prodTableBody" class="live-fade">
+                        {% for product in page_obj %}
+                        <tr>
+                            <td data-label="รูป">
+                                <img src="{% static product.image %}" alt="{{ product.name }}" width="52" height="40" class="rounded-3" style="object-fit: cover;">
+                            </td>
+                            <td class="fw-medium text-start" data-label="ชื่อสินค้า">{{ product.name }}</td>
+                            <td class="fw-bold" data-label="ราคา">฿ {{ product.price|floatformat:2 }}</td>
+                            <td data-label="คงเหลือ">
+                                {% if product.stock > 0 %}
+                                    {{ product.stock }} ชิ้น
+                                {% else %}
+                                    <span class="emp-status status-resigned">หมด</span>
+                                {% endif %}
+                            </td>
+                            <td data-label="ปรับสต็อก">
+                                <div class="d-inline-flex align-items-center gap-1 stock-adjust" data-id="{{ product.id }}">
+                                    <button type="button" class="btn btn-sm btn-outline-danger stock-btn" data-delta="-1" {% if product.stock <= 0 %}disabled{% endif %}>−</button>
+                                    <span class="stock-num fw-bold" style="min-width:28px;text-align:center">{{ product.stock }}</span>
+                                    <button type="button" class="btn btn-sm btn-outline-success stock-btn" data-delta="1">+</button>
+                                </div>
+                            </td>
+                            <td data-label="หน้าร้าน">
+                                {% if product.is_active %}
+                                    <span class="emp-status status-active">แสดง</span>
+                                {% else %}
+                                    <span class="emp-status status-resigned">ซ่อน</span>
+                                {% endif %}
+                            </td>
+                            <td class="actions-cell" data-label="จัดการ">
+                                <a href="{% url 'product_edit' product.id %}" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil me-1"></i> แก้ไข</a>
+                                <form method="POST" action="{% url 'product_delete' product.id %}" class="d-inline" data-confirm="ต้องการลบสินค้ารายการนี้ใช่หรือไม่ การลบไม่สามารถย้อนกลับได้">
+                                    {% csrf_token %}
+                                    <template class="confirm-details">
+                                        <div class="gc-row"><span class="gc-label">ชื่อสินค้า</span><span class="gc-value">{{ product.name }}</span></div>
+                                        <div class="gc-row"><span class="gc-label">ราคา</span><span class="gc-value">฿ {{ product.price|floatformat:2 }}</span></div>
+                                        <div class="gc-row"><span class="gc-label">คงเหลือ</span><span class="gc-value">{{ product.stock }} ชิ้น</span></div>
+                                        <div class="gc-row"><span class="gc-label">สถานะหน้าร้าน</span><span class="gc-value">{% if product.is_active %}แสดง{% else %}ซ่อน{% endif %}</span></div>
+                                    </template>
+                                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i> ลบ</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr><td colspan="7" class="text-center py-5 text-muted-apple">
+                            <i class="bi bi-inbox empty-state-icon"></i>
+                            <h5 class="mt-3">{% if has_filter %}ไม่พบสินค้าที่ตรงกับการค้นหาหรือตัวกรอง{% else %}ยังไม่มีสินค้าในระบบ — เริ่มด้วยการเพิ่มสินค้าใหม่{% endif %}</h5>
+                        </td></tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="prodPagination">
+            {% if page_obj.paginator.num_pages > 1 %}
+            <nav class="mt-5 d-flex justify-content-between align-items-center flex-wrap gap-2" data-motion="reveal">
+                <span class="text-muted-apple small">หน้า {{ page_obj.number }} จาก {{ page_obj.paginator.num_pages }}</span>
+                <ul class="pagination mb-0">
+                    {% if page_obj.has_previous %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if show %}&show={{ show }}{% endif %}{% if stock %}&stock={{ stock }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}"><i class="bi bi-chevron-left"></i></a></li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+                    {% endif %}
+
+                    {% for num in page_obj.paginator.page_range %}
+                        {% if num == page_obj.number %}
+                            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+                        {% else %}
+                            <li class="page-item"><a class="page-link" href="?page={{ num }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if show %}&show={{ show }}{% endif %}{% if stock %}&stock={{ stock }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}">{{ num }}</a></li>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if page_obj.has_next %}
+                    <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if show %}&show={{ show }}{% endif %}{% if stock %}&stock={{ stock }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}"><i class="bi bi-chevron-right"></i></a></li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+                    {% endif %}
+                </ul>
+            </nav>
+            {% endif %}
+        </div>
+    </div>
+</section>
+
+<style>
+.prod-search-form .input-group-text { border-radius: 14px 0 0 14px; }
+.prod-search-icon { gap: 6px; min-width: 46px; justify-content: center; position: relative; }
+.prod-search-icon .spinner-border { position: absolute; }
+.prod-search-form.is-searching .bi-search { opacity: .25; }
+.prod-search-form.is-searching .spinner-border { display: inline-flex !important; color: var(--apple-blue); }
+.prod-search-form.js-live .prod-submit { display: none; }
+.prod-search-form.js-live .prod-clear { display: inline-flex !important; align-items: center; justify-content: center; flex: 1; }
+tr { animation: prowIn .45s var(--ease-apple) backwards; }
+tr:nth-child(1) { animation-delay: .02s; } tr:nth-child(2) { animation-delay: .07s; }
+tr:nth-child(3) { animation-delay: .12s; } tr:nth-child(4) { animation-delay: .17s; }
+tr:nth-child(5) { animation-delay: .22s; }
+@keyframes prowIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+</style>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('prodSearchForm');
+    if (!form || !window.fetch) return;
+    form.classList.add('js-live');
+
+    var input = document.getElementById('prodSearchInput');
+    var selects = form.querySelectorAll('select[name]');
+    var clearBtn = document.getElementById('prodClear');
+    var tbody = document.getElementById('prodTableBody');
+    var countWrap = document.getElementById('prodCountWrap');
+    var pagWrap = document.getElementById('prodPagination');
+    var timer = null, seq = 0;
+
+    function currentQS(page) {
+        var p = new URLSearchParams();
+        if (input.value.trim()) p.set('q', input.value.trim());
+        selects.forEach(function (s) {
+            var v = s.value;
+            if (!v) return;
+            if (s.name === 'sort' && v === 'newest') return;
+            p.set(s.name, v);
+        });
+        if (page && page > 1) p.set('page', page);
+        return p.toString();
+    }
+    function run(page) {
+        var my = ++seq;
+        var qs = currentQS(page);
+        form.classList.add('is-searching');
+        tbody.classList.add('searching');
+        fetch(location.pathname + (qs ? '?' + qs : ''), { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error(r.status);
+                return r.text();
+            })
+            .then(function (html) {
+                if (my !== seq) return;
+                var tpl = document.createElement('template');
+                tpl.innerHTML = html;
+                var rows = tpl.content.querySelector('[data-slot="rows"]');
+                var count = tpl.content.querySelector('[data-slot="count"]');
+                var pag = tpl.content.querySelector('[data-slot="pagination"]');
+                if (rows) tbody.innerHTML = rows.innerHTML;
+                if (count) countWrap.innerHTML = count.innerHTML;
+                if (pag) pagWrap.innerHTML = pag.outerHTML;
+                else pagWrap.innerHTML = '';
+                history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+                form.classList.remove('is-searching');
+                tbody.classList.remove('searching');
+                toggleClear();
+            })
+            .catch(function () { form.classList.remove('is-searching'); tbody.classList.remove('searching'); });
+    }
+    function toggleClear() {
+        var active = input.value.trim() || form.querySelector('[name=show]').value ||
+            form.querySelector('[name=stock]').value || form.querySelector('[name=sort]').value !== 'newest';
+        clearBtn.classList.toggle('d-none', !active);
+    }
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { run(1); }, 250);
+    });
+    selects.forEach(function (s) { s.addEventListener('change', function () { run(1); }); });
+    pagWrap.addEventListener('click', function (e) {
+        var a = e.target.closest ? e.target.closest('a.page-link') : null;
+        if (!a || a.parentElement.classList.contains('disabled')) return;
+        e.preventDefault();
+        var page = new URL(a.getAttribute('href'), location.href).searchParams.get('page');
+        run(parseInt(page || '1', 10));
+        var card = tbody.closest('.card');
+        if (card) window.scrollTo({ top: card.getBoundingClientRect().top + window.scrollY - 90, behavior: 'smooth' });
+    });
+    clearBtn.addEventListener('click', function () {
+        input.value = '';
+        selects.forEach(function (s) { s.value = s.name === 'sort' ? 'newest' : ''; });
+        run(1);
+        input.focus();
+    });
+    toggleClear();
+
+    /* ---- Stock Adjust +/- ---- */
+    document.addEventListener('click', function (e) {
+        var btn = e.target.closest('.stock-btn');
+        if (!btn) return;
+        var wrap = btn.closest('.stock-adjust');
+        if (!wrap) return;
+        var id = wrap.dataset.id;
+        var delta = parseInt(btn.dataset.delta, 10);
+        var numEl = wrap.querySelector('.stock-num');
+        btn.disabled = true;
+        fetch('/product/' + id + '/stock-adjust/', {
+            method: 'POST',
+            body: new URLSearchParams([['delta', String(delta)]]),
+            headers: { 'X-Requested-With': 'fetch', 'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value }
+        }).then(function (r) { return r.json(); })
+          .then(function (d) {
+              if (d.ok) { numEl.textContent = d.stock; }
+              var minus = wrap.querySelector('[data-delta="-1"]');
+              if (minus) minus.disabled = d.stock <= 0;
+              btn.disabled = false;
+          }).catch(function () { btn.disabled = false; });
+    });
+})();
+</script>
+{% endblock %}

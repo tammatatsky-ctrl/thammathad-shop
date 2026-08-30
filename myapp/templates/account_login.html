@@ -1,0 +1,35 @@
+﻿{# ===== account_login.html: ล็อกอินลูกค้า — POST + hidden next → redirect กลับหน้าที่มาก่อน ===== #}
+{% extends 'basetemplate.html' %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-5" data-motion="reveal" data-dir="zoom">
+                <p class="eyebrow mb-2 text-center"><i class="bi bi-person"></i> บัญชีลูกค้า</p>
+                <h1 class="page-title text-center mb-4">เข้าสู่ระบบ</h1>
+                <div class="card panel-card">
+                    {% if error %}<div class="alert alert-danger py-2 small">{{ error }}</div>{% endif %}
+                    <form method="POST">
+                        {% csrf_token %}
+                        <input type="hidden" name="next" value="{{ next }}">
+                        <div class="mb-3">
+                            <label class="form-label">อีเมล</label>
+                            <input type="email" name="username" class="form-control" required value="{{ v_username|default:'' }}" placeholder="you@email.com">
+                        </div>
+                        <div class="mb-4">
+                            <label class="form-label">รหัสผ่าน</label>
+                            <input type="password" name="password" class="form-control" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-box-arrow-in-right me-1"></i> เข้าสู่ระบบ</button>
+                    </form>
+                </div>
+                <p class="text-center text-muted-apple mt-3 small">
+                    ยังไม่มีบัญชี? <a href="{% url 'account_register' %}{% if next %}?next={{ next|urlencode }}{% endif %}" class="link-arrow">สมัครฟรี</a>
+                    · ซื้อแบบไม่ลงทะเบียนก็ได้ <a href="{% url 'product' %}" class="link-arrow">ไปหน้าร้าน</a>
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

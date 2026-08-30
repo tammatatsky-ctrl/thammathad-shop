@@ -1,0 +1,83 @@
+{# ===== employee_rows.html: partial แถวพนักงาน (AJAX live search) — สล็อต count/rows/pagination + ลบแบบ glass confirm พร้อม template details ===== #}
+{% comment %} Partial: ส่งเฉพาะส่วนที่เปลี่ยนสำหรับ live search (fetch พร้อม header X-Requested-With: fetch) {% endcomment %}
+<div data-slot="count">
+    {% if has_filter %}
+        พบ <strong class="result-count">{{ total }}</strong> คน{% if query %} ที่ตรงกับ "{{ query }}"{% endif %}
+    {% else %}
+        พนักงานทั้งหมด <strong class="result-count">{{ total }}</strong> คน
+    {% endif %}
+</div>
+
+<table style="display:none"><tbody data-slot="rows">
+    {% for employee in page_obj %}
+    <tr>
+        <td data-label="รูป">
+            {% if employee.avatar %}
+                <img src="{{ employee.avatar.url }}" alt="{{ employee.name }}" width="40" height="40" class="rounded-circle emp-avatar table-avatar">
+            {% else %}
+                <div class="rounded-circle d-inline-flex align-items-center justify-content-center emp-avatar table-avatar placeholder-avatar"><i class="bi bi-person"></i></div>
+            {% endif %}
+        </td>
+        <td class="fw-bold employee-code" data-label="รหัส">{{ employee.emp_code }}</td>
+        <td class="fw-medium text-start" data-label="ชื่อ-นามสกุล">{{ employee.name }}</td>
+        <td class="text-muted-apple" data-label="เพศ">{{ employee.get_gender_display }}</td>
+        <td data-label="แผนก"><span class="badge bg-info-subtle department-badge">{{ employee.department }}</span></td>
+        <td class="text-muted-apple small" data-label="เบอร์โทร">{{ employee.phone|default:"—" }}</td>
+        <td class="text-muted-apple small" data-label="อีเมล">{{ employee.email|default:"—" }}</td>
+        <td data-label="สถานะ"><span class="emp-status status-{{ employee.status }}">{{ employee.get_status_display }}</span></td>
+        <td class="fw-bold" data-label="เงินเดือน">฿ {{ employee.salary|floatformat:2 }}</td>
+        <td class="text-muted-apple small" data-label="วันเริ่มงาน">{{ employee.hire_date|date:"d/m/Y" }}</td>
+        {% if user.is_staff %}
+            <td class="actions-cell" data-label="จัดการ">
+                <a href="{% url 'employee_update' employee.pk %}" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil me-1"></i> แก้ไข</a>
+                <form method="POST" action="{% url 'employee_delete' employee.pk %}" class="d-inline" data-confirm="ต้องการลบข้อมูลพนักงานคนนี้ใช่หรือไม่ การลบไม่สามารถย้อนกลับได้">
+                    {% csrf_token %}
+                    <template class="confirm-details">
+                        <div class="gc-row"><span class="gc-label">รหัสพนักงาน</span><span class="gc-value">{{ employee.emp_code }}</span></div>
+                        <div class="gc-row"><span class="gc-label">ชื่อ-นามสกุล</span><span class="gc-value">{{ employee.name }}</span></div>
+                        <div class="gc-row"><span class="gc-label">แผนก</span><span class="gc-value">{{ employee.department }}</span></div>
+                        <div class="gc-row"><span class="gc-label">เบอร์โทร</span><span class="gc-value">{{ employee.phone|default:"—" }}</span></div>
+                        <div class="gc-row"><span class="gc-label">อีเมล</span><span class="gc-value">{{ employee.email|default:"—" }}</span></div>
+                        <div class="gc-row"><span class="gc-label">สถานะ</span><span class="gc-value">{{ employee.get_status_display }}</span></div>
+                        <div class="gc-row"><span class="gc-label">เงินเดือน</span><span class="gc-value">฿ {{ employee.salary|floatformat:2 }}</span></div>
+                        <div class="gc-row"><span class="gc-label">วันที่เริ่มงาน</span><span class="gc-value">{{ employee.hire_date|date:"d/m/Y" }}</span></div>
+                    </template>
+                    <button type="submit" class="btn btn-sm btn-outline-danger"><i class="bi bi-trash me-1"></i> ลบ</button>
+                </form>
+            </td>
+        {% endif %}
+    </tr>
+    {% empty %}
+    <tr><td colspan="{% if user.is_staff %}11{% else %}10{% endif %}" class="text-center py-5 text-muted-apple">
+        <i class="bi bi-inbox empty-state-icon"></i>
+        <h5 class="mt-3">ไม่พบพนักงานที่ตรงกับการค้นหาหรือตัวกรอง</h5>
+    </td></tr>
+    {% endfor %}
+</tbody></table>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav data-slot="pagination" class="mt-5 d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <span class="text-muted-apple small">หน้า {{ page_obj.number }} จาก {{ page_obj.paginator.num_pages }}</span>
+    <ul class="pagination mb-0">
+        {% if page_obj.has_previous %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if department %}&department={{ department|urlencode }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}"><i class="bi bi-chevron-left"></i></a></li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-left"></i></span></li>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+            {% if num == page_obj.number %}
+                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% else %}
+                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if department %}&department={{ department|urlencode }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}">{{ num }}</a></li>
+            {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query|urlencode }}{% endif %}{% if department %}&department={{ department|urlencode }}{% endif %}{% if gender %}&gender={{ gender }}{% endif %}{% if status %}&status={{ status }}{% endif %}{% if sort != 'newest' %}&sort={{ sort }}{% endif %}"><i class="bi bi-chevron-right"></i></a></li>
+        {% else %}
+        <li class="page-item disabled"><span class="page-link"><i class="bi bi-chevron-right"></i></span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

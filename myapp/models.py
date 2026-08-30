@@ -1,0 +1,566 @@
+"""โมเดล + QuerySet/Manager — Rich Domain Model ตามหลัก OOP ของระบบ.
+
+สถาปัตยกรรม:
+- Product / Order / OrderItem / Payment : ฝั่งขาย (หน้าร้าน + สายเงินของใบงาน)
+- Employee                            : ฝั่ง HR (หลังบ้าน)
+- CustomerProfile / CustomerAddress   : บัญชีลูกค้า + สมุดที่อยู่จัดส่ง
+- แต่ละโมเดลมี QuerySet + Manager ของตัวเอง → "คิวรีของโดเมนอยู่กับโดเมน": view เรียก
+  Employee.objects.search(...), Order.objects.revenue() โดยไม่ต้องรู้ว่า filter ข้างในเป็นยังไง
+"""
+import re
+from decimal import Decimal
+
+from django.conf import settings as dj_settings
+from django.db import models
+from django.db.models import Count, F, Q, Sum
+from django.utils import timezone
+
+
+# ==================== QuerySets: Encapsulation — คิวรีของโดเมนอยู่กับโดเมน ====================
+
+class EmployeeQuerySet(models.QuerySet):
+    """คิวรีพนักงานทั้งหมด: ค้นหา กรอง เรียงลำดับ สถิติ"""
+
+    SEARCH_FIELDS = ('emp_code', 'name', 'department', 'email', 'phone')
+    SORT_MAP = {
+        'newest': '-created_at',
+        'name': 'name',
+        'salary_desc': '-salary',
+        'salary_asc': 'salary',
+        'tenure': 'hire_date',  # อายุงานมากสุดก่อน (เริ่มงานนานสุด)
+    }
+    DEFAULT_SORT = '-created_at'
+
+    def search(self, term):
+        """ค้นหาหลายฟิลด์พร้อมกัน (รหัส/ชื่อ/แผนก/อีเมล/เบอร์) — icontains รวม Q.
+
+        Args:
+            term: สตริงค้นหา (ว่าง/None = คืนทั้งชุดไม่กรอง)
+
+        Returns:
+            EmployeeQuerySet (chain ต่อได้)
+        """
+        if not term:
+            return self
+        conditions = Q()
+        for field in self.SEARCH_FIELDS:
+            conditions |= Q(**{f'{field}__icontains': term})
+        return self.filter(conditions)
+
+    def of_department(self, department):
+        """กรองแผนก (case-insensitive) — ค่าว่าง/None = คืนทั้งชุด.
+
+        Args:
+            department: ชื่อแผนกจาก dropdown (normalize ด้วย iexact)
+
+        Returns:
+            EmployeeQuerySet
+        """
+        return self.filter(department__iexact=department) if department else self
+
+    def with_gender(self, gender):
+        """กรองเพศเฉพาะ 'M'/'F'/'O' — ค่านอกเหนือ = ไม่กรอง.
+
+        Args:
+            gender: ตัวกรองจาก select บนหน้า
+
+        Returns:
+            EmployeeQuerySet
+        """
+        return self.filter(gender=gender) if gender in ('M', 'F', 'O') else self
+
+    def with_status(self, status):
+        """กรองสถานะ (active/leave/resigned) — block ค่ามั่วจาก URL.
+
+        Args:
+            status: เฉพาะค่าที่ whitelist ไว้ มิฉะนั้นข้ามการกรอง
+
+        Returns:
+            EmployeeQuerySet
+        """
+        return self.filter(status=status) if status in ('active', 'leave', 'resigned') else self
+
+    def sorted_by(self, key=None):
+        """เรียงตาม SORT_MAP (เฉพาะคีย์ที่จัดไว้) — คีย์ไม่รู้จัก = default.
+
+        Args:
+            key: 'newest'/'name'/'salary_desc'/'salary_asc'/'tenure' (None = default)
+
+        Returns:
+            EmployeeQuerySet
+        """
+        return self.order_by(self.SORT_MAP.get(key, self.DEFAULT_SORT))
+
+    def active(self):
+        """เฉพาะพนักงานที่ยังทำงานอยู่ (ใช้หน้า dashboard/กราฟ)."""
+        return self.filter(status='active')
+
+    def recent(self, limit=5):
+        """พนักงานล่าสุด N คน (เรียง created_at ล่าสุดก่อน).
+
+        Args:
+            limit: จำนวนที่ต้องการ (default 5)
+
+        Returns:
+            EmployeeQuerySet
+        """
+        return self.order_by('-created_at')[:limit]
+
+    def department_choices(self):
+        """รายชื่อแผนกที่มีจริง เรียง A-Z (สำหรับ dropdown ตัวกรอง)"""
+        return (
+            self.exclude(department='')
+            .order_by('department')
+            .values_list('department', flat=True)
+            .distinct()
+        )
+
+    def department_distribution(self, limit=6):
+        """จำนวนพนักงานต่อแผนก (กราฟแดชบอร์ด)"""
+        return (
+            self.values('department')
+            .annotate(n=Count('id'))
+            .order_by('-n')[:limit]
+        )
+
+    def stats(self):
+        """ตัวเลขสรุปพนักงานสำหรับแดชบอร์ด.
+
+        Returns:
+            dict {total, active, leave}
+        """
+        return {
+            'total': self.count(),
+            'active': self.filter(status='active').count(),
+            'leave': self.filter(status='leave').count(),
+        }
+
+
+class EmployeeManager(models.Manager.from_queryset(EmployeeQuerySet)):
+    """Manager พนักงาน: เพิ่มโรงงานผู้ช่วยระดับตาราง"""
+
+    CODE_PATTERN = re.compile(r'^EMP(\d+)$', re.IGNORECASE)
+
+    def next_code(self):
+        """รันเลขรหัสพนักงานอัตโนมัติ — หาเลข EMP### สูงสุดแล้ว +1.
+
+        เช่น เจอ EMP013 สูงสุด → คืน 'EMP014'. ใช้ตอนสร้างพนักงาน (Unique
+        กันซ้ำ) — เลขอาจไม่ต่อเนื่องถ้าเคยลบเลขกลางคัน ซึ่งไม่ใช่ปัญหา.
+
+        Returns:
+            str รหัสใหม่ฟอร์แมต 3 หลัก เช่น 'EMP014'
+        """
+        max_num = 0
+        for code in self.values_list('emp_code', flat=True):
+            m = self.CODE_PATTERN.match((code or '').strip())
+            if m:
+                max_num = max(max_num, int(m.group(1)))
+        return f"EMP{max_num + 1:03d}"
+
+
+class ProductQuerySet(models.QuerySet):
+    """คิวรีสินค้า: หน้าร้าน หลังบ้าน และสต็อก"""
+
+    SORT_MAP = {
+        'newest': '-id',
+        'name': 'name',
+        'price_desc': '-price',
+        'price_asc': 'price',
+        'stock_asc': 'stock',   # ใกล้หมดก่อน
+    }
+    DEFAULT_SORT = '-id'
+    LOW_STOCK_THRESHOLD = 5
+
+    def search(self, term):
+        """ค้นหาชื่อ/รายละเอียดสินค้า (icontains) — ว่าง = คืนทั้งชุด.
+
+        Args:
+            term: ข้อความค้นหา
+
+        Returns:
+            ProductQuerySet
+        """
+        if not term:
+            return self
+        return self.filter(Q(name__icontains=term) | Q(description__icontains=term))
+
+    def of_category(self, category):
+        """กรองตามหมวดหมู่ (ค่าว่าง = ทุกหมวด)"""
+        return self.filter(category__iexact=category) if category else self
+
+    def category_choices(self):
+        """หมวดหมู่ที่มีสินค้าจริง เรียง A-Z (สำหรับ filter pills หน้าร้าน)"""
+        return (
+            self.exclude(category='')
+            .order_by('category')
+            .values_list('category', flat=True)
+            .distinct()
+        )
+
+    def related_to(self, product, limit=3):
+        """สินค้าที่เกี่ยวข้อง: หมวดเดียวกันก่อน แล้วตัวอื่น ไม่รวมตัวเอง"""
+        same = []
+        if product.category:
+            same = list(self.filter(category__iexact=product.category).exclude(id=product.id)[:limit])
+        remaining = limit - len(same)
+        if remaining <= 0:
+            return same
+        others = self.exclude(id=product.id)
+        if product.category:
+            others = others.exclude(category__iexact=product.category)
+        return same + list(others[:remaining])
+
+    def listed(self):
+        """สินค้าที่หน้าร้านแสดง"""
+        return self.filter(is_active=True)
+
+    def visibility(self, state):
+        """กรองสถานะการแสดง: 'active'/'hidden' — ค่าอื่น = ไม่กรอง.
+
+        Args:
+            state: ตัวกรองจาก select หลังบ้าน (จัดการสินค้า)
+
+        Returns:
+            ProductQuerySet
+        """
+        if state == 'active':
+            return self.filter(is_active=True)
+        if state == 'hidden':
+            return self.filter(is_active=False)
+        return self
+
+    def stock_state(self, state):
+        """กรองตามสต็อก: 'out' = หมด, 'in' = มีของ — ค่าอื่น = ไม่กรอง.
+
+        Args:
+            state: 'out'/'in' จาก select
+
+        Returns:
+            ProductQuerySet
+        """
+        if state == 'out':
+            return self.filter(stock__lte=0)
+        if state == 'in':
+            return self.filter(stock__gt=0)
+        return self
+
+    def low_stock(self, threshold=None):
+        """สินค้าใกล้หมด (≤ threshold) เรียงของน้อยสุดก่อน — เตือนสต็อก.
+
+        Args:
+            threshold: เกณฑ์ (default = LOW_STOCK_THRESHOLD = 5)
+
+        Returns:
+            ProductQuerySet
+        """
+        threshold = self.LOW_STOCK_THRESHOLD if threshold is None else threshold
+        return self.filter(stock__lte=threshold).order_by('stock', 'name')
+
+    def sorted_by(self, key=None):
+        """เรียงตาม SORT_MAP ของสินค้า — คีย์ไม่รู้จัก = default ล่าสุดก่อน.
+
+        Args:
+            key: 'newest'/'name'/'price_desc'/'price_asc'/'stock_asc'
+
+        Returns:
+            ProductQuerySet
+        """
+        return self.order_by(self.SORT_MAP.get(key, self.DEFAULT_SORT))
+
+    def recent(self, limit=5):
+        """สินค้าใหม่ล่าสุด N ชิ้น (เรียง created_at ล่าสุดก่อน).
+
+        Args:
+            limit: จำนวนที่ต้องการ (default 5)
+
+        Returns:
+            ProductQuerySet
+        """
+        return self.order_by('-created_at')[:limit]
+
+    def inventory_value(self):
+        """มูลค่าสต็อกรวม (ราคา × จำนวน)"""
+        return self.aggregate(v=Sum(F('price') * F('stock')))['v'] or 0
+
+    def stats(self):
+        """ตัวเลขสรุปสินค้าสำหรับแดชบอร์ด.
+
+        Returns:
+            dict {total, active, out}
+        """
+        return {
+            'total': self.count(),
+            'active': self.filter(is_active=True).count(),
+            'out': self.filter(stock__lte=0).count(),
+        }
+
+
+ProductManager = models.Manager.from_queryset(ProductQuerySet)
+
+
+class OrderQuerySet(models.QuerySet):
+    """คิวรีออเดอร์: สายเงิน + สถานะ — ใช้หลังบ้านและหน้าแจ้งชำระ"""
+
+    PAID_STATUSES_EXCLUDE = ('pending',)
+
+    def recent(self, limit=5):
+        """ออเดอร์ล่าสุด N ใบ (เรียง created_at ล่าสุดก่อน).
+
+        Args:
+            limit: จำนวนที่ต้องการ (default 5)
+
+        Returns:
+            OrderQuerySet
+        """
+        return self.order_by('-created_at')[:limit]
+
+    def awaiting_action(self):
+        """ออเดอร์ที่ยังไม่จบ (ยกเว้น delivered) — หน้าแจ้งชำระเงิน"""
+        return self.exclude(status='delivered').order_by('-id')
+
+    def revenue(self):
+        """รายได้รวมเฉพาะออเดอร์ที่เกิน pending"""
+        return (
+            self.exclude(status='pending').aggregate(s=Sum('total'))['s']
+            or 0
+        )
+
+    def stats(self):
+        """ตัวเลขสรุปออเดอร์: จำนวนใบ/ค้างชำระ/รายได้ (ไม่นับ pending).
+
+        Returns:
+            dict {total, pending, revenue}
+        """
+        return {
+            'total': self.count(),
+            'pending': self.filter(status='pending').count(),
+            'revenue': self.revenue(),
+        }
+
+
+OrderManager = models.Manager.from_queryset(OrderQuerySet)
+
+
+# ==================== Models: Rich domain objects ====================
+
+class Product(models.Model):
+    """สินค้าในร้าน — แสดงหน้าร้าน + ใช้ในตะกร้า/ใบสั่งซื้อ.
+
+    - is_active=False → ซ่อนจากหน้าร้าน (product_grid ยังใช้จัดการหลังบ้านได้)
+    - image เก็บเป็น static path (images/...) ไม่ใช่ไฟล์อัปโหลด (ตั้งค่าใน static)
+    """
+    name = models.CharField(max_length=200, verbose_name="ชื่อสินค้า")
+    category = models.CharField(max_length=60, blank=True, default='', verbose_name="หมวดหมู่")
+    description = models.TextField(blank=True, verbose_name="รายละเอียด")
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ราคา (บาท)")
+    stock = models.IntegerField(default=0, verbose_name="จำนวนคงเหลือ")
+    image = models.CharField(max_length=200, blank=True, default='images/prod1.jpg', verbose_name="ที่อยู่รูปภาพ (static)")
+    is_active = models.BooleanField(default=True, verbose_name="แสดงสินค้า")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่เพิ่ม")
+
+    objects = ProductManager()
+
+    DEFAULT_IMAGE = 'images/prod1.jpg'
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def stock_value(self):
+        """มูลค่าสต็อกของสินค้าชิ้นนี้"""
+        return self.price * self.stock
+
+    @property
+    def stock_status(self):
+        """in = มีสินค้า, out = หมด"""
+        return 'in' if self.stock > 0 else 'out'
+
+    def apply_form_data(self, data, image_fallback=DEFAULT_IMAGE):
+        """ผูกข้อมูลจากฟอร์ม manual (product_form.html เรนเดอร์ input เอง ไม่ได้ใช้ {{ form }})
+        image_fallback: ค่าที่ใช้เมื่อฟอร์มไม่ส่งฟิลด์ image มา (create=default, edit=ค่าเดิม)"""
+        self.name = data.get('name', '')
+        self.category = data.get('category', '').strip()
+        self.description = data.get('description', '')
+        self.price = data.get('price', '')
+        self.stock = data.get('stock', '')
+        self.image = data['image'] if 'image' in data else image_fallback
+        self.is_active = data.get('is_active') == 'on'
+        return self
+
+
+class Order(models.Model):
+    """ใบสั่งซื้อ — ตัวเดินเรื่อง "สายเงินและสถานะ" ของใบงาน.
+
+    สถานะเป็นบันไดขั้นเดียว (pending → paid → shipped → delivered):
+    - ขั้น 'paid' ขึ้นอัตโนมัติเมื่อจ่ายครบผ่าน PaymentService (เจ้าหน้าที่ตั้งไม่ได้)
+    - ห้ามข้ามขั้น/ถอยหลัง (บังคับใน OrderStatusService.move)
+    total = snapshot ยอดตอนสั่ง; reported_total() = ยอดที่จ่ายสะสม →
+    เอามาเทียบกันเพื่อบอก "จ่ายครบยัง" (จ่ายบางส่วนหลายครั้งได้).
+    """
+    PAYMENT_METHODS = [
+        ('promptpay', 'พร้อมเพย์ / QR'),
+        ('bank', 'โอนผ่านธนาคาร'),
+        ('cod', 'เก็บเงินปลายทาง'),
+    ]
+    STATUS_CHOICES = [
+        ('pending', 'รอดำเนินการ'),
+        ('paid', 'ชำระเงินแล้ว'),
+        ('shipped', 'จัดส่งแล้ว'),
+        ('delivered', 'ได้รับสินค้าแล้ว'),
+    ]
+    user = models.ForeignKey(
+        dj_settings.AUTH_USER_MODEL, verbose_name='บัญชีผู้ซื้อ',
+        null=True, blank=True, on_delete=models.SET_NULL, related_name='orders',
+    )
+    payment_method = models.CharField(
+        max_length=20, choices=PAYMENT_METHODS, default='promptpay',
+        verbose_name='วิธีชำระเงิน',
+    )
+    customer_name = models.CharField(max_length=100, verbose_name="ชื่อผู้สั่งซื้อ")
+    phone = models.CharField(max_length=20, verbose_name="เบอร์โทรศัพท์")
+    address = models.TextField(verbose_name="ที่อยู่จัดส่ง")
+    total = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ยอดรวม")
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending', verbose_name="สถานะ")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่สั่งซื้อ")
+
+    objects = OrderManager()
+
+    def __str__(self):
+        return f"Order #{self.id} - {self.customer_name}"
+
+    def reported_total(self):
+        """ยอดที่ลูกค้าแจ้งโอนมาแล้ว (รวมทุกครั้ง — โอนแบ่งหลายครั้งก็นับรวม)"""
+        return self.payments.aggregate(s=Sum('amount'))['s'] or Decimal('0')
+
+    @property
+    def remaining(self):
+        """ยอดที่ยังขาด (ยอดเต็ม − เงินที่แจ้งแล้ว) — ไม่ติดลบ"""
+        return max(self.total - self.reported_total(), Decimal('0'))
+
+
+class OrderItem(models.Model):
+    """แถวสินค้าในใบสั่งซื้อ — snapshot ราคา/ชิ้นตอนสั่ง (ไม่ผูกกับราคาสินค้าปัจจุบัน)."""
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="items")
+    product = models.ForeignKey(Product, on_delete=models.CASCADE)
+    quantity = models.IntegerField(default=1, verbose_name="จำนวน")
+    price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ราคาต่อชิ้น")
+
+    def __str__(self):
+        return f"{self.product.name} x {self.quantity}"
+
+    @property
+    def line_total(self):
+        """ยอดแถวนี้ = ราคาต่อชิ้น (snapshot) × จำนวน.
+
+        Returns:
+            Decimal
+        """
+        return self.price * self.quantity
+
+
+class Payment(models.Model):
+    """บิลยอดจ่ายแต่ละครั้งของออเดอร์ — สร้างผ่าน PaymentService.record_payment().
+
+    ต่อออเดอร์หนึ่งใบได้หลายบิล (จ่ายบางส่วนหลายรอบ) → นับรวมเป็น reported_total
+    เพื่อให้ระบบรู้ว่าเมื่อไรครบยอด แล้วค่อยยกสถานะเป็น paid อัตโนมัติ.
+    """
+    order = models.ForeignKey(Order, on_delete=models.CASCADE, related_name="payments")
+    name = models.CharField(max_length=100, verbose_name="ชื่อผู้แจ้งชำระ")
+    phone = models.CharField(max_length=20, verbose_name="เบอร์โทรศัพท์")
+    amount = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ยอดโอน")
+    transfer_date = models.DateField(verbose_name="วันที่โอนเงิน")
+    note = models.TextField(blank=True, verbose_name="หมายเหตุ")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่แจ้ง")
+
+    def __str__(self):
+        return f"Payment for Order #{self.order_id} - {self.amount} บาท"
+
+
+class Employee(models.Model):
+    """พนักงาน — โมเดลฝั่ง HR สำหรับหลังบ้าน.
+
+    emp_code รันอัตโนมัติผ่าน Employee.objects.next_code() (ฟอร์แมต EMP###).
+    avatar อัปโหลดได้ไปที่ media/employees/ — หน้าแสดงผลมี fallback หากไม่มีรูป.
+    """
+    GENDER_CHOICES = [
+        ('M', 'ชาย'),
+        ('F', 'หญิง'),
+        ('O', 'อื่นๆ'),
+    ]
+    STATUS_CHOICES = [
+        ('active', 'ทำงานอยู่'),
+        ('leave', 'ลาพัก'),
+        ('resigned', 'ลาออกแล้ว'),
+    ]
+    emp_code = models.CharField(max_length=20, unique=True, verbose_name="รหัสพนักงาน")
+    name = models.CharField(max_length=150, verbose_name="ชื่อ-นามสกุล")
+    gender = models.CharField(max_length=1, choices=GENDER_CHOICES, default='M', verbose_name="เพศ")
+    department = models.CharField(max_length=100, verbose_name="แผนก")
+    email = models.EmailField(blank=True, verbose_name="อีเมล")
+    phone = models.CharField(max_length=25, blank=True, verbose_name="เบอร์โทรศัพท์")
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active', verbose_name="สถานะ")
+    salary = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="เงินเดือน (บาท)")
+    hire_date = models.DateField(verbose_name="วันที่เริ่มงาน")
+    address = models.TextField(blank=True, verbose_name="ที่อยู่")
+    avatar = models.ImageField(upload_to='employees/', blank=True, null=True, verbose_name="รูปถ่ายพนักงาน")
+    created_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่บันทึก")
+
+    objects = EmployeeManager()
+
+    def __str__(self):
+        return f"{self.emp_code} - {self.name}"
+
+    @property
+    def years_of_service(self):
+        """อายุงานเป็นจำนวนเต็มปี นับจากวันเริ่มงาน"""
+        return (timezone.localdate() - self.hire_date).days // 365
+
+
+class CustomerProfile(models.Model):
+    """ข้อมูลจัดส่งของลูกค้าที่สมัครบัญชี — ใช้ prefill หน้า checkout ให้อัตโนมัติ"""
+    user = models.OneToOneField(
+        dj_settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='customer_profile', verbose_name='บัญชี',
+    )
+    phone = models.CharField(max_length=20, blank=True, verbose_name='เบอร์โทรศัพท์')
+    address = models.TextField(blank=True, verbose_name='ที่อยู่จัดส่ง')
+
+    class Meta:
+        verbose_name = 'โปรไฟล์ลูกค้า'
+        verbose_name_plural = 'โปรไฟล์ลูกค้า'
+
+    def __str__(self):
+        return f'Profile: {self.user.username}'
+
+
+class CustomerAddress(models.Model):
+    """สมุดที่อยู่จัดส่ง — 1 บัญชี เพิ่มได้หลายที่อยู่ (บ้าน/ที่ทำงาน/...)"""
+
+    user = models.ForeignKey(
+        dj_settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='addresses', verbose_name='เจ้าของ',
+    )
+    label = models.CharField(max_length=40, default='บ้าน', verbose_name='ชื่อที่อยู่')
+    receiver_name = models.CharField(max_length=150, verbose_name='ชื่อผู้รับ')
+    phone = models.CharField(max_length=20, verbose_name='เบอร์โทรศัพท์')
+    detail = models.TextField(verbose_name='บ้านเลขที่/ซอย/ถนน')
+    province = models.CharField(max_length=80, verbose_name='จังหวัด')
+    district = models.CharField(max_length=80, verbose_name='อำเภอ/เขต')
+    subdistrict = models.CharField(max_length=80, verbose_name='ตำบล/แขวง')
+    zipcode = models.CharField(max_length=5, verbose_name='รหัสไปรษณีย์')
+    is_default = models.BooleanField(default=False, verbose_name='ค่าเริ่มต้น')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'ที่อยู่จัดส่ง'
+        verbose_name_plural = 'สมุดที่อยู่จัดส่ง'
+        ordering = ['-is_default', '-created_at']
+
+    def __str__(self):
+        return f'{self.label}: {self.receiver_name} ({self.province})'
+
+    @property
+    def full_address(self):
+        """ที่อยู่บรรทัดเดียว — ใช้ snapshot ลง Order.address"""
+        return (f'{self.detail} {self.subdistrict} {self.district} '
+                f'{self.province} {self.zipcode}')

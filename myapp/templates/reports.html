@@ -1,0 +1,198 @@
+﻿{# ===== reports.html: รายงานขาย — ตัวกรองช่วงเวลา (today/week/month/year) · summary cards · Chart.js (dark-aware, rebuild on theme toggle) · ขายดี 5 อันดับ ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+                <p class="eyebrow mb-1"><i class="bi bi-graph-up"></i> รายงาน</p>
+                <h2 class="page-title mb-0" data-motion="reveal">รายงานขาย</h2>
+            </div>
+        </div>
+
+        {# ช่วงเวลา filter: เปลี่ยนค่า period → server ควิรีใหม่ (รายได้เฉพาะออเดอร์ชำระแล้ว) #}
+        <div class="d-flex gap-2 mb-4 flex-wrap">
+            <a href="?period=today" class="btn btn-sm {% if period == 'today' %}btn-primary{% else %}btn-light{% endif %}">วันนี้</a>
+            <a href="?period=week" class="btn btn-sm {% if period == 'week' %}btn-primary{% else %}btn-light{% endif %}">สัปดาห์นี้</a>
+            <a href="?period=month" class="btn btn-sm {% if period == 'month' %}btn-primary{% else %}btn-light{% endif %}">เดือนนี้</a>
+            <a href="?period=year" class="btn btn-sm {% if period == 'year' %}btn-primary{% else %}btn-light{% endif %}">ปีนี้</a>
+        </div>
+
+        <div class="row g-4 mb-4" data-motion="stagger">
+            <div class="col-md-4">
+                <div class="card panel-card text-center p-4">
+                    <p class="eyebrow mb-1">รายได้ {{ period_label }}</p>
+                    <h3 class="summary-total mb-0">฿ {{ revenue|floatformat:2 }}</h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card panel-card text-center p-4">
+                    <p class="eyebrow mb-1">จำนวนออเดอร์</p>
+                    <h3 class="summary-total mb-0">{{ order_count }}</h3>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card panel-card text-center p-4">
+                    <p class="eyebrow mb-1">เฉลี่ยต่อออเดอร์</p>
+                    <h3 class="summary-total mb-0">฿ {{ avg_order|floatformat:2 }}</h3>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-lg-8">
+                <div class="card panel-card--wide p-4" data-motion="reveal">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0"><i class="bi bi-bar-chart me-2"></i>
+                            {% if period == 'today' %}รายได้รายชั่วโมง (วันนี้)
+                            {% elif period == 'week' %}รายได้รายวัน (สัปดาห์นี้)
+                            {% elif period == 'year' %}รายได้รายเดือน (ปีนี้)
+                            {% else %}รายได้รายวัน (เดือนนี้){% endif %}
+                        </h6>
+                    </div>
+                    <div style="position:relative;height:350px;max-height:350px">
+                        <canvas id="revenueChart"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card panel-card--wide p-4" data-motion="reveal">
+                    <h6 class="mb-3"><i class="bi bi-trophy me-2"></i>สินค้าขายดี 5 อันดับ</h6>
+                    {% for p in top_products %}
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <span class="fw-medium">{{ p.product__name }}</span>
+                            <br><small class="text-muted-apple">{{ p.total_qty }} ชิ้น</small>
+                        </div>
+                        <strong class="text-nowrap">฿ {{ p.total_revenue|floatformat:2 }}</strong>
+                    </div>
+                    {% empty %}
+                    <p class="text-muted-apple small">ยังไม่มีข้อมูลในช่วงเวลานี้</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    var canvas = document.getElementById('revenueChart');
+    if (!canvas) return;
+
+    var chartLabels = {{ chart_labels|safe }};
+    var chartData   = {{ chart_data|safe }};
+    var chart = null;
+
+    function getTheme() { return document.documentElement.dataset.theme || 'light'; }
+
+    function buildChart() {
+        if (chart) { chart.destroy(); chart = null; }
+        var ctx = canvas.getContext('2d');
+        var isDark = getTheme() === 'dark';
+
+        var grad = ctx.createLinearGradient(0, 0, 0, 350);
+        grad.addColorStop(0, isDark ? 'rgba(41,151,255,0.85)' : 'rgba(0,113,227,0.85)');
+        grad.addColorStop(1, isDark ? 'rgba(100,210,255,0.35)' : 'rgba(100,210,255,0.45)');
+
+        var hoverGrad = ctx.createLinearGradient(0, 0, 0, 350);
+        hoverGrad.addColorStop(0, isDark ? 'rgba(41,151,255,1)' : 'rgba(0,113,227,1)');
+        hoverGrad.addColorStop(1, isDark ? 'rgba(100,210,255,0.6)' : 'rgba(100,210,255,0.7)');
+
+        var gridColor = isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.04)';
+        var tickColor = isDark ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.35)';
+
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: 'รายได้ (฿)',
+                    data: chartData,
+                    backgroundColor: grad,
+                    hoverBackgroundColor: hoverGrad,
+                    borderRadius: { topLeft: 6, topRight: 6, bottomLeft: 0, bottomRight: 0 },
+                    borderSkipped: false,
+                    barPercentage: 0.7,
+                    categoryPercentage: 0.8,
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 600, easing: 'easeOutQuart' },
+                interaction: { intersect: false, mode: 'index' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: isDark ? 'rgba(40,40,40,0.95)' : 'rgba(255,255,255,0.96)',
+                        titleColor: isDark ? '#f5f5f7' : '#1d1d1f',
+                        bodyColor: isDark ? 'rgba(245,245,247,0.75)' : 'rgba(0,0,0,0.55)',
+                        borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)',
+                        borderWidth: 1,
+                        cornerRadius: 12,
+                        padding: { top: 10, bottom: 10, left: 14, right: 14 },
+                        titleFont: { family: 'Prompt', size: 13, weight: '600' },
+                        bodyFont: { family: 'Prompt', size: 12 },
+                        displayColors: false,
+                        callbacks: {
+                            title: function (items) { return items[0].label; },
+                            label: function (item) {
+                                return '\u0e3f ' + item.parsed.y.toLocaleString('th-TH', {minimumFractionDigits: 2});
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: {
+                            color: tickColor,
+                            font: { family: 'Prompt', size: 11, weight: '500' },
+                            maxRotation: 0,
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        border: { display: false },
+                        grid: { color: gridColor, drawBorder: false },
+                        ticks: {
+                            color: tickColor,
+                            font: { family: 'Prompt', size: 11 },
+                            callback: function (v) {
+                                if (v >= 1000000) return '\u0e3f' + (v / 1000000).toFixed(1) + 'M';
+                                if (v >= 1000) return '\u0e3f' + (v / 1000).toFixed(0) + 'K';
+                                return '\u0e3f' + v;
+                            },
+                            maxTicksLimit: 6,
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    buildChart();
+
+    /* Rebuild chart when theme toggles */
+    var toggle = document.getElementById('themeToggle');
+    if (toggle) {
+        toggle.addEventListener('click', function () {
+            setTimeout(buildChart, 80);
+        });
+    }
+    /* Also watch for OS-level changes (prefers-color-scheme) */
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function () {
+            setTimeout(buildChart, 80);
+        });
+    }
+})();
+</script>
+{% endblock %}

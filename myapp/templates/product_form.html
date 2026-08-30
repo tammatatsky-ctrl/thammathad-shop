@@ -1,0 +1,235 @@
+﻿{# ===== product_form.html: เพิ่ม/แก้ไขสินค้า — รูป + ราคา + สต็อก · ปุ่ม AI ช่วยเขียนคำอธิบาย (แสดงเมื่อ GEMINI_API_KEY มีค่า) · alert ใช้ islandAlert (ไม่ใช่ native) ===== #}
+{% extends "adminbase.html" %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <p class="eyebrow mb-2"><i class="bi bi-sliders"></i> โซนผู้ดูแล / <a href="{% url 'product_manage' %}" class="text-decoration-none">จัดการสินค้า</a></p>
+        <h1 class="page-title page-title--small">
+            {% if product %}<i class="bi bi-pencil-square"></i> แก้ไขสินค้า{% else %}<i class="bi bi-stars"></i> เพิ่มสินค้าใหม่{% endif %}
+        </h1>
+
+        {% if form_errors %}
+            <div class="alert alert-danger d-flex align-items-center gap-2 mt-3">
+                <i class="bi bi-exclamation-triangle-fill"></i>
+                <div>กรุณาตรวจสอบข้อมูลที่ทำเครื่องหมายสีแดงให้ถูกต้อง</div>
+            </div>
+        {% endif %}
+
+        <div class="row g-4 mt-1" data-motion="reveal" data-dir="zoom">
+            <!-- ฟอร์ม -->
+            <div class="col-lg-8">
+                <div class="card panel-card">
+                    <form method="POST" id="productForm" novalidate>
+                        {% csrf_token %}
+
+                        <div class="mb-3">
+                            <label class="form-label req" for="prodName">ชื่อสินค้า</label>
+                            <input type="text" name="name" id="prodName" value="{{ product.name|default:'' }}" class="form-control" placeholder="กรุณากรอกชื่อสินค้า" required data-live="name">
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="prodCategory">หมวดหมู่</label>
+                            <input type="text" name="category" id="prodCategory" value="{{ product.category|default:'' }}" class="form-control" placeholder="เช่น อุปกรณ์ต่อพ่วง เกมมิ่ง เน็ตเวิร์ก" data-live="category" list="categoryList">
+                            <datalist id="categoryList">
+                                {% for cat in all_categories %}<option value="{{ cat }}"></option>{% endfor %}
+                            </datalist>
+                            <div class="form-hint"><i class="bi bi-tags"></i> ใช้จัดกลุ่มสินค้าและแสดง filter pills หน้าร้าน</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <label class="form-label" for="prodDesc">รายละเอียด</label>
+                                {% if ai_enabled %}
+                                <button type="button" id="aiBtn" class="btn btn-sm btn-outline-primary ai-btn">
+                                    <i class="bi bi-stars me-1"></i> AI ช่วยเขียน
+                                </button>
+                                {% endif %}
+                            </div>
+                            <textarea name="description" id="prodDesc" rows="3" class="form-control" placeholder="รายละเอียดสินค้า" data-live="desc">{{ product.description|default:'' }}</textarea>
+                            <div class="form-hint ai-hint d-none"><i class="bi bi-hourglass-split"></i> AI กำลังเขียน...</div>
+                        </div>
+
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="prodPrice">ราคา (บาท)</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">฿</span>
+                                    <input type="number" name="price" id="prodPrice" value="{{ product.price|default:'' }}" step="0.01" min="0" class="form-control" placeholder="เช่น 450" required data-live="price" inputmode="decimal">
+                                </div>
+                                <div class="form-hint"><i class="bi bi-cash-coin"></i> พรีวิว: <span id="pricePreview">0.00</span> บาท</div>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label req" for="prodStock">จำนวนคงเหลือ</label>
+                                <input type="number" name="stock" id="prodStock" value="{{ product.stock|default:'' }}" min="0" class="form-control" placeholder="เช่น 50" required data-live="stock" inputmode="numeric">
+                                <div class="form-hint"><i class="bi bi-box-seam"></i> <span id="stockHint">กรอกจำนวนสินค้าที่มีในคลัง</span></div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="prodImage">รูปภาพ (ไฟล์ใน static/images/)</label>
+                            <input type="text" name="image" id="prodImage" value="{{ product.image|default:'images/prod1.jpg' }}" class="form-control" placeholder="images/prod1.jpg" data-live="image">
+                            <div class="form-hint"><i class="bi bi-info-circle"></i> ไฟล์ที่มีในระบบ: prod1.jpg, prod2.jpg, prod3.jpg — พรีวิวอัปเดตทันทีที่แก้พาธ</div>
+                        </div>
+
+                        <div class="form-check form-switch mb-4">
+                            <input type="checkbox" name="is_active" class="form-check-input" role="switch" id="isActive" {% if product.is_active or not product %}checked{% endif %} data-live="active">
+                            <label class="form-check-label" for="isActive">แสดงสินค้าบนหน้าร้าน</label>
+                        </div>
+
+                        <div class="d-grid gap-2">
+                            <button type="submit" class="btn btn-primary btn-lg" id="submitBtn">
+                                <i class="bi bi-cloud-arrow-up me-1"></i>
+                                {% if product %}บันทึกการแก้ไข{% else %}เพิ่มสินค้า{% endif %}
+                            </button>
+                            <a href="{% url 'product_manage' %}" class="btn btn-light lens-btn">ยกเลิกกลับหน้าจัดการ</a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            <!-- พรีวิวสด -->
+            <div class="col-lg-4">
+                <div class="emp-aside">
+                    <div class="card panel-card text-center">
+                        <p class="eyebrow mb-3"><i class="bi bi-eye"></i> พรีวิวหน้าร้าน</p>
+                        <img id="pvImage" src="{% static product.image|default:'images/prod1.jpg' %}" alt="" class="product-img mb-3">
+                        <h5 class="mb-1" id="pvName">{{ product.name|default:"ชื่อสินค้า" }}</h5>
+                        <p class="catalog-tag mb-2" id="pvCategory" {% if not product.category %}style="display:none"{% endif %}>{{ product.category|default:'' }}</p>
+                        <p class="text-muted-apple small mb-2" id="pvDesc">{{ product.description|default:"รายละเอียดสินค้า" }}</p>
+                        <p class="product-price product-price--emphasis mb-1">฿ <span id="pvPrice">{{ product.price|floatformat:2|default:"0.00" }}</span></p>
+                        <p class="text-muted-apple small mb-3" id="pvStock">{{ product.stock|default:"0" }} ชิ้น</p>
+                        <span class="emp-status {% if product.is_active or not product %}status-active{% else %}status-resigned{% endif %}" id="pvActive">{% if product.is_active or not product %}แสดงบนหน้าร้าน{% else %}ซ่อนจากหน้าร้าน{% endif %}</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('productForm');
+    if (!form) return;
+    var g = function (id) { return document.getElementById(id); };
+    var pv = {
+        image: g('pvImage'), name: g('pvName'), desc: g('pvDesc'),
+        price: g('pvPrice'), stock: g('pvStock'), active: g('pvActive'),
+        category: g('pvCategory')
+    };
+    var pricePreview = g('pricePreview'), stockHint = g('stockHint');
+
+    function fmtPrice(v) {
+        var n = parseFloat(v);
+        if (!isFinite(n) || n < 0) return '0.00';
+        return n.toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+    function bindLive(name, fn) {
+        var el = form.querySelector('[data-live="' + name + '"]');
+        if (!el) return;
+        var evt = (el.type === 'checkbox') ? 'change' : 'input';
+        el.addEventListener(evt, fn);
+        fn();
+    }
+    bindLive('name', function () {
+        var v = form.querySelector('[data-live="name"]').value.trim();
+        pv.name.textContent = v || 'ชื่อสินค้า';
+    });
+    bindLive('category', function () {
+        var v = form.querySelector('[data-live="category"]').value.trim();
+        pv.category.textContent = v;
+        pv.category.style.display = v ? '' : 'none';
+    });
+    bindLive('desc', function () {
+        var v = form.querySelector('[data-live="desc"]').value.trim();
+        pv.desc.textContent = v || 'รายละเอียดสินค้า';
+    });
+    bindLive('price', function () {
+        var v = fmtPrice(form.querySelector('[data-live="price"]').value);
+        pv.price.textContent = v;
+        if (pricePreview) pricePreview.textContent = v;
+    });
+    bindLive('stock', function () {
+        var el = form.querySelector('[data-live="stock"]');
+        var n = parseInt(el.value, 10);
+        pv.stock.textContent = (isFinite(n) && n > 0 ? n : '0') + ' ชิ้น';
+        if (stockHint) {
+            if (!el.value.length) stockHint.textContent = 'กรอกจำนวนสินค้าที่มีในคลัง';
+            else if (n === 0) stockHint.textContent = 'หมดสต็อก — จะแสดงป้าย "หมด" ในหน้าจัดการ';
+            else if (n <= 5) stockHint.textContent = 'สต็อกน้อย (' + n + ' ชิ้น) — ควรเติมสินค้าเร็วนี้';
+            else stockHint.textContent = 'สต็อกพร้อมขาย ' + n + ' ชิ้น';
+        }
+    });
+    bindLive('image', function () {
+        var v = form.querySelector('[data-live="image"]').value.trim() || 'images/prod1.jpg';
+        var cur = pv.image.getAttribute('src') || '';
+        var cut = cur.lastIndexOf('/static/');
+        pv.image.src = cut >= 0 ? cur.substring(0, cut + 8) + v : v;
+    });
+    bindLive('active', function () {
+        var on = form.querySelector('[data-live="active"]').checked;
+        pv.active.textContent = on ? 'แสดงบนหน้าร้าน' : 'ซ่อนจากหน้าร้าน';
+        pv.active.classList.toggle('status-active', on);
+        pv.active.classList.toggle('status-resigned', !on);
+    });
+
+    /* ---- มาร์กช่องที่ error (required เว้นว่าง / ค่าติดลบ) + เลื่อนไปช่องแรก ---- */
+    var invalid = [];
+    form.querySelectorAll('[required]').forEach(function (ctrl) {
+        var bad = !ctrl.value.trim() ||
+            (ctrl.type === 'number' && ctrl.min !== '' && parseFloat(ctrl.value) < parseFloat(ctrl.min));
+        if (bad) { ctrl.classList.add('is-invalid'); invalid.push(ctrl); }
+    });
+    if (invalid.length) {
+        invalid[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+        invalid[0].focus({ preventScroll: true });
+    }
+
+    /* ---- Gemini AI ช่วยเขียนคำอธิบาย ---- */
+    var aiBtn = document.getElementById('aiBtn');
+    if (aiBtn) {
+        var aiHint = document.querySelector('.ai-hint');
+        aiBtn.addEventListener('click', function () {
+            var nameEl = document.getElementById('prodName');
+            if (!nameEl.value.trim()) {
+                nameEl.classList.add('is-invalid');
+                nameEl.focus();
+                return;
+            }
+            aiBtn.disabled = true;
+            aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> กำลังคิด...';
+            if (aiHint) aiHint.classList.remove('d-none');
+            fetch("{% url 'product_describe_ai' %}", { method: 'POST', body: new FormData(form) })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                .then(function (res) {
+                    if (res.ok && res.j.description) {
+                        var desc = document.getElementById('prodDesc');
+                        desc.value = res.j.description;
+                        desc.dispatchEvent(new Event('input', { bubbles: true }));
+                    } else {
+                        islandAlert(res.j.error || 'AI ไม่ตอบสนอง', 'AI ไม่ตอบสนอง');
+                    }
+                })
+                .catch(function () { islandAlert('เชื่อมต่อ AI ไม่สำเร็จ'); })
+                .finally(function () {
+                    aiBtn.disabled = false;
+                    aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> AI ช่วยเขียน';
+                    if (aiHint) aiHint.classList.add('d-none');
+                });
+        });
+    }
+
+    /* ---- ปุ่มบันทึก: กันกดซ้ำ + สถานะกำลังบันทึก ---- */
+    form.addEventListener('submit', function (e) {
+        var btn = g('submitBtn');
+        if (btn.classList.contains('btn-loading')) { e.preventDefault(); return; }
+        btn.classList.add('btn-loading');
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>กำลังบันทึก...';
+    });
+})();
+</script>
+{% endblock %}

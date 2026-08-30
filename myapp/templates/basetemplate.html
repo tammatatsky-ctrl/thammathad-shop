@@ -1,0 +1,196 @@
+﻿{# ===== basetemplate.html: เฟรมโซนผู้ใช้ทั่วไป (ทุกหน้าโซน public) — จุดโหลด static จุดเดียว #}
+{#  head: theme.css + css/effects/*.css (9) · ท้าย body: motion-core.js → js/effects/*.js (9) → FX.boot() #}
+{#  navbar: ตะกร้า (cart_count จาก context_processor) · theme toggle · ปุ่ม ⚡ (Motion) · สลับโซนผู้ดูแล #}
+{#  + island toast (messages) + SVG เลนส์ขอบแก้ว (#liquid-distort) ให้ fx-glass ใช้                    #}
+{% load static %}
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>THAMMATHAD SHOP</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Prompt:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        (function () {
+            var saved = null;
+            try { saved = localStorage.getItem('thammathad-theme'); } catch (error) {}
+            var systemDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.dataset.theme = saved === 'dark' || saved === 'light'
+                ? saved
+                : (systemDark ? 'dark' : 'light');
+        })();
+    </script>
+    <link rel="stylesheet" href="{% static 'css/theme.css' %}">
+    {# คิว CSS: core theme.css ก่อน แล้วตามด้วย css/effects/*.css — แก้/ปิดเอฟเฟกต์รายตัวได้โดยไม่แตะ core #}
+    <link rel="stylesheet" href="{% static 'css/effects/fx-glass.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-reveal.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-progress.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-blur-up.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-card-pop.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-morph.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-skeleton.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-ripple.css' %}">
+    <link rel="stylesheet" href="{% static 'css/effects/fx-parallax.css' %}">
+    <noscript><style>body{opacity:1!important}</style></noscript>
+    <script>setTimeout(function(){if(document.body&&!document.body.classList.contains('loaded'))document.body.classList.add('loaded');},3000);</script>
+</head>
+<body>
+
+    <!-- Frosted Glass Navbar (หน้าผู้ใช้ทั่วไป — ไม่มีเมนูจัดการ) -->
+    {% block navbar %}
+    <nav class="navbar navbar-expand-lg navbar-light" id="navbar">
+        <div class="container">
+            <a class="navbar-brand" href="{% url 'index' %}">
+                <i class="bi bi-bag-fill text-primary brand-mark me-1"></i>THAMMATHAD SHOP
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item"><a class="nav-link" href="{% url 'index' %}"><i class="bi bi-house-door"></i>หน้าหลัก</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{% url 'product' %}"><i class="bi bi-grid"></i>สินค้า</a></li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{% url 'cart' %}">
+                            <i class="bi bi-bag"></i> ตะกร้า
+                            <span class="cart-badge" id="navCartCount" {% if not cart_count %}hidden{% endif %}>{{ cart_count }}</span>
+                        </a>
+                    </li>
+                    {% if user.is_authenticated %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'account' %}"><i class="bi bi-box-seam"></i> ออเดอร์ของฉัน</a></li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'contact' %}"><i class="bi bi-headset"></i>ติดต่อสอบถาม</a></li>
+                </ul>
+                {% if user.is_authenticated %}
+                    <a href="{% url 'account' %}" class="btn btn-sm btn-light me-2 account-chip">
+                        <i class="bi bi-person-circle me-1"></i><span class="d-none d-md-inline">{{ user.get_full_name|default:user.username|truncatechars:14 }}</span><span class="d-md-none">บัญชี</span>
+                    </a>
+                {% else %}
+                    <a href="{% url 'account_login' %}" class="btn btn-sm btn-light me-2">
+                        <i class="bi bi-person me-1"></i><span class="d-none d-md-inline">เข้าสู่ระบบ</span>
+                    </a>
+                {% endif %}
+                {% if user.is_staff %}
+                    <a href="{% url 'employee_list' %}" class="btn btn-sm zone-switch lens-btn me-2" title="สลับไปโซนผู้ดูแล">
+                        <i class="bi bi-shield-lock-fill me-1"></i>โซนผู้ดูแล
+                    </a>
+                {% else %}
+                    <a href="{% url 'staff_login' %}" class="btn btn-sm zone-switch lens-btn me-2" title="เข้าสู่ระบบผู้ดูแล">
+                        <i class="bi bi-shield-lock me-1"></i><span class="d-none d-md-inline">เข้าสู่ระบบผู้ดูแล</span><span class="d-md-none">ผู้ดูแล</span>
+                    </a>
+                {% endif %}
+                <button type="button" class="theme-switch" id="themeToggle" role="switch" aria-label="เปลี่ยนเป็นโหมดมืด" aria-checked="false" aria-pressed="false" title="สลับโหมดมืด/สว่าง">
+                    <span class="theme-switch-track" aria-hidden="true">
+                        <i class="bi bi-sun-fill"></i>
+                        <span class="theme-switch-thumb"></span>
+                        <i class="bi bi-moon-fill"></i>
+                    </span>
+                    <span class="visually-hidden">สลับโหมดมืดและโหมดสว่าง</span>
+                </button>
+                <button type="button" class="motion-switch" id="motionToggle" role="switch" aria-label="ปิดอนิเมชั่น" aria-checked="true" aria-pressed="true" title="ปิดอนิเมชั่น">
+                    <span class="motion-switch-track" aria-hidden="true">
+                        <i class="bi bi-lightning-fill"></i>
+                        <span class="motion-switch-thumb"></span>
+                        <i class="bi bi-pause-fill"></i>
+                    </span>
+                    <span class="visually-hidden">เปิด/ปิดอนิเมชั่น</span>
+                </button>
+            </div>
+        </div>
+    </nav>
+    {% endblock navbar %}
+
+    <main>
+        {% block content %}
+        {% endblock %}
+    </main>
+
+    <!-- Minimal Light Footer -->
+    <footer class="apple-footer mt-auto">
+        <div class="footer-inner">
+            <div class="footer-grid">
+                <div class="footer-brand">
+                    <p class="footer-brand-name mb-0">THAMMATHAD SHOP</p>
+                    <p class="footer-brand-desc mb-0">จำหน่ายอุปกรณ์คอมพิวเตอร์และไอที คุณภาพส่งตรงถึงมือคุณ ปลอดภัยทุกออเดอร์</p>
+                    <div class="footer-social mt-3">
+                        <a href="#" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+                        <a href="#" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+                        <a href="#" aria-label="LINE"><i class="bi bi-line"></i></a>
+                        <a href="{% url 'contact' %}" aria-label="ติดต่อเรา"><i class="bi bi-envelope"></i></a>
+                    </div>
+                </div>
+                <div>
+                    <p class="footer-col-title">เมนู</p>
+                    <ul class="footer-links">
+                        <li><a href="{% url 'index' %}">หน้าแรก</a></li>
+                        <li><a href="{% url 'product' %}">สินค้าทั้งหมด</a></li>
+                        <li><a href="{% url 'cart' %}">ตะกร้าสินค้า</a></li>
+                        <li><a href="{% url 'account' %}">บัญชีของฉัน</a></li>
+                        <li><a href="{% url 'order_tracking' %}">ติดตามสินค้า</a></li>
+                    </ul>
+                </div>
+                <div>
+                    <p class="footer-col-title">ช่วยเหลือ</p>
+                    <ul class="footer-links">
+                        <li><a href="{% url 'contact' %}">ติดต่อเรา</a></li>
+                        <li><a href="{% url 'order_tracking' %}">เช็คสถานะออเดอร์</a></li>
+                        <li><a href="{% url 'staff_login' %}">เข้าสู่ระบบผู้ดูแล</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <span>© {% now "Y" %} THAMMATHAD SHOP — พัฒนาโดย ธรรมธัช รูปไธสง</span>
+                <span>สาขาวิทยาการคอมพิวเตอร์ มหาวิทยาลัยราชภัฏกำแพงเพชร</span>
+            </div>
+        </div>
+    </footer>
+    <button type="button" class="back-top" id="backTop" aria-label="กลับขึ้นด้านบน"><i class="bi bi-arrow-up"></i></button>
+
+    <!-- Dynamic Island Toast stack -->
+    <div class="island-stack" id="islandStack" aria-live="polite" aria-atomic="true">
+        {% for message in messages %}
+            <div class="island-toast" data-level="{{ message.tags }}" role="status">
+                <span class="island-icon">
+                    {% if message.tags == 'success' %}<i class="bi bi-check-circle-fill"></i>
+                    {% elif message.tags == 'error' %}<i class="bi bi-exclamation-triangle-fill"></i>
+                    {% else %}<i class="bi bi-info-circle-fill"></i>{% endif %}
+                </span>
+                <span class="island-text">{{ message }}</span>
+            </div>
+        {% endfor %}
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+
+    {# คิว JS: core ก่อนเสมอ แล้ว effects ทีละไฟล์ ปิดท้าย FX.boot() — ลำดับนี้ต้องอยู่แบบนี้ #}
+    <script src="{% static 'js/motion-core.js' %}"></script>
+    <script src="{% static 'js/effects/fx-countup.js' %}"></script>
+    <script src="{% static 'js/effects/fx-ripple.js' %}"></script>
+    <script src="{% static 'js/effects/fx-glass.js' %}"></script>
+    <script src="{% static 'js/effects/fx-progress.js' %}"></script>
+    <script src="{% static 'js/effects/fx-blur-up.js' %}"></script>
+    <script src="{% static 'js/effects/fx-magnetic.js' %}"></script>
+    <script src="{% static 'js/effects/fx-parallax.js' %}"></script>
+    <script src="{% static 'js/effects/fx-card-pop.js' %}"></script>
+    <script src="{% static 'js/effects/fx-morph.js' %}"></script>
+    <script>if (window.FX) FX.boot();</script>
+    {# ↓ ถ้า mod ใหม่ต้องการ script/Link เพิ่ม ต้องแทรกก่อนบรรทัดนี้ (ลำดับ: core → effects → boot) #}
+
+
+    {% block extra_js %}{% endblock %}
+
+    <!-- Liquid Edge Lens: การหักเหแบบเลนส์ขอบแก้ว (displacement map gen จาก canvas — ไม่ใช้ noise) -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+        <defs>
+            <filter id="liquid-distort" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
+                <feImage id="lensMap" x="0" y="0" width="600" height="300" preserveAspectRatio="none" result="map"></feImage>
+                <feDisplacementMap in="SourceGraphic" in2="map" scale="8" xChannelSelector="R" yChannelSelector="G" />
+            </filter>
+        </defs>
+    </svg>
+</body>
+</html>

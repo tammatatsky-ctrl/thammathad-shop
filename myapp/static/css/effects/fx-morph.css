@@ -1,0 +1,202 @@
+/* ===== FX MOD CSS: card-expand morph lightbox ===== */
+/* ---- Card Expand modal: คลิกการ์ดขยายเป็น modal ---- */
+@keyframes cardPopIn {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.card-expand-wrap {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  pointer-events: none;
+}
+.card-expand-card {
+  pointer-events: auto;
+  position: relative;
+  width: min(520px, 94vw);
+  max-height: 86vh;
+  overflow: auto;
+  border-radius: 32px;
+  padding: 18px;
+  border: 1px solid var(--gray-border-soft);
+  backdrop-filter: var(--glass-filter);
+  -webkit-backdrop-filter: var(--glass-filter);
+  box-shadow:
+    inset 0 1px 0 var(--glass-highlight),
+    0 30px 90px rgba(0, 0, 0, 0.45);
+  background:
+    radial-gradient(
+      320px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(120, 130, 145, calc(var(--spec-o, 0) * 0.7)),
+      rgba(120, 130, 145, calc(var(--spec-o, 0) * 0.28)) 40%,
+      transparent 72%
+    ),
+    radial-gradient(
+      640px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+      rgba(120, 130, 145, calc(var(--bloom-o, 0) * 0.18)),
+      transparent 70%
+    ),
+    var(--surface-raised);
+  opacity: 0;
+  transform: translateY(18px) scale(0.92);
+  transition:
+    opacity 0.5s var(--ease-apple),
+    transform 0.5s var(--ease-apple);
+}
+.card-expand-card.show {
+  opacity: 1;
+  transform: none;
+}
+.card-expand-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 2;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: 1px solid var(--gray-border);
+  background: var(--gray-bg);
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  transition:
+    transform 0.3s var(--ease-apple),
+    background 0.3s var(--ease-apple);
+  cursor: pointer;
+}
+.card-expand-close:hover {
+  background: var(--gray-bg-2);
+  transform: scale(1.06);
+}
+.card-expand-img {
+  width: 100%;
+  height: 280px;
+  object-fit: contain;
+  border-radius: 24px;
+  margin-bottom: 16px;
+  background: #fff;
+  padding: 14px;
+}
+.card-expand-body {
+  padding: 4px 8px 8px;
+  text-align: left;
+}
+.card-expand-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  letter-spacing: -0.02em;
+}
+.card-expand-desc {
+  color: var(--muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin: 0 0 14px;
+}
+.card-expand-price {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin: 0 0 8px;
+  letter-spacing: -0.01em;
+}
+.card-expand-link {
+  border-radius: 999px;
+}
+.card-expand-link .bi {
+  transition: transform 0.25s var(--ease-apple);
+}
+.card-expand-link:hover .bi {
+  transform: translateX(4px);
+}
+/* Morph (ขยายจากการ์ดที่คลิก) — ใช้ inline position/size + spring-like ease */
+.card-expand-card.is-morph {
+  width: auto;
+  height: auto;
+  max-height: none;
+  overflow: hidden;
+  opacity: 1;
+  transform: none;
+  margin: 0;
+  border-radius: 26px;
+  transition:
+    left 0.65s cubic-bezier(0.34, 1.3, 0.36, 1),
+    top 0.65s cubic-bezier(0.34, 1.3, 0.36, 1),
+    width 0.65s cubic-bezier(0.34, 1.3, 0.36, 1),
+    height 0.65s cubic-bezier(0.34, 1.3, 0.36, 1),
+    border-radius 0.65s var(--ease-apple),
+    opacity 0.3s var(--ease-apple);
+  display: flex;
+  flex-direction: column;
+}
+.card-expand-card.is-morph .card-expand-img {
+  flex-grow: 1;
+  height: auto;
+  min-height: 220px;
+  margin: 0;
+  border-radius: 26px 26px 0 0;
+  object-fit: contain;
+  padding: 18px;
+  animation: cardPopIn 0.5s var(--ease-apple-out) 0.15s backwards;
+}
+.card-expand-card.is-morph .card-expand-body {
+  flex-shrink: 0;
+}
+.card-expand-card.is-morph-open {
+  border-radius: 32px;
+}
+.card-expand-card.is-morph-open .card-expand-body > * {
+  animation: cardPopIn 0.45s var(--ease-apple-out) backwards;
+}
+.card-expand-card.is-morph-open .card-expand-body > *:nth-child(1) {
+  animation-delay: 0.45s;
+}
+.card-expand-card.is-morph-open .card-expand-body > *:nth-child(2) {
+  animation-delay: 0.52s;
+}
+.card-expand-card.is-morph-open .card-expand-body > *:nth-child(3) {
+  animation-delay: 0.59s;
+}
+.card-expand-card.is-morph-open .card-expand-body > *:nth-child(4) {
+  animation-delay: 0.66s;
+}
+.card-expand-card.is-morph .card-expand-close {
+  transform: scale(0);
+  opacity: 0;
+  transition:
+    transform 0.3s var(--ease-apple) 0.45s,
+    opacity 0.3s var(--ease-apple) 0.45s;
+}
+.card-expand-card.is-morph-open .card-expand-close,
+.card-expand-card.show .card-expand-close {
+  transform: scale(1);
+  opacity: 1;
+}
+/* Closing: spring dismiss อยู่ตรงกลาง—scale .9 เด้ง + fade (ไม่มุดกลับการ์ด) */
+.card-expand-card.is-closing {
+  transform: translateY(14px) scale(0.9) !important;
+  opacity: 0;
+  border-radius: 26px;
+  transition:
+    transform 0.45s cubic-bezier(0.34, 1.3, 0.36, 1),
+    opacity 0.4s ease 0.05s,
+    border-radius 0.3s var(--ease-apple);
+}
+.card-expand-card.is-closing .card-expand-img,
+.card-expand-card.is-closing .card-expand-body > *,
+.card-expand-card.is-closing .card-expand-close {
+  animation: none !important;
+}
