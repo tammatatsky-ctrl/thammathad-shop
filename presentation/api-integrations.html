@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบเชื่อมต่อ API ภายนอก — Thammathad Shop</title>
+<style>
+  /* =========================================================================
+     สไลด์พรีเซนต์: ระบบเชื่อมต่อ API ภายนอกของ Thammathad Shop
+     - ไฟล์เดียวจบ (offline ได้ — ไม่มี CDN/ฟอนต์ภายนอก)
+     - คีย์บอร์ด ← → / Space เลื่อนสไลด์ · ปุ่มมุมขวาล่าง · พิมพ์เป็น PDF ได้
+     - ดีไซน์ชุดเดียวกับโปรเจกต์ (Liquid Glass-light · Apple blue · ฟอนต์ระบบ+ไทย)
+     ========================================================================= */
+  :root {
+    --apple-blue: #0071e3;
+    --apple-blue-hover: #0077ed;
+    --apple-green: #1f8f4e;
+    --apple-amber: #9a6400;
+    --apple-red: #c92a24;
+    --ink: #1d1d1f;
+    --ink-soft: #424245;
+    --muted: #6e6e73;
+    --muted-2: #86868b;
+    --page-bg: #f5f5f7;
+    --surface: rgba(255, 255, 255, 0.72);
+    --surface-solid: #ffffff;
+    --hairline: rgba(0, 0, 0, 0.09);
+    --hairline-strong: #d2d2d7;
+    --code-bg: #f2f4f7;
+    --ease: cubic-bezier(0.28, 0.11, 0.32, 1);
+    --radius: 18px;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+                 "Helvetica Neue", "Prompt", "Noto Sans Thai", "Segoe UI", sans-serif;
+    color: var(--ink);
+    background:
+      radial-gradient(1200px 700px at 12% -8%, rgba(0, 113, 227, 0.10), transparent 60%),
+      radial-gradient(900px 600px at 100% 110%, rgba(52, 199, 89, 0.07), transparent 55%),
+      var(--page-bg);
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- โครงสไลด์ ---------- */
+  .deck { height: 100%; display: grid; place-items: center; padding: 22px; }
+  .slide {
+    display: none;
+    width: min(1180px, 100%);
+    max-height: calc(100vh - 96px);
+    overflow: auto;
+    background: var(--surface);
+    border: 1px solid var(--hairline);
+    border-radius: var(--radius);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.10), 0 2px 8px rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(14px) saturate(1.4);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4);
+    padding: 44px 52px 38px;
+    animation: rise 0.34s var(--ease);
+  }
+  .slide.active { display: block; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* ---------- ตัวอักษร ---------- */
+  .eyebrow {
+    font-size: 12.5px; letter-spacing: 0.14em; text-transform: uppercase;
+    color: var(--apple-blue); font-weight: 700; margin: 0 0 10px;
+  }
+  h1 { font-size: clamp(28px, 3.6vw, 44px); line-height: 1.2; letter-spacing: -0.02em; margin: 0 0 14px; }
+  h2 { font-size: clamp(22px, 2.4vw, 30px); line-height: 1.25; letter-spacing: -0.015em; margin: 0 0 6px; }
+  h3 { font-size: 17px; margin: 0 0 8px; letter-spacing: -0.01em; }
+  p.lead { font-size: 16.5px; color: var(--ink-soft); margin: 0 0 18px; max-width: 78ch; }
+  .subtle { color: var(--muted); font-size: 13.5px; }
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 12.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+    border: 1px solid var(--hairline-strong); background: #fff; color: var(--ink-soft);
+  }
+  .tag.keyless { border-color: rgba(31, 143, 78, 0.35); background: rgba(52, 199, 89, 0.10); color: var(--apple-green); }
+  .tag.needs-key { border-color: rgba(154, 100, 0, 0.35); background: rgba(255, 204, 0, 0.14); color: var(--apple-amber); }
+  .tag.ours { border-color: rgba(0, 113, 227, 0.35); background: rgba(0, 113, 227, 0.10); color: var(--apple-blue); }
+  code, .mono { font-family: var(--mono); font-size: 0.92em; }
+  code { background: var(--code-bg); border: 1px solid var(--hairline); border-radius: 6px; padding: 1px 6px; }
+  pre {
+    background: var(--code-bg); border: 1px solid var(--hairline); border-radius: 12px;
+    padding: 13px 16px; overflow: auto; font-family: var(--mono); font-size: 13px; line-height: 1.65; margin: 10px 0 0;
+  }
+  pre .cm { color: var(--muted-2); }
+  pre .ok { color: var(--apple-green); font-weight: 700; }
+
+  /* ---------- ตาราง ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 4px; font-size: 14px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--hairline); vertical-align: top; }
+  th { font-size: 12.5px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+  tbody tr:hover { background: rgba(0, 113, 227, 0.045); }
+  td.num, th.num { font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  /* ---------- การ์ด/กริด ---------- */
+  .grid { display: grid; gap: 14px; }
+  .grid.c2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .card {
+    background: var(--surface-solid); border: 1px solid var(--hairline); border-radius: 14px;
+    padding: 15px 17px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.05);
+  }
+  .card h3 { display: flex; align-items: center; gap: 8px; }
+  .card ul { margin: 6px 0 0; padding-left: 18px; }
+  .card li { margin: 3px 0; font-size: 14px; color: var(--ink-soft); }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--apple-blue); flex: none; }
+  .dot.green { background: var(--apple-green); } .dot.amber { background: #e0a800; } .dot.red { background: var(--apple-red); }
+
+  /* ---------- แผนผังสถาปัตยกรรม ---------- */
+  .flow { display: grid; grid-template-columns: 1fr 26px 1fr 26px 1fr 26px 1fr; align-items: center; gap: 4px; margin: 14px 0 6px; }
+  .flow .node {
+    background: var(--surface-solid); border: 1px solid var(--hairline-strong); border-radius: 12px;
+    padding: 12px 10px; text-align: center; font-size: 13px; box-shadow: 0 6px 16px rgba(0,0,0,.05);
+  }
+  .flow .node b { display: block; font-size: 13.5px; }
+  .flow .node .s { color: var(--muted); font-size: 11.5px; }
+  .flow .arr { text-align: center; color: var(--muted-2); font-size: 17px; }
+  .flow .cache { grid-column: 5 / 6; }
+
+  /* ---------- รายการหลักการ ---------- */
+  ol.rules { margin: 6px 0 0; padding-left: 22px; }
+  ol.rules li { margin: 7px 0; color: var(--ink-soft); }
+  ol.rules b { color: var(--ink); }
+
+  /* ---------- ต้นไม้ไฟล์ ---------- */
+  .tree { font-family: var(--mono); font-size: 13px; line-height: 1.8; background: var(--code-bg);
+          border: 1px solid var(--hairline); border-radius: 12px; padding: 14px 18px; }
+  .tree .f { color: var(--ink); font-weight: 700; }
+  .tree .n { color: var(--muted); }
+
+  /* ---------- ปุ่ม/ตัวเลื่อนสไลด์ ---------- */
+  .hud { position: fixed; right: 18px; bottom: 16px; display: flex; align-items: center; gap: 10px; z-index: 20; }
+  .hud button {
+    width: 42px; height: 42px; border-radius: 50%; border: 1px solid var(--hairline-strong);
+    background: var(--surface-solid); color: var(--ink); font-size: 17px; cursor: pointer;
+    box-shadow: 0 6px 16px rgba(0,0,0,.08); transition: background .15s var(--ease), transform .1s var(--ease);
+  }
+  .hud button:hover { background: var(--apple-blue); color: #fff; border-color: var(--apple-blue); }
+  .hud button:active { transform: translateY(1px) scale(0.98); }
+  .hud button:focus-visible { outline: 2px solid var(--apple-blue); outline-offset: 2px; }
+  .hud .counter { font-family: var(--mono); font-size: 13px; color: var(--muted); background: rgba(255,255,255,.8);
+                  border: 1px solid var(--hairline); border-radius: 999px; padding: 6px 12px; }
+  .progress { position: fixed; top: 0; left: 0; height: 3px; background: var(--apple-blue); width: 0;
+              transition: width .2s var(--ease); z-index: 30; }
+  .hint { position: fixed; left: 18px; bottom: 22px; font-size: 12px; color: var(--muted-2); z-index: 20; }
+
+  /* ---------- สไลด์แรก/สรุป ---------- */
+  .cover { text-align: center; padding: 60px 52px; }
+  .cover .badge { display: inline-block; font-size: 12.5px; letter-spacing: .12em; text-transform: uppercase;
+                  color: var(--apple-blue); font-weight: 700; margin-bottom: 14px; }
+  .cover .meta { margin-top: 22px; color: var(--muted); font-size: 14.5px; }
+
+  /* ---------- print: พิมพ์/บันทึกเป็น PDF ---------- */
+  @media print {
+    body { background: #fff; }
+    .hud, .hint, .progress { display: none !important; }
+    .deck { display: block; padding: 0; }
+    .slide { display: block !important; page-break-after: always; break-after: page;
+             box-shadow: none; border: none; max-height: none; backdrop-filter: none; animation: none; padding: 26px 30px; }
+    .slide:last-child { page-break-after: auto; }
+    @page { size: A4 landscape; margin: 10mm; }
+  }
+  @media (max-width: 820px) {
+    .slide { padding: 26px 22px; }
+    .flow { grid-template-columns: 1fr; }
+    .flow .arr { transform: rotate(90deg); }
+    .grid.c2, .grid.c3 { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div class="progress" id="progress" aria-hidden="true"></div>
+
+<div class="deck" id="deck">
+
+  <!-- ================= 1. ปก ================= -->
+  <section class="slide active cover">
+    <div class="badge">รายงานโครงงาน · ระบบร้านค้าออนไลน์</div>
+    <h1>ระบบเชื่อมต่อ API ภายนอก<br>Thammathad Shop</h1>
+    <p class="lead" style="margin-inline:auto">
+      Django 6.0 · 7 บริการภายนอก · หลักการออกแบบที่ทำให้ระบบ <b>ไม่พังแม้ API ล่ม</b>
+      และ <b>ไม่ต้องพึ่งพา dependency เพิ่ม</b>
+    </p>
+    <p class="meta">จัดทำโดย ______________________ · รหัสนักศึกษา ____________ · วันที่ ____ / ____ / 2569</p>
+    <p class="meta subtle">กด <code>←</code> <code>→</code> หรือ <code>Space</code> เพื่อเลื่อนสไลด์ · กด <code>P</code> หรือปุ่ม 🖨 เพื่อพิมพ์/บันทึกเป็น PDF</p>
+  </section>
+
+  <!-- ================= 2. ภาพรวม 2 ทิศทาง ================= -->
+  <section class="slide">
+    <p class="eyebrow">ภาพรวม</p>
+    <h2>ระบบเรามี API สองทิศทาง</h2>
+    <p class="lead">“ต่อออก” (เรียกใช้บริการข้างนอก) และ “เปิดรับ” (ให้ผู้อื่นเรียกใช้ระบบเรา)</p>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot"></span> ก. API ที่ระบบเราเรียกใช้ (Consume) — 7 บริการ</h3>
+        <table>
+          <thead><tr><th>บริการ</th><th>ผู้ให้</th><th>ต้องสมัคร/มี key?</th></tr></thead>
+          <tbody>
+            <tr><td>อัตราแลกเปลี่ยน THB→USD</td><td class="mono">open.er-api.com</td><td><span class="tag keyless">ไม่ต้อง</span></td></tr>
+            <tr><td>วันหยุดราชการไทย + วันทำการถัดไป</td><td class="mono">Google Calendar ICS</td><td><span class="tag keyless">ไม่ต้อง</span></td></tr>
+            <tr><td>ตำแหน่งผู้เข้าชมจาก IP</td><td class="mono">ipwho.is</td><td><span class="tag keyless">ไม่ต้อง</span></td></tr>
+            <tr><td>แปลข้อความ EN↔TH</td><td class="mono">MyMemory</td><td><span class="tag keyless">ไม่ต้อง</span></td></tr>
+            <tr><td>QR พร้อมเพย์รับเงิน</td><td class="mono">ไลบรารีในเครื่อง</td><td><span class="tag keyless">ไม่ต้อง</span></td></tr>
+            <tr><td>OCR ตรวจสลิปโอนเงิน</td><td class="mono">slipok.com</td><td><span class="tag needs-key">ต้องมี key</span></td></tr>
+            <tr><td>ช่วยเขียนคำอธิบายสินค้า</td><td class="mono">Google Gemini</td><td><span class="tag needs-key">ต้องมี key</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span> ข. API ที่ระบบเราเปิดให้ใช้ (Expose)</h3>
+        <ul>
+          <li><code>GET /api/products/</code> · <code>/api/categories/</code> — สาธารณะ อ่านอย่างเดียว</li>
+          <li><code>GET /api/orders/</code> — เฉพาะเจ้าหน้าที่ (อ่านอย่างเดียว)</li>
+          <li><code>CRUD /api/employees/</code> — เฉพาะเจ้าหน้าที่ (รหัสพนักงานอัตโนมัติ)</li>
+          <li><code>POST /api/token/</code> — ขอ Token (จำกัด 10 ครั้ง/นาที/IP)</li>
+          <li><code>/api/schema/</code> + <code>/api/docs/</code> — เอกสาร OpenAPI 3 + Swagger UI</li>
+        </ul>
+        <p class="subtle" style="margin-top:10px">รับรองตัวตน 2 ทาง: Session (เบราว์เซอร์) หรือ Token (<code>Authorization: Token …</code>)</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 3. สถาปัตยกรรม ================= -->
+  <section class="slide">
+    <p class="eyebrow">สถาปัตยกรรม</p>
+    <h2>ทุกการเรียกภายนอกวิ่งผ่าน “Service Layer” ที่เดียว</h2>
+    <div class="flow">
+      <div class="node"><b>หน้าเว็บ / เทมเพลต</b><span class="s">HTML ที่ผู้ใช้เห็น</span></div>
+      <div class="arr">▸</div>
+      <div class="node"><b>View</b><span class="s">รับคำขอ + ส่งข้อมูลเข้าเทมเพลต</span></div>
+      <div class="arr">▸</div>
+      <div class="node"><b>Service</b><span class="s">services.py — คุยกับโลกภายนอก</span></div>
+      <div class="arr">▸</div>
+      <div class="node"><b>API ภายนอก</b><span class="s">ผ่าน HTTPS + timeout</span></div>
+    </div>
+    <div class="grid c3" style="margin-top:16px">
+      <div class="card">
+        <h3><span class="dot"></span> แคช (ชั้นกลาง)</h3>
+        <p class="subtle" style="margin:0">ผลลัพธ์ถูกเก็บใน Django Cache ก่อนถึง API จริง → เปิดหน้าเดิมซ้ำเร็วขึ้นมาก และยิง API น้อยลง</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span> View บาง</h3>
+        <p class="subtle" style="margin:0">View ทำแค่ “เรียก service + ส่ง context” — ไม่มี business logic และไม่มีโค้ดต่อเน็ตอยู่ใน view</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot amber"></span> สัญญาณเดียวกัน</h3>
+        <p class="subtle" style="margin:0">ทุก service ใช้รูปแบบเดียวกับ <code>ExchangeRate</code>: classmethod, cache, timeout, ไม่ throw</p>
+      </div>
+    </div>
+    <pre><span class="cm">// ตัวอย่างจริง: services.py (ThaiCalendar) — เรียก ICS แล้วแคช 24 ชม.</span>
+with urllib.request.urlopen(req, timeout=6) as resp:
+    parsed = cls.parse_ics(resp.read().decode('utf-8', 'replace'))
+data = {d: n for d, n in parsed.items() if d.year == year and ...}
+cache.set(key, data, cls.HOLIDAYS_TTL if data else cls.HOLIDAYS_FAIL_TTL) <span class="ok">← ล่มก็แคชสั้นไว้ลองใหม่</span></pre>
+  </section>
+
+  <!-- ================= 4. หลักการออกแบบ ================= -->
+  <section class="slide">
+    <p class="eyebrow">หลักการออกแบบ</p>
+    <h2>7 หลักการที่ใช้กับทุก API</h2>
+    <ol class="rules">
+      <li><b>เรียกจากฝั่งเซิร์ฟเวอร์เท่านั้น</b> — เบราว์เซอร์ไม่ยิง API ตรง (ซ่อน key, เลี่ยงปัญหา CORS, คุมรูปแบบข้อมูลได้)</li>
+      <li><b>Service Layer เป็นจุดเดียว</b> — โค้ดต่อเน็ตทั้งหมดอยู่ใน <code>services.py</code>; ถ้าเปลี่ยนผู้ให้บริการ แก้ที่เดียว</li>
+      <li><b>แคช + TTL</b> — อัตราแลกเปลี่ยน 6 ชม. · ตำแหน่ง/แปล/วันหยุด 24 ชม. · หมวดหมู่สินค้า 60 วินาที (ลด latency และโควตา)</li>
+      <li><b>Graceful Degradation</b> — API ล่ม/ช้า → คืน <code>None</code>/<code>''</code> แล้วเทมเพลตซ่อนฟีเจอร์นั้นเอง <b>หน้าเว็บไม่มีวันพัง</b></li>
+      <li><b>Key-gating</b> — บริการที่ต้องมีคีย์ (Gemini/SlipOK) มี <code>enabled()</code>; ไม่มีคีย์ = ซ่อนปุ่ม/ฟอร์มทั้งชิ้น</li>
+      <li><b>Timeout + User-Agent ชัดเจน</b> — 4–6 วินาที กันหน้าค้าง และสุภาพต่อผู้ให้บริการ</li>
+      <li><b>ทดสอบได้แบบไม่ต้องต่อเน็ต</b> — เทสต์ mock <code>urllib.request.urlopen</code> → ผลการทดสอบคงที่ (deterministic)</li>
+    </ol>
+    <p class="subtle" style="margin-top:12px">โบนัส: ทั้งหมดเขียนด้วยไลบรารีมาตรฐาน (<code>urllib</code>, <code>json</code>, <code>re</code>, <code>hashlib</code>) — <b>ไม่เพิ่ม dependency ให้โปรเจกต์เลย</b></p>
+  </section>
+
+  <!-- ================= 5. ExchangeRate + PromptPay ================= -->
+  <section class="slide">
+    <p class="eyebrow">API ที่ 1–2</p>
+    <h2>อัตราแลกเปลี่ยน &amp; QR พร้อมเพย์</h2>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot"></span> ExchangeRate <span class="tag keyless">keyless</span></h3>
+        <ul>
+          <li><b>ไฟล์:</b> <code>services.py:283</code> · <code>templatetags/shop_extras.py</code> (ฟิลเตอร์ <code>usd</code>)</li>
+          <li><b>หน้าเว็บ:</b> <code>product_grid.html</code> (หน้าร้าน), <code>product_detail.html</code></li>
+          <li><b>หลักการ:</b> แคช 6 ชม. + ถ้าดึงไม่ได้ให้ใช้ค่าเดิม → ถ้าไม่เคยได้เลย เทมเพลตซ่อน “≈ $” อัตโนมัติ</li>
+          <li><b>ผู้ให้:</b> <code>open.er-api.com/v6/latest/THB</code></li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span> PromptPay QR <span class="tag keyless">ในเครื่อง</span></h3>
+        <ul>
+          <li><b>ไฟล์:</b> <code>services.py:455</code> (<code>qr_payload</code> / <code>qr_data_uri</code>)</li>
+          <li><b>หน้าเว็บ:</b> <code>order_success.html</code> (สแกนจ่าย + payload)</li>
+          <li><b>หลักการ:</b> สร้าง QR ฝั่งเซิร์ฟเวอร์จากไลบรารี <code>promptpay-qr</code> + <code>qrcode</code> — ไม่ส่งข้อมูลลูกค้าออกนอกระบบ</li>
+          <li><b>หมายเหตุ:</b> ไม่ใช่ HTTP API (คำนวณในเครื่อง 100%)</li>
+        </ul>
+      </div>
+    </div>
+    <pre><span class="cm">// shop_extras.py — เทมเพลตขอ “ราคา ≈ USD” ได้โดยไม่รู้จัก API เลย</span>
+&#123;% load shop_extras %&#125;
+฿&#123;&#123; product.price &#125;&#125; <span class="ok">&#123;&#123; product.price|usd &#125;&#125;</span></pre>
+  </section>
+
+  <!-- ================= 6. ThaiCalendar holidays ================= -->
+  <section class="slide">
+    <p class="eyebrow">API ที่ 3 · ใหม่</p>
+    <h2>วันหยุดราชการไทย → คำนวณวันจัดส่ง (ETA)</h2>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot"></span> ไฟล์ที่เกี่ยวข้อง</h3>
+        <ul>
+          <li><code>services.py:122</code> — <code>parse_ics()</code> · <code>holidays()</code> · <code>is_holiday()</code> · <code>next_business_day()</code></li>
+          <li><code>views.py</code> — <code>OrderSuccessView.get_context_data</code> ใส่ <code>delivery_eta</code></li>
+          <li><code>templates/order_success.html</code> — แสดงบรรทัด ETA</li>
+          <li><code>tests/test_external_apis.py</code> — 6 เทสต์</li>
+        </ul>
+        <p class="subtle" style="margin:8px 0 0"><b>หน้าเว็บ:</b> <code>/order/success/&lt;id&gt;/</code></p>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span> หลักการ + ปัญหาที่เจอจริง</h3>
+        <ul>
+          <li>ผู้ให้: Google Calendar ICS สาธารณะ — <b>ไม่ต้องมี key</b></li>
+          <li>แคชสำเร็จ 24 ชม. · <b>ล่ม = แคช 10 นาที</b> (ลองใหม่เร็ว ไม่ทิ้งทั้งวัน)</li>
+          <li>แกะ ICS เองด้วย <code>re</code> — รองรับบรรทัดพับและอักขระหลบ</li>
+          <li><b>ตรวจข้อมูลจริงพบ:</b> ICS มี 28 รายการ แต่ปนวัน <i>observance</i> (วาเลนไทน์ ตรุษจีน คริสต์มาส) → เพิ่มตัวกรองเหลือ <b>22 วัน</b> ตรงกับวันหยุดราชการจริง</li>
+        </ul>
+      </div>
+    </div>
+    <pre><span class="cm">// ผลตรวจสด (ยิง ICS จริง)</span>
+ThaiCalendar.holidays(2026) → <span class="ok">22 วัน</span> · คริสต์มาส/ตรุษจีนถูกกรองออก ✔
+ThaiCalendar.next_business_day() → 2026-09-16 (พุธ) → “<span class="ok">คาดจัดส่งภายใน 16 กันยายน 2569</span>”</pre>
+  </section>
+
+  <!-- ================= 7. GeoIP ================= -->
+  <section class="slide">
+    <p class="eyebrow">API ที่ 4 · ใหม่</p>
+    <h2>ตำแหน่งผู้เข้าชมจาก IP (ใช้อย่างซื่อตรงกับความแม่นยำ)</h2>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot"></span> ไฟล์ที่เกี่ยวข้อง</h3>
+        <ul>
+          <li><code>services.py:325</code> — <code>GeoIP.lookup()</code> · <code>is_private()</code> · <code>visitor()</code></li>
+          <li><code>views.py</code> — <code>AddressCreateView.get</code> ส่ง <code>geo_hint</code></li>
+          <li><code>templates/address_form.html</code> — แบนเนอร์เตือนเมื่ออยู่นอกไทย</li>
+        </ul>
+        <p class="subtle" style="margin:8px 0 0"><b>หน้าเว็บ:</b> <code>/account/addresses/add/</code> (สมุดที่อยู่ลูกค้า)</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot amber"></span> หลักการ + ข้อจำกัดที่พิสูจน์แล้ว</h3>
+        <ul>
+          <li>ผู้ให้: <code>ipwho.is</code> — keyless · timeout 4 วิ · แคช 24 ชม./IP</li>
+          <li><b>IP ส่วนตัว/loopback ไม่ยิง API</b> (127.x, 10.x, 192.168.x, 172.16–31, 169.254)</li>
+          <li><b>ทดสอบจริง 5 ISP ไทย → ได้ “Bangkok” หมด</b> ⇒ ใช้ได้แค่ระดับประเทศ</li>
+          <li>จึงเลือกใช้เป็น “คำใบ้ประเทศ” เท่านั้น — <b>ไม่ prefill จังหวัด/ที่อยู่</b> (กันข้อมูลผิดหลอกผู้ใช้)</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 8. Translate ================= -->
+  <section class="slide">
+    <p class="eyebrow">API ที่ 5 · ใหม่</p>
+    <h2>แปลคำอธิบายสินค้า EN→TH (ใช้ได้โดยไม่ต้องมีคีย์)</h2>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot"></span> ไฟล์ที่เกี่ยวข้อง</h3>
+        <ul>
+          <li><code>services.py:399</code> — <code>Translate.text()</code> (แคช 24 ชม. · จำกัด 500 ตัวอักษร)</li>
+          <li><code>views.py</code> — <code>ProductTranslateView</code> (staff เท่านั้น) · <code>urls.py</code> → <code>/product/translate/</code></li>
+          <li><code>templates/product_form.html</code> — ปุ่ม “แปล EN→TH” + โค้ด fetch</li>
+          <li><code>tests/test_external_apis.py</code></li>
+        </ul>
+        <p class="subtle" style="margin:8px 0 0"><b>หน้าเว็บ:</b> <code>/product/add/</code> · <code>/product/edit/&lt;id&gt;/</code> (โซนเจ้าหน้าที่)</p>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span> หลักการ</h3>
+        <ul>
+          <li>เป็น “คู่หู” ของปุ่ม AI (Gemini) — <b>ทำงานได้แม้ไม่มี GEMINI_API_KEY</b></li>
+          <li>ตรวจข้อความเตือน <code>MYMEMORY WARNING</code> (โควตาหมด) → ตอบ error ภาษาไทยสุภาพ (502)</li>
+          <li>ล่ม/ช้า → คืน <code>''</code> · ข้อความเหมือนกันถูกแคช (คีย์ = SHA-256 ของข้อความ)</li>
+        </ul>
+        <pre style="margin-top:10px"><span class="cm">// ยิงจริง</span>
+"Wireless mouse with silent click"
+  → <span class="ok">"เมาส์ไร้สายคลิกเงียบ"</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 9. SlipOK + Gemini ================= -->
+  <section class="slide">
+    <p class="eyebrow">API ที่ 6–7</p>
+    <h2>บริการที่ต้องมีคีย์ — ซ่อนตัวเองเมื่อไม่มีคีย์</h2>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot red"></span> SlipOK — OCR ตรวจสลิป <span class="tag needs-key">ต้องมี key</span></h3>
+        <ul>
+          <li><code>services.py:498</code> · <code>views.py</code> <code>SlipVerifyView</code> + <code>RateLimit</code></li>
+          <li><code>templates/slip_upload.html</code> (ถูก <code>include</code> ใน <code>order_success.html</code>)</li>
+          <li>ไม่มี <code>SLIPOK_API_KEY</code> → คืน 503 + ซ่อนฟอร์มอัปโหลด</li>
+          <li>มี guard: ขนาด ≤ 5MB, นามสกุล JPG/PNG/WebP, ยืนยันเจ้าของด้วยเลขออเดอร์+เบอร์</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot red"></span> Gemini — ช่วยเขียนคำอธิบาย <span class="tag needs-key">ต้องมี key</span></h3>
+        <ul>
+          <li><code>services.py:598</code> · <code>views.py</code> <code>ProductDescribeAIView</code></li>
+          <li><code>templates/product_form.html</code> — ปุ่ม “AI ช่วยเขียน” แสดงเฉพาะเมื่อ <code>enabled()</code></li>
+          <li>ไม่มี <code>GEMINI_API_KEY</code> → ปุ่มหายทั้งปุ่ม (ไม่โชว์ปุ่มที่กดแล้วพัง)</li>
+          <li>มีปุ่มแปล (keyless) เป็นทางเลือกสำรองเสมอ</li>
+        </ul>
+      </div>
+    </div>
+    <p class="subtle" style="margin-top:12px">เพิ่มความปลอดภัย: <code>/payment/slip/</code> ถูกจำกัด <b>10 ครั้ง/นาที/IP</b> ด้วย service <code>RateLimit</code> (cache) — กันการยิง OCR รัว</p>
+  </section>
+
+  <!-- ================= 10. หน้าเว็บ ↔ API ================= -->
+  <section class="slide">
+    <p class="eyebrow">แผนที่การใช้งาน</p>
+    <h2>หน้าเว็บไหน ใช้ API อะไร</h2>
+    <table>
+      <thead><tr><th>หน้าเว็บ (URL)</th><th>เทมเพลต</th><th>API / บริการที่เกี่ยวข้อง</th></tr></thead>
+      <tbody>
+        <tr><td>หน้าร้าน + ค้นหา/กรอง<br><span class="mono subtle">/ /product/</span></td><td class="mono">index.html · product_grid.html</td><td>ExchangeRate (ราคา ≈ USD) · Catalog (แคชหมวดหมู่)</td></tr>
+        <tr><td>รายละเอียดสินค้า<br><span class="mono subtle">/product/&lt;id&gt;/</span></td><td class="mono">product_detail.html</td><td>ExchangeRate</td></tr>
+        <tr><td>ฟอร์มสินค้า (เจ้าหน้าที่)<br><span class="mono subtle">/product/add/ · /product/edit/&lt;id&gt;/</span></td><td class="mono">product_form.html</td><td>Gemini (ถ้ามีคีย์) · <b>Translate</b> · Catalog</td></tr>
+        <tr><td>สมุดที่อยู่ลูกค้า<br><span class="mono subtle">/account/addresses/add/</span></td><td class="mono">address_form.html</td><td><b>GeoIP</b> (คำใบ้ประเทศ)</td></tr>
+        <tr><td>สั่งซื้อสำเร็จ<br><span class="mono subtle">/order/success/&lt;id&gt;/</span></td><td class="mono">order_success.html + slip_upload.html</td><td><b>ThaiCalendar (ETA)</b> · PromptPay (QR) · SlipOK + RateLimit</td></tr>
+        <tr><td>ติดตามออเดอร์<br><span class="mono subtle">/order/tracking/</span></td><td class="mono">order_tracking.html</td><td>— (อ่านข้อมูลภายในระบบ)</td></tr>
+        <tr><td>เอกสาร/ทดลอง API<br><span class="mono subtle">/api/ · /api/docs/</span></td><td class="mono">drf-spectacular (Swagger UI)</td><td>REST API ของเรา (ส่งออกให้ผู้อื่น)</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- ================= 11. แผนที่ไฟล์ ================= -->
+  <section class="slide">
+    <p class="eyebrow">แผนที่ไฟล์</p>
+    <h2>ไฟล์ที่เกี่ยวข้องทั้งหมด</h2>
+    <div class="grid c2">
+      <div class="tree">
+myproject/<br>
+├─ <span class="f">settings.py</span> <span class="n">← ติดตั้ง DRF/authtoken, REST_FRAMEWORK, throttle, OpenAPI</span><br>
+└─ urls.py <span class="n">← เส้นทาง /api/* ทั้งหมด</span><br><br>
+myapp/<br>
+├─ <span class="f">services.py</span> <span class="n">← หัวใจ: 13 service classes (โค้ดต่อโลกภายนอกทั้งหมด)</span><br>
+│&nbsp;&nbsp;&nbsp;ThaiCalendar · ExchangeRate · GeoIP · Translate · PromptPay · SlipOK · GeminiAI · RateLimit …<br>
+├─ <span class="f">views.py</span> <span class="n">← เรียก service + ส่ง context (ไม่ต่อเน็ตเอง)</span><br>
+│&nbsp;&nbsp;&nbsp;OrderSuccessView · AddressCreateView · ProductTranslateView · ProductDescribeAIView · SlipVerifyView<br>
+├─ <span class="f">api.py</span> + serializers.py <span class="n">← REST API ที่เราเปิดให้ใช้</span><br>
+├─ urls.py <span class="n">← route ทุกหน้า + /product/translate/</span><br>
+├─ templatetags/shop_extras.py <span class="n">← ฟิลเตอร์ usd (ราคา ≈ $)</span>
+      </div>
+      <div class="tree">
+templates/ <span class="n">← หน้าเว็บที่แสดงผลลัพธ์จาก API</span><br>
+├─ product_grid.html · product_detail.html <span class="n">← ≈ USD</span><br>
+├─ product_form.html <span class="n">← ปุ่ม AI + ปุ่มแปล</span><br>
+├─ address_form.html <span class="n">← คำใบ้ GeoIP</span><br>
+├─ order_success.html <span class="n">← ETA + QR</span><br>
+└─ slip_upload.html <span class="n">← อัปสลิป → SlipOK</span><br><br>
+tests/ <span class="n">← หลักประกันคุณภาพ (mock เน็ตทั้งหมด)</span><br>
+├─ <span class="f">test_external_apis.py</span> (23) <span class="n">← holidays/GeoIP/Translate + หน้าเว็บ</span><br>
+├─ test_api.py (23) · test_ratelimit.py (4)<br>
+├─ test_ajax_convention.py (8) · test_services.py (21)<br>
+└─ test_cart_checkout.py · test_staff_zone.py · test_roles.py · test_account.py<br><br>
+requirements.txt <span class="n">← drf-spectacular (เอกสาร API) — ไม่มี dep ใหม่จากการต่อ API ภายนอก</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= 12. หลักประกันคุณภาพ ================= -->
+  <section class="slide">
+    <p class="eyebrow">หลักประกันคุณภาพ</p>
+    <h2>พิสูจน์ด้วยเทสต์ + ผลรันจริง</h2>
+    <div class="grid c3">
+      <div class="card"><h3><span class="dot green"></span> 164 เทสต์ผ่านทั้งหมด</h3>
+        <p class="subtle" style="margin:0">เพิ่มจากงาน API ชุดนี้ 46 เทสต์: external 23 · REST API 23 · rate limit 4 · AJAX 8</p></div>
+      <div class="card"><h3><span class="dot"></span> เทสต์ไม่ยิงเน็ต</h3>
+        <p class="subtle" style="margin:0">mock <code>urllib.request.urlopen</code> ทุกจุด → รันได้แม้ออฟไลน์ ผลคงที่ทุกครั้ง</p></div>
+      <div class="card"><h3><span class="dot amber"></span> มี fallback ทุกบริการ</h3>
+        <p class="subtle" style="margin:0">API ล่ม → ฟีเจอร์นั้นหายไป แต่ทุกหน้ายัง 200 และใช้งานต่อได้</p></div>
+    </div>
+    <pre><span class="cm">// ผลตรวจกับของจริง (รันสด ไม่ใช่ mock)</span>
+ThaiCalendar.holidays(2026)       → <span class="ok">22 วัน</span> (กรอง observance ออกแล้ว)
+ThaiCalendar.next_business_day()  → 16 กันยายน 2569 → แสดงบนหน้าสั่งซื้อสำเร็จ ✔
+Translate.text("Wireless mouse…") → <span class="ok">"เมาส์ไร้สายคลิกเงียบ"</span> ✔
+GeoIP.lookup("8.8.8.8")           → United States / San Jose ✔ · private IP → ไม่ยิง API ✔
+POST /api/token/ ครั้งที่ 11       → <span class="ok">429 Too Many Requests</span> ✔ (กัน brute force)
+GET /api/docs/                    → <span class="ok">200</span> · Swagger UI ✔</pre>
+  </section>
+
+  <!-- ================= 13. สรุป ================= -->
+  <section class="slide">
+    <p class="eyebrow">สรุป</p>
+    <h2>สิ่งที่ระบบทำได้แล้ว</h2>
+    <div class="grid c2">
+      <div class="card">
+        <h3><span class="dot"></span> จุดเด่นเชิงวิศวกรรม</h3>
+        <ul>
+          <li>ต่อ API ภายนอก 4 บริการใหม่ — <b>ไม่ต้องสมัคร ไม่มีค่าใช้จ่าย ไม่เพิ่ม dependency</b></li>
+          <li>ทุกบริการอยู่ใต้สัญญาเดียว: cache + timeout + fallback + ทดสอบได้</li>
+          <li>ค้นพบและแก้ปัญหาข้อมูลจริง (วัน observance ปนใน ICS) และข้อจำกัดจริง (GeoIP ไทยหยาบ) — เลือกใช้อย่างตรงไปตรงมา</li>
+          <li>เปิด REST API พร้อมเอกสาร OpenAPI/Swagger + throttle กันการใช้งานผิดวัตถุประสงค์</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3><span class="dot green"></span> ประโยชน์ต่อผู้ใช้</h3>
+        <ul>
+          <li>ลูกค้าเห็นราคาเทียบสกุลเงิน และวันจัดส่งที่ข้ามวันหยุดจริง</li>
+          <li>เจ้าหน้าที่กรอกสินค้าเร็วขึ้นด้วยปุ่มแปลที่ไม่ต้องมีคีย์</li>
+          <li>ระบบไม่พังและไม่ค้าง แม้บริการภายนอกจะล่ม</li>
+          <li>ข้อมูลสำคัญ (สลิป, ที่อยู่) ไม่ถูกส่งออกนอกระบบเกินจำเป็น</li>
+        </ul>
+      </div>
+    </div>
+    <h2 style="margin-top:26px">ขอบคุณครับ · ยินดีตอบคำถาม</h2>
+    <p class="subtle">เอกสารประกอบ: <code>AGENTS.md</code> (สถาปัตยกรรม + bug recipes) · <code>/api/docs/</code> (Swagger UI) · <code>myapp/tests/</code> (เทสต์ 164 ตัว)</p>
+  </section>
+
+</div>
+
+<div class="hint">← → เลื่อน · P พิมพ์</div>
+<div class="hud">
+  <span class="counter" id="counter" aria-live="polite">1 / 13</span>
+  <button id="prev" aria-label="สไลด์ก่อนหน้า">←</button>
+  <button id="next" aria-label="สไลด์ถัดไป">→</button>
+  <button id="print" aria-label="พิมพ์หรือบันทึกเป็น PDF">🖨</button>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var idx = 0;
+  var counter = document.getElementById("counter");
+  var progress = document.getElementById("progress");
+
+  function show(n) {
+    idx = Math.max(0, Math.min(slides.length - 1, n));
+    slides.forEach(function (s, i) { s.classList.toggle("active", i === idx); });
+    counter.textContent = (idx + 1) + " / " + slides.length;
+    progress.style.width = ((idx + 1) / slides.length * 100) + "%";
+    slides[idx].scrollTop = 0;
+    if (location.hash !== "#" + (idx + 1)) history.replaceState(null, "", "#" + (idx + 1));
+  }
+  function next() { show(idx + 1); }
+  function prev() { show(idx - 1); }
+
+  document.getElementById("next").addEventListener("click", next);
+  document.getElementById("prev").addEventListener("click", prev);
+  document.getElementById("print").addEventListener("click", function () { window.print(); });
+
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "ArrowRight" || e.key === "PageDown" || e.key === " ") { e.preventDefault(); next(); }
+    else if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); prev(); }
+    else if (e.key === "Home") { show(0); }
+    else if (e.key === "End") { show(slides.length - 1); }
+    else if (e.key === "p" || e.key === "P") { window.print(); }
+  });
+  document.addEventListener("click", function (e) {
+    if (e.target.closest("a, button, code, pre, table")) return;   // อย่าเลื่อนสไลด์ตอนกดของในเนื้อหา
+    if (e.clientX > window.innerWidth * 0.72) next();
+    else if (e.clientX < window.innerWidth * 0.28) prev();
+  });
+  // ปัดนิ้ว (แท็บเล็ต)
+  var x0 = null;
+  document.addEventListener("touchstart", function (e) { x0 = e.touches[0].clientX; }, { passive: true });
+  document.addEventListener("touchend", function (e) {
+    if (x0 === null) return;
+    var dx = e.changedTouches[0].clientX - x0;
+    if (Math.abs(dx) > 48) (dx < 0 ? next : prev)();
+    x0 = null;
+  }, { passive: true });
+
+  var start = parseInt((location.hash || "#1").slice(1), 10);
+  show(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>

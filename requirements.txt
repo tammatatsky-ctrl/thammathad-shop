@@ -1,5 +1,6 @@
 Django==6.0.6
 djangorestframework==3.18.0
+drf-spectacular==0.30.0
 Pillow==12.3.0
 promptpay-qr==0.1.2
 python-dotenv==1.2.2
