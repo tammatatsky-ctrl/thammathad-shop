@@ -1,4 +1,4 @@
-﻿{# ===== cart_area.html: ตะกร้า (partial ใช้ซ้ำ หน้าเต็ม + AJAX swap) — stepper ±, ลบ, สรุปยอด → checkout ===== #}
+{# ===== cart_area.html: ตะกร้า (partial ใช้ซ้ำ หน้าเต็ม + AJAX swap) — stepper ±, ลบ, สรุปยอด → checkout ===== #}
 {% load static %}
 {# Partial: พื้นที่ตะกร้าทั้งบล็อก (ใช้ทั้งหน้าเต็มและ AJAX swap) #}
 {% if items %}
@@ -8,13 +8,13 @@
             <div class="table-responsive">
                 <table class="table align-middle text-center mb-0 table-cardify">
                     <thead>
-                        <tr><th>สินค้า</th><th>ราคา</th><th>จำนวน</th><th>รวม</th><th></th></tr>
+                        <tr><th scope="col">สินค้า</th><th scope="col">ราคา</th><th scope="col">จำนวน</th><th scope="col">รวม</th><th scope="col"></th></tr>
                     </thead>
                     <tbody data-motion="stagger" class="in">
                         {% for item in items %}
                         <tr data-row="{{ item.product.id }}">
                             <td class="text-start" data-label="สินค้า">
-                                <img src="{% static item.product.image %}" alt="{{ item.product.name }}" class="me-3 cart-thumb">
+                                <img loading="lazy" src="{% static item.product.image %}" alt="{{ item.product.name }}" class="me-3 cart-thumb">
                                 <span class="fw-medium">{{ item.product.name }}</span>
                             </td>
                             <td data-label="ราคา">฿ {{ item.product.price|floatformat:2 }}</td>
@@ -40,14 +40,35 @@
     </div>
 
     <div class="col-lg-4">
-        <div class="card panel-card--wide cart-summary">
-            <h5 class="mb-4">สรุปยอด</h5>
+        <div class="card panel-card--wide cart-summary sticky-sidebar">
+            <h5 class="mb-3">สรุปยอด</h5>
+
+            <!-- Free Shipping Dynamic Threshold Bar -->
+            <div class="shipping-progress mb-3">
+                <div class="d-flex justify-content-between align-items-center small mb-1">
+                    {% if free_shipping_needed == 0 %}
+                    <span class="text-success fw-semibold">
+                        <i class="bi bi-truck me-1"></i> ได้รับสิทธิ์ <strong>ส่งด่วนฟรี</strong>
+                    </span>
+                    <span class="badge bg-success-subtle text-success font-mono">FREE</span>
+                    {% else %}
+                    <span class="text-muted-apple">
+                        ซื้อเพิ่มอีก <strong class="text-primary tabular-nums font-mono">฿ {{ free_shipping_needed|floatformat:2 }}</strong> เพื่อส่งฟรี
+                    </span>
+                    <span class="badge bg-primary-subtle text-primary font-mono tabular-nums">{{ free_shipping_percent }}%</span>
+                    {% endif %}
+                </div>
+                <div class="shipping-progress-track">
+                    <div class="shipping-progress-fill" style="width: {{ free_shipping_percent }}%;"></div>
+                </div>
+            </div>
+
             <div class="d-flex justify-content-between mb-2">
                 <span class="text-muted-apple">{{ items|length }} รายการในตะกร้า</span>
             </div>
             <div class="d-flex justify-content-between mb-2">
                 <span class="text-muted-apple">ยอดรวมทั้งหมด</span>
-                <span class="total-price">฿ {{ total|floatformat:2 }}</span>
+                <span class="total-price font-mono tabular-nums">฿ {{ total|floatformat:2 }}</span>
             </div>
             <hr class="apple-divider my-3">
             <a href="{% url 'checkout' %}" class="btn btn-primary btn-lg w-100 mb-2"><i class="bi bi-bag-check me-1"></i> ดำเนินการสั่งซื้อ</a>

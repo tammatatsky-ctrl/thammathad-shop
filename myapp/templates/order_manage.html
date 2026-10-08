@@ -1,5 +1,5 @@
-﻿{# ===== order_manage.html: พนักงาน — จัดการออเดอร์ (ค้นหา + กรองสถานะตามบันได) — แถวอยู่ใน order_manage_rows.html ===== #}
 {% extends "adminbase.html" %}
+{# ===== order_manage.html: พนักงาน — จัดการออเดอร์ (ค้นหา + กรองสถานะตามบันได) — แถวอยู่ใน order_manage_rows.html ===== #}
 {% load static %}
 
 {% block content %}
@@ -10,23 +10,42 @@
                 <p class="eyebrow mb-1"><i class="bi bi-receipt"></i> จัดการออเดอร์</p>
                 <h2 class="page-title mb-0" data-motion="reveal">ออเดอร์ทั้งหมด</h2>
             </div>
-            <span class="text-muted-apple">ทั้งหมด {{ total }} ออเดอร์</span>
+            <div class="d-flex align-items-center gap-3">
+                <a href="{% url 'order_export' %}" class="btn btn-light lens-btn"><i class="bi bi-filetype-csv me-1"></i> ส่งออก CSV</a>
+                <span class="text-muted-apple">ทั้งหมด {{ total }} ออเดอร์</span>
+            </div>
+        </div>
+
+        <!-- Segmented Status Quick Pills (1-Click Operational Filtering) -->
+        <div class="order-status-pills mb-3" data-motion="reveal">
+            {% for val, label in status_choices %}
+            <a href="?status={{ val }}{% if query %}&amp;q={{ query|urlencode }}{% endif %}"
+               class="order-status-pill {% if val == selected_status %}is-active{% endif %}">
+                {% if val == 'pending' %}<i class="bi bi-clock-history"></i>
+                {% elif val == 'paid' %}<i class="bi bi-cash-stack"></i>
+                {% elif val == 'shipped' %}<i class="bi bi-truck"></i>
+                {% elif val == 'delivered' %}<i class="bi bi-check-circle"></i>
+                {% elif val == 'cancelled' %}<i class="bi bi-x-circle"></i>
+                {% else %}<i class="bi bi-grid"></i>{% endif %}
+                <span>{{ label }}</span>
+            </a>
+            {% endfor %}
         </div>
 
         <div class="card panel-card--wide mb-4" data-motion="reveal">
-            <form method="GET" class="row g-2 align-items-end" id="orderFilter">
-                <div class="col-md-5">
-                    <input type="search" name="q" class="form-control" placeholder="ค้นหา ชื่อ/เบอร์/เลขออเดอร์..." value="{{ query }}">
+            <form method="GET" class="row g-2 align-items-center" id="orderFilter">
+                {% if selected_status %}<input type="hidden" name="status" value="{{ selected_status }}">{% endif %}
+                <div class="col-md-9 col-lg-10">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0 text-muted-apple"><i class="bi bi-search"></i></span>
+                        <input type="search" name="q" class="form-control border-start-0 ps-0" placeholder="ค้นหา ชื่อลูกค้า / เบอร์โทร / หมายเลขออเดอร์..." value="{{ query }}">
+                    </div>
                 </div>
-                <div class="col-md-3">
-                    <select name="status" class="form-select" onchange="this.form.submit()">
-                        {% for val, label in status_choices %}
-                        <option value="{{ val }}" {% if val == selected_status %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="col-md-2 d-grid">
-                    <button type="submit" class="btn btn-primary"><i class="bi bi-search me-1"></i>ค้นหา</button>
+                <div class="col-md-3 col-lg-2 d-flex gap-2">
+                    <button type="submit" class="btn btn-primary flex-fill"><i class="bi bi-search me-1"></i>ค้นหา</button>
+                    {% if query or selected_status %}
+                    <a href="{% url 'order_manage' %}" class="btn btn-light" title="ล้างตัวกรอง"><i class="bi bi-x-lg"></i></a>
+                    {% endif %}
                 </div>
             </form>
         </div>
@@ -36,4 +55,149 @@
         </div>
     </div>
 </section>
+
+<!-- Slide-Over Side Drawer (Context Preservation) -->
+<div class="drawer-backdrop" id="orderDrawerBackdrop"></div>
+<aside class="side-drawer" id="orderDrawer" aria-label="Order Details Drawer" role="dialog" aria-modal="true">
+    <div id="orderDrawerContent" class="h-100 d-flex flex-column">
+        <div class="p-5 text-center text-muted-apple">
+            <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+            <div>กำลังโหลดข้อมูลออเดอร์...</div>
+        </div>
+    </div>
+</aside>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    const drawer = document.getElementById('orderDrawer');
+    const backdrop = document.getElementById('orderDrawerBackdrop');
+    const drawerContent = document.getElementById('orderDrawerContent');
+    const tableArea = document.getElementById('orderTableArea');
+
+    function openDrawer(orderId) {
+        drawer.classList.add('is-open');
+        backdrop.classList.add('is-open');
+        document.body.style.overflow = 'hidden';
+
+        drawerContent.innerHTML = `
+            <div class="p-5 text-center text-muted-apple">
+                <div class="spinner-border spinner-border-sm text-primary mb-2" role="status"></div>
+                <div>กำลังโหลดข้อมูลออเดอร์ #${orderId}...</div>
+            </div>
+        `;
+
+        fetch(`/orders/${orderId}/?drawer=1`, {
+            headers: { 'X-Drawer': 'true' }
+        })
+        .then(res => res.text())
+        .then(html => {
+            drawerContent.innerHTML = html;
+            bindDrawerEvents(orderId);
+        })
+        .catch(err => {
+            drawerContent.innerHTML = `
+                <div class="p-4 text-center text-danger">
+                    <i class="bi bi-exclamation-triangle-fill fs-3 mb-2 d-block"></i>
+                    <div>ไม่สามารถโหลดข้อมูลออเดอร์ได้</div>
+                    <button class="btn btn-sm btn-light mt-3" data-drawer-close>ปิด</button>
+                </div>
+            `;
+        });
+    }
+
+    function closeDrawer() {
+        drawer.classList.remove('is-open');
+        backdrop.classList.remove('is-open');
+        document.body.style.overflow = '';
+    }
+
+    window.closeDrawer = closeDrawer;
+
+    function bindDrawerEvents(orderId) {
+        const closeBtn = document.getElementById('closeDrawerBtn');
+        const closeBtnFooter = document.getElementById('closeDrawerBtnFooter');
+        if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+        if (closeBtnFooter) closeBtnFooter.addEventListener('click', closeDrawer);
+
+        const statusForm = document.getElementById('drawerStatusForm');
+        if (statusForm) {
+            statusForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+                const formData = new FormData(statusForm);
+                formData.append('ajax', '1');
+                const submitBtn = statusForm.querySelector('button[type="submit"]');
+                if (submitBtn) submitBtn.disabled = true;
+
+                fetch(statusForm.action, {
+                    method: 'POST',
+                    body: formData,
+                    headers: { 'X-Drawer': 'true' }
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.ok) {
+                        if (window.FX && FX.toast) {
+                            FX.toast(data.msg, 'success');
+                        }
+                        const badge = document.getElementById(`orderBadge-${orderId}`);
+                        if (badge) {
+                            badge.textContent = data.status_display;
+                            badge.className = `badge ${
+                                data.status === 'pending' ? 'bg-warning-subtle text-warning-emphasis' :
+                                data.status === 'paid' ? 'bg-success-subtle text-success' :
+                                data.status === 'shipped' ? 'bg-info-subtle text-info-emphasis' :
+                                'bg-success text-white'
+                            }`;
+                        }
+                        openDrawer(orderId); // Reload drawer with next allowed statuses
+                    } else {
+                        if (window.FX && FX.toast) {
+                            FX.toast(data.msg || 'เกิดข้อผิดพลาด', 'error');
+                        } else {
+                            alert(data.msg);
+                        }
+                        if (submitBtn) submitBtn.disabled = false;
+                    }
+                })
+                .catch(err => {
+                    alert('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+                    if (submitBtn) submitBtn.disabled = false;
+                });
+            });
+        }
+    }
+
+    // Delegate row click and button click
+    if (tableArea) {
+        tableArea.addEventListener('click', (e) => {
+            const btn = e.target.closest('.btn-open-drawer');
+            if (btn) {
+                e.stopPropagation();
+                openDrawer(btn.dataset.orderId);
+                return;
+            }
+
+            const row = e.target.closest('.order-clickable-row');
+            if (row && !e.target.closest('a') && !e.target.closest('button')) {
+                openDrawer(row.dataset.orderId);
+            }
+        });
+    }
+
+    if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+    /* ปุ่มปิดที่ถูกสร้างในเทมเพลต JS (error state) — delegate แทน onclick inline */
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('[data-drawer-close]')) closeDrawer();
+    });
+
+    window.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && drawer.classList.contains('is-open')) {
+            closeDrawer();
+        }
+    });
+})();
+</script>
 {% endblock %}

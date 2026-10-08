@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ใบเสร็จรับเงิน / ใบสั่งซื้อ #{{ order.id }} — Thammathad Shop</title>
+    <!-- Google Fonts: Inter & Noto Sans Thai -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        :root {
+            --ink: #1d1d1f;
+            --muted: #6e6e73;
+            --line: #e5e5ea;
+            --bg-page: #f5f5f7;
+            --accent: #0071e3;
+            --success: #34c759;
+            --warning: #ff9f0a;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg-page);
+            color: var(--ink);
+            font-family: -apple-system, BlinkMacSystemFont, "Noto Sans Thai", "Inter", sans-serif;
+            -webkit-font-smoothing: antialiased;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        /* Toolbar บนหน้าจอ */
+        .invoice-toolbar-group { display: flex; align-items: center; gap: 12px; }
+        .invoice-toolbar-actions { display: flex; align-items: center; gap: 10px; }
+        .invoice-doc-title { font-weight: 600; color: var(--ink); }
+        .invoice-toolbar {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(18px);
+            -webkit-backdrop-filter: blur(18px);
+            border-bottom: 1px solid var(--line);
+            padding: 12px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .btn-action {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 8px 16px;
+            border-radius: 980px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        .btn-print {
+            background: var(--accent);
+            color: #fff;
+        }
+        .btn-print:hover {
+            background: #0077ed;
+            transform: translateY(-1px);
+        }
+        .btn-back {
+            background: #fff;
+            color: var(--ink);
+            border-color: var(--line);
+        }
+        .btn-back:hover {
+            background: #f5f5f7;
+        }
+
+        /* กรอบแผ่นกระดาษใบเสร็จ A4 */
+        .sheet-container {
+            display: flex;
+            justify-content: center;
+            padding: 32px 16px 60px;
+        }
+        .sheet {
+            width: 210mm;
+            min-height: 297mm;
+            background: #ffffff;
+            padding: 18mm 20mm;
+            border-radius: 16px;
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* หัวเอกสาร */
+        .doc-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            border-bottom: 2px solid var(--ink);
+            padding-bottom: 20px;
+            margin-bottom: 24px;
+        }
+        .brand-title {
+            font-size: 1.6rem;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+            margin: 0 0 4px;
+            color: var(--ink);
+        }
+        .brand-sub {
+            color: var(--muted);
+            font-size: 0.85rem;
+            margin: 0;
+        }
+        .doc-type-box {
+            text-align: right;
+        }
+        .doc-type-title {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin: 0 0 4px;
+            color: var(--accent);
+        }
+        .doc-meta {
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin: 2px 0;
+        }
+
+        /* ข้อมูล 2 ฝั่ง (ผู้ซื้อ / รายละเอียดคำสั่งซื้อ) */
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1.2fr 1fr;
+            gap: 24px;
+            margin-bottom: 24px;
+            background: #fafafa;
+            border: 1px solid var(--line);
+            border-radius: 10px;
+            padding: 16px 20px;
+        }
+        .info-col h4 {
+            margin: 0 0 8px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: var(--ink);
+            border-bottom: 1px solid var(--line);
+            padding-bottom: 4px;
+        }
+        .info-row {
+            display: flex;
+            font-size: 0.88rem;
+            margin-bottom: 4px;
+        }
+        .info-label {
+            color: var(--muted);
+            width: 90px;
+            flex-shrink: 0;
+        }
+        .info-val {
+            color: var(--ink);
+            font-weight: 500;
+            word-break: break-word;
+        }
+
+        /* ตารางสินค้า */
+        .items-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 24px;
+        }
+        .items-table th {
+            background: #f5f5f7;
+            color: var(--ink);
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-align: left;
+            padding: 10px 12px;
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+        .items-table td {
+            padding: 12px;
+            border-bottom: 1px solid var(--line);
+            font-size: 0.88rem;
+        }
+        .text-center { text-align: center !important; }
+        .text-end { text-align: right !important; }
+
+        /* ส่วนรวมเงิน & ตรายาง */
+        .summary-wrap {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 30px;
+            gap: 20px;
+        }
+        .stamp-box {
+            position: relative;
+            padding: 12px 24px;
+            border-radius: 12px;
+            border: 3px dashed;
+            display: inline-block;
+            text-align: center;
+            transform: rotate(-3deg);
+        }
+        .stamp-paid {
+            border-color: var(--success);
+            color: var(--success);
+            background: rgba(52, 199, 89, 0.06);
+        }
+        .stamp-pending {
+            border-color: var(--warning);
+            color: var(--warning);
+            background: rgba(255, 159, 10, 0.06);
+        }
+        .stamp-title {
+            font-size: 1.25rem;
+            font-weight: 800;
+            letter-spacing: 1px;
+            margin: 0;
+            text-transform: uppercase;
+        }
+        .stamp-sub {
+            font-size: 0.75rem;
+            font-weight: 600;
+            margin: 2px 0 0;
+        }
+
+        .calc-table {
+            width: 300px;
+            border-collapse: collapse;
+        }
+        .calc-table td {
+            padding: 6px 10px;
+            font-size: 0.9rem;
+        }
+        .calc-table tr.total-row {
+            border-top: 2px solid var(--ink);
+            border-bottom: 2px solid var(--ink);
+            font-weight: 700;
+            font-size: 1.1rem;
+            color: var(--ink);
+        }
+
+        /* ลายเซ็น */
+        .signatures {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 40px;
+            padding-top: 20px;
+        }
+        .sig-block {
+            text-align: center;
+            width: 200px;
+        }
+        .sig-line {
+            border-bottom: 1px dashed var(--muted);
+            height: 50px;
+            margin-bottom: 8px;
+        }
+        .sig-title {
+            font-size: 0.85rem;
+            color: var(--muted);
+        }
+
+        /* หมายเหตุท้ายเอกสาร */
+        .doc-footer-note {
+            text-align: center;
+            font-size: 0.75rem;
+            color: var(--muted);
+            border-top: 1px solid var(--line);
+            padding-top: 12px;
+            margin-top: 20px;
+        }
+
+        /* คำสั่งพิมพ์ @media print */
+        @media print {
+            .no-print { display: none !important; }
+            body {
+                background: #fff;
+                color: #000;
+                padding: 0;
+            }
+            .sheet-container {
+                padding: 0;
+            }
+            .sheet {
+                width: 100%;
+                min-height: auto;
+                box-shadow: none;
+                border-radius: 0;
+                padding: 0;
+            }
+            @page {
+                size: A4;
+                margin: 15mm;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- แถบเครื่องมือบนจอ (ไม่พิมพ์) -->
+    <div class="invoice-toolbar no-print">
+        <div class="invoice-toolbar-group">
+            <a href="javascript:history.back()" class="btn-action btn-back">
+                <i class="bi bi-arrow-left"></i> ย้อนกลับ
+            </a>
+            <span class="invoice-doc-title">เอกสารใบเสร็จ #{{ order.id }}</span>
+        </div>
+        <div class="invoice-toolbar-actions">
+            <button id="invoicePrintBtn" class="btn-action btn-print">
+                <i class="bi bi-printer"></i> พิมพ์เอกสาร (Print)
+            </button>
+        </div>
+    </div>
+
+    <div class="sheet-container">
+        <div class="sheet">
+            <div>
+                <!-- หัวเอกสาร -->
+                <div class="doc-header">
+                    <div>
+                        <h1 class="brand-title">THAMMATHAD SHOP</h1>
+                        <p class="brand-sub">ร้านค้าอุปกรณ์ไอทีและเทคโนโลยีชั้นนำ</p>
+                        <p class="brand-sub">โทร: 02-123-4567 | อีเมล: support@thammathad.local</p>
+                        <p class="brand-sub" style="font-size: 0.75rem; color: #8e8e93;">(เอกสารจำลองสำหรับการศึกษา — Academic Demo Project)</p>
+                    </div>
+                    <div class="doc-type-box">
+                        <div class="doc-type-title">ใบเสร็จรับเงิน / ใบสั่งซื้อ</div>
+                        <div class="doc-meta"><strong>เลขที่:</strong> #INV-{{ order.id|stringformat:"05d" }}</div>
+                        <div class="doc-meta"><strong>วันที่:</strong> {{ order.created_at|date:"d/m/Y H:i" }}</div>
+                        <div class="doc-meta"><strong>พิมพ์เมื่อ:</strong> {{ today|date:"d/m/Y" }}</div>
+                    </div>
+                </div>
+
+                <!-- ข้อมูลลูกค้าและคำสั่งซื้อ -->
+                <div class="info-grid">
+                    <div class="info-col">
+                        <h4>ข้อมูลลูกค้า (Customer)</h4>
+                        <div class="info-row">
+                            <span class="info-label">ชื่อผู้สั่ง:</span>
+                            <span class="info-val">{{ order.customer_name }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">เบอร์โทร:</span>
+                            <span class="info-val">{{ order.phone }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">ที่อยู่จัดส่ง:</span>
+                            <span class="info-val">{{ order.address }}</span>
+                        </div>
+                    </div>
+                    <div class="info-col">
+                        <h4>รายละเอียดการชำระ (Payment)</h4>
+                        <div class="info-row">
+                            <span class="info-label">ช่องทาง:</span>
+                            <span class="info-val">{{ order.get_payment_method_display }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">สถานะออเดอร์:</span>
+                            <span class="info-val">{{ order.get_status_display }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">ยอดชำระแล้ว:</span>
+                            <span class="info-val">฿ {{ reported|floatformat:2 }}</span>
+                        </div>
+                        {% if remaining > 0 %}
+                        <div class="info-row">
+                            <span class="info-label">ยอดค้างชำระ:</span>
+                            <span class="info-val" style="color: var(--warning);">฿ {{ remaining|floatformat:2 }}</span>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- ตารางรายการสินค้า -->
+                <table class="items-table">
+                    <thead>
+                        <tr>
+                            <th scope="col" class="text-center" style="width: 50px;">ลำดับ</th>
+                            <th scope="col">รายการสินค้า (Description)</th>
+                            <th scope="col" class="text-end" style="width: 110px;">ราคา/หน่วย</th>
+                            <th scope="col" class="text-center" style="width: 70px;">จำนวน</th>
+                            <th scope="col" class="text-end" style="width: 120px;">รวมเงิน (บาท)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in items %}
+                        <tr>
+                            <td class="text-center">{{ forloop.counter }}</td>
+                            <td>
+                                <strong>{{ item.product.name }}</strong>
+                                {% if item.product.category %}
+                                <div style="font-size: 0.75rem; color: var(--muted);">หมวดหมู่: {{ item.product.category }}</div>
+                                {% endif %}
+                            </td>
+                            <td class="text-end">฿ {{ item.price|floatformat:2 }}</td>
+                            <td class="text-center">{{ item.quantity }}</td>
+                            <td class="text-end">฿ {{ item.line_total|floatformat:2 }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+
+                <!-- สรุปยอดเงินและตรายาง -->
+                <div class="summary-wrap">
+                    <div>
+                        {% if is_paid %}
+                        <div class="stamp-box stamp-paid">
+                            <p class="stamp-title"><i class="bi bi-check2-circle me-1"></i> PAID</p>
+                            <p class="stamp-sub">ชำระเงินเรียบร้อยแล้ว</p>
+                            <small style="font-size: 0.65rem;">{{ order.created_at|date:"d/m/Y" }}</small>
+                        </div>
+                        {% else %}
+                        <div class="stamp-box stamp-pending">
+                            <p class="stamp-title"><i class="bi bi-clock-history me-1"></i> PENDING</p>
+                            <p class="stamp-sub">รอการชำระเงิน</p>
+                            <small style="font-size: 0.65rem;">กรุณาชำระเงินตามยอด</small>
+                        </div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <table class="calc-table">
+                            <tr>
+                                <td class="text-end" style="color: var(--muted);">ยอดรวมสินค้า:</td>
+                                <td class="text-end fw-semibold">฿ {{ order.total|floatformat:2 }}</td>
+                            </tr>
+                            <tr>
+                                <td class="text-end" style="color: var(--muted);">ค่าจัดส่ง:</td>
+                                <td class="text-end fw-semibold" style="color: var(--success);">ฟรี (Free)</td>
+                            </tr>
+                            <tr class="total-row">
+                                <td class="text-end">ยอดสุทธิ (Total):</td>
+                                <td class="text-end">฿ {{ order.total|floatformat:2 }}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div>
+                <!-- ลายเซ็นต์ -->
+                <div class="signatures">
+                    <div class="sig-block">
+                        <div class="sig-line"></div>
+                        <div class="sig-title">ลงชื่อผู้รับสินค้า / ลูกค้า</div>
+                        <div class="sig-title">วันที่ ....../....../..........</div>
+                    </div>
+                    <div class="sig-block">
+                        <div class="sig-line"></div>
+                        <div class="sig-title">ลงชื่อผู้รับเงิน / เจ้าหน้าที่</div>
+                        <div class="sig-title">วันที่ ....../....../..........</div>
+                    </div>
+                </div>
+
+                <!-- ท้ายเอกสาร -->
+                <div class="doc-footer-note">
+                    ขอขอบคุณที่ใช้บริการ Thammathad Shop · เอกสารนี้จัดทำขึ้นโดยระบบจำลองเพื่อการศึกษา (Assignment Demo)
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        /* ปุ่มพิมพ์ (ไม่ใช้ onclick inline) — ทำงานเฉพาะหน้าเอกสารนี้ */
+        var printBtn = document.getElementById('invoicePrintBtn');
+        if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+    </script>
+</body>
+</html>

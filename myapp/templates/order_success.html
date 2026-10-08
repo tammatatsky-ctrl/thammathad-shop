@@ -1,5 +1,5 @@
-﻿{# ===== order_success.html: หน้าหลังสั่งซื้อ (จุดจ่ายเงินของลูกค้า) — ตาม payment_method: COD / bank (เลขบัญชี+copy+แจ้ง 1 คลิก) / promptpay (QR+open app) + สลิป OCR + confetti ===== #}
 {% extends "basetemplate.html" %}
+{# ===== order_success.html: หน้าหลังสั่งซื้อ (จุดจ่ายเงินของลูกค้า) — ตาม payment_method: COD / bank (เลขบัญชี+copy+แจ้ง 1 คลิก) / promptpay (QR+open app) + สลิป OCR + confetti ===== #}
 
 {% block content %}
 <section class="page-section" data-motion="reveal" data-dir="zoom">
@@ -11,6 +11,13 @@
                 </div>
                 <h1 class="page-title page-title--small mb-3">สั่งซื้อสำเร็จ</h1>
                 <p class="lead-apple mb-4">ขอบคุณคุณ {{ order.customer_name }} สำหรับคำสั่งซื้อ</p>
+                {% if delivery_eta_display %}
+                {# ETA จาก ThaiCalendar: ข้ามเสาร์/อาทิตย์ + วันหยุดนักขัตฤกษ์ไทย (Google ICS, keyless) #}
+                <p class="text-muted-apple small mb-4">
+                    <i class="bi bi-truck me-1"></i> คาดจัดส่งภายใน <strong>{{ delivery_eta_display }}</strong>
+                    (วันทำการถัดไป — ข้ามเสาร์/อาทิตย์และวันหยุดนักขัตฤกษ์)
+                </p>
+                {% endif %}
 
                 <div class="card panel-card--wide mx-auto mb-4 order-number-card">
                     <p class="text-muted-apple mb-1 small">หมายเลขออเดอร์ของคุณ</p>
@@ -111,6 +118,7 @@
                 </div>
 
                 <div class="d-flex justify-content-center gap-2 flex-wrap">
+                    <a href="{% url 'order_invoice' order.id %}?phone={{ order.phone }}" target="_blank" rel="noopener" class="btn btn-primary btn-lg"><i class="bi bi-printer me-1"></i> พิมพ์ใบเสร็จ</a>
                     <a href="{% url 'order_tracking' %}" class="btn btn-light btn-lg"><i class="bi bi-box-seam me-1"></i> ติดตามสินค้า</a>
                     <a href="{% url 'product' %}" class="btn btn-light btn-lg">กลับสู่ร้านค้า</a>
                 </div>

@@ -1,5 +1,5 @@
-﻿{# ===== product_manage.html: จัดการสินค้า — live search (AJAX) + ปรับสต็อก ± (AJAX POST ห้ามติดลบ) · แถวอยู่ใน product_rows.html ===== #}
 {% extends "adminbase.html" %}
+{# ===== product_manage.html: จัดการสินค้า — live search (AJAX) + ปรับสต็อก ± (AJAX POST ห้ามติดลบ) · แถวอยู่ใน product_rows.html ===== #}
 {% load static %}
 
 {% block content %}
@@ -55,7 +55,7 @@
                     </div>
                     <div class="col-6 col-lg-1 d-flex gap-2">
                         <button type="submit" class="btn btn-primary flex-fill prod-submit">ค้นหา</button>
-                        <button type="button" id="prodClear" class="btn btn-light prod-clear d-none" title="ล้างตัวกรองทั้งหมด"><i class="bi bi-x-lg"></i></button>
+                        <button aria-label="ล้างตัวกรองทั้งหมด" type="button" id="prodClear" class="btn btn-light prod-clear d-none" title="ล้างตัวกรองทั้งหมด"><i class="bi bi-x-lg"></i></button>
                     </div>
                 </div>
                 <div class="form-hint mt-2"><i class="bi bi-lightning-charge"></i> ผลค้นหาอัปเดตทันทีขณะพิมพ์</div>
@@ -72,18 +72,18 @@
 
         <div class="card panel-card--flush" data-motion="reveal" data-dir="zoom">
             <div class="table-responsive">
-                <table class="table align-middle text-center mb-0 table-cardify">
+                <table class="table align-middle text-center mb-0 table-cardify table-sticky-head">
                     <thead>
                         <tr>
-                             <th>รูป</th><th>ชื่อสินค้า</th><th>ราคา</th><th>คงเหลือ</th><th>ปรับสต็อก</th>
-                            <th>สถานะหน้าร้าน</th><th>จัดการ</th>
+                             <th scope="col">รูป</th><th scope="col">ชื่อสินค้า</th><th scope="col">ราคา</th><th scope="col">คงเหลือ</th><th scope="col">ปรับสต็อก</th>
+                            <th scope="col">สถานะหน้าร้าน</th><th scope="col">จัดการ</th>
                         </tr>
                     </thead>
                     <tbody data-motion="stagger" id="prodTableBody" class="live-fade">
                         {% for product in page_obj %}
                         <tr>
                             <td data-label="รูป">
-                                <img src="{% static product.image %}" alt="{{ product.name }}" width="52" height="40" class="rounded-3" style="object-fit: cover;">
+                                <img loading="lazy" src="{% static product.image %}" alt="{{ product.name }}" width="52" height="40" class="rounded-3 img-cover">
                             </td>
                             <td class="fw-medium text-start" data-label="ชื่อสินค้า">{{ product.name }}</td>
                             <td class="fw-bold" data-label="ราคา">฿ {{ product.price|floatformat:2 }}</td>
@@ -97,7 +97,7 @@
                             <td data-label="ปรับสต็อก">
                                 <div class="d-inline-flex align-items-center gap-1 stock-adjust" data-id="{{ product.id }}">
                                     <button type="button" class="btn btn-sm btn-outline-danger stock-btn" data-delta="-1" {% if product.stock <= 0 %}disabled{% endif %}>−</button>
-                                    <span class="stock-num fw-bold" style="min-width:28px;text-align:center">{{ product.stock }}</span>
+                                    <span class="stock-num fw-bold">{{ product.stock }}</span>
                                     <button type="button" class="btn btn-sm btn-outline-success stock-btn" data-delta="1">+</button>
                                 </div>
                             </td>

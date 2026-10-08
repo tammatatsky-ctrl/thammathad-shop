@@ -1,0 +1,63 @@
+{% extends 'basetemplate.html' %}
+{# ===== 403.html: การเข้าถึงถูกปฏิเสธ (Permission Denied) ในสไตล์ Apple Liquid Glass ===== #}
+{% load shop_extras %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-7 col-lg-6 text-center" data-motion="reveal" data-dir="zoom">
+                <div class="card panel-card p-4 p-md-5 my-4 shadow-lg border-0 position-relative overflow-hidden">
+                    <span class="holographic-sheen" aria-hidden="true"></span>
+
+                    <!-- Icon Lock Badge -->
+                    <div class="d-inline-flex align-items-center justify-content-center mb-4 rounded-circle mx-auto error-badge">
+                        <i class="bi bi-shield-slash-fill text-danger"></i>
+                    </div>
+
+                    <p class="eyebrow text-danger mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i> ข้อผิดพลาด 403 (FORBIDDEN)</p>
+                    <h1 class="page-title mb-2">การเข้าถึงถูกจำกัด</h1>
+                    
+                    <p class="lead-apple text-muted-apple mb-4">
+                        ขออภัย คุณไม่มีสิทธิ์ในการเข้าถึงหน้านี้ เนื่องจากระบบจำกัดสิทธิ์เฉพาะผู้จัดการร้าน (Manager) หรือผู้ดูแลระบบเท่านั้น
+                    </p>
+
+                    {% if user.is_authenticated %}
+                    <div class="p-3 rounded-4 mb-4 text-start info-glass-box">
+                        <div class="small text-muted-apple mb-1">สถานะบัญชีปัจจุบันของคุณ:</div>
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">
+                            <div>
+                                <span class="fw-bold">{{ user.first_name|default:user.username }}</span>
+                                <span class="text-muted-apple small ms-1">({{ user.email }})</span>
+                            </div>
+                            <div>
+                                {% user_role user %}
+                                {% user_group_badges user %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <a href="{% url 'index' %}" class="btn btn-primary px-4 py-2">
+                            <i class="bi bi-house-door me-1"></i> กลับสู่หน้าหลัก
+                        </a>
+                        {% if user.is_authenticated %}
+                        <form method="POST" action="{% url 'account_logout' %}" class="d-inline mb-0">
+                            {% csrf_token %}
+                            <button type="submit" class="btn btn-outline-secondary px-4 py-2">
+                                <i class="bi bi-person-x me-1"></i> สลับบัญชีผู้ใช้
+                            </button>
+                        </form>
+                        {% else %}
+                        <a href="{% url 'account_login' %}" class="btn btn-outline-secondary px-4 py-2">
+                            <i class="bi bi-box-arrow-in-right me-1"></i> เข้าสู่ระบบ
+                        </a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

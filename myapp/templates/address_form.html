@@ -1,5 +1,5 @@
-﻿{# ===== address_form.html: เพิ่ม/แก้ที่อยู่ — cascade จังหวัด→อำเภอ→ตำบล→รหัสไปรษณีย์ ผ่าน thai-address.js (data-selected restore ค่าโหมดแก้) ===== #}
 {% extends 'basetemplate.html' %}
+{# ===== address_form.html: เพิ่ม/แก้ที่อยู่ — cascade จังหวัด→อำเภอ→ตำบล→รหัสไปรษณีย์ ผ่าน thai-address.js (data-selected restore ค่าโหมดแก้) ===== #}
 {% load static %}
 
 {% block content %}
@@ -9,6 +9,13 @@
             <div class="col-md-7" data-motion="reveal" data-dir="zoom">
                 <p class="eyebrow mb-2"><i class="bi bi-geo-alt"></i> สมุดที่อยู่</p>
                 <h1 class="page-title mb-4">{% if address %}แก้ไขที่อยู่{% else %}เพิ่มที่อยู่ใหม่{% endif %}</h1>
+                {% if geo_hint and geo_hint.country_code and geo_hint.country_code != 'TH' %}
+                {# คำใบ้ระดับประเทศจาก GeoIP (ipwho.is) — แสดงเฉพาะเมื่ออยู่นอกไทย; ห้ามผูกกับที่อยู่ผู้ใช้ #}
+                <div class="alert alert-warning py-2 small mb-3" data-motion="reveal">
+                    <i class="bi bi-globe2 me-1"></i> ตรวจพบว่าคุณอยู่นอกประเทศไทย ({{ geo_hint.country }})
+                    — ร้านจัดส่งเฉพาะภายในประเทศไทย · ข้อมูลนี้ประมาณจาก IP ใช้เป็นคำใบ้เท่านั้น
+                </div>
+                {% endif %}
                 <div class="card panel-card">
                     {% if error %}<div class="alert alert-danger py-2 small">{{ error }}</div>{% endif %}
                     <form method="POST" id="addrForm">

@@ -1,56 +1,202 @@
-﻿{# ===== account_register.html: สมัครลูกค้า — ข้อมูลเก็บไว้เติมอัตโนมัติตอนสั่งครั้งถัดไป ===== #}
 {% extends 'basetemplate.html' %}
+{# ===== account_register.html: สมัครลูกค้า — Form Validation ครบทุกฟิลด์ + แถบวัดความแข็งแกร่งรหัสผ่าน + Password Toggle ===== #}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-md-6" data-motion="reveal" data-dir="zoom">
-                <p class="eyebrow mb-2 text-center"><i class="bi bi-person-plus"></i> บัญชีลูกค้า</p>
-                <h1 class="page-title text-center mb-1">สมัครสมาชิก</h1>
-                <p class="text-center text-muted-apple small mb-4">กรอกครั้งเดียว — สั่งซื้อครั้งหน้ากรอกให้อัตโนมัติ + เห็นออเดอร์ของตัวเองทุกใบ</p>
-                <div class="card panel-card">
-                    {% if error %}<div class="alert alert-danger py-2 small">{{ error }}</div>{% endif %}
-                    <form method="POST">
+            <div class="col-md-6 col-lg-5" data-motion="reveal" data-dir="zoom">
+                <div class="text-center mb-3">
+                    <p class="eyebrow mb-1"><i class="bi bi-person-plus-fill text-primary"></i> บัญชีลูกค้าใหม่</p>
+                    <h1 class="page-title mb-1">สมัครสมาชิก</h1>
+                    <p class="text-muted-apple small">กรอกครั้งเดียว — สั่งซื้อครั้งหน้ากรอกให้อัตโนมัติ + เห็นออเดอร์ของตัวเองทุกใบ</p>
+                </div>
+
+                <div class="card panel-card shadow-sm">
+                    {% if error %}
+                    <div class="alert alert-danger py-2 px-3 small rounded-3 mb-3 d-flex align-items-center gap-2">
+                        <i class="bi bi-exclamation-circle-fill"></i>
+                        <span>{{ error }}</span>
+                    </div>
+                    {% endif %}
+
+                    <form method="POST" novalidate id="registerForm">
                         {% csrf_token %}
                         <input type="hidden" name="next" value="{{ next }}">
+
+                        <!-- ชื่อ-นามสกุล -->
                         <div class="mb-3">
-                            <label class="form-label">ชื่อ-นามสกุล</label>
-                            <input type="text" name="name" class="form-control" required value="{{ v_name|default:'' }}">
+                            <label class="form-label fw-semibold">ชื่อ-นามสกุล <span class="text-danger">*</span></label>
+                            <input type="text" name="name" id="regName" class="form-control {% if form.name.errors %}is-invalid{% endif %}"
+                                   required value="{{ form.name.value|default:'' }}"
+                                   placeholder="เช่น ธนภัทร ใจดี">
+                            {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>
+                            {% endif %}
                         </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">อีเมล (ใช้เข้าสู่ระบบ)</label>
-                                <input type="email" name="email" class="form-control" required value="{{ v_email|default:'' }}">
+
+                        <!-- อีเมล & เบอร์โทร -->
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">อีเมล (ใช้เข้าสู่ระบบ) <span class="text-danger">*</span></label>
+                                <input type="email" name="email" id="regEmail" class="form-control {% if form.email.errors %}is-invalid{% endif %}"
+                                       required value="{{ form.email.value|default:'' }}"
+                                       placeholder="you@email.com">
+                                {% if form.email.errors %}
+                                <div class="invalid-feedback d-block">{{ form.email.errors.0 }}</div>
+                                {% endif %}
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">เบอร์โทรศัพท์</label>
-                                <input type="tel" name="phone" class="form-control" required
-                                       pattern="^0\d{8,9}$" title="เบอร์ไทย 0XXXXXXXXX" value="{{ v_phone|default:'' }}">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">เบอร์โทรศัพท์ <span class="text-danger">*</span></label>
+                                <input type="tel" name="phone" id="regPhone" class="form-control {% if form.phone.errors %}is-invalid{% endif %}"
+                                       required pattern="^0\d{8,9}$" title="เบอร์ไทย 0XXXXXXXXX"
+                                       value="{{ form.phone.value|default:'' }}"
+                                       placeholder="เช่น 0812345678" inputmode="tel">
+                                {% if form.phone.errors %}
+                                <div class="invalid-feedback d-block">{{ form.phone.errors.0 }}</div>
+                                {% endif %}
                             </div>
                         </div>
+
+                        <!-- ที่อยู่จัดส่ง -->
                         <div class="mb-3">
-                            <label class="form-label">ที่อยู่จัดส่ง</label>
-                            <textarea name="address" rows="2" class="form-control" required>{{ v_address|default:'' }}</textarea>
+                            <label class="form-label fw-semibold">ที่อยู่จัดส่งเริ่มต้น <span class="text-danger">*</span></label>
+                            <textarea name="address" id="regAddress" rows="2" class="form-control {% if form.address.errors %}is-invalid{% endif %}"
+                                      required placeholder="บ้านเลขที่ ถนน ตำบล อำเภอ จังหวัด รหัสไปรษณีย์">{{ form.address.value|default:'' }}</textarea>
+                            {% if form.address.errors %}
+                            <div class="invalid-feedback d-block">{{ form.address.errors.0 }}</div>
+                            {% endif %}
                         </div>
-                        <div class="row">
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">รหัสผ่าน</label>
-                                <input type="password" name="password1" class="form-control" required minlength="6">
+
+                        <!-- รหัสผ่าน & ยืนยันรหัสผ่าน พร้อมปุ่มลูกตาดูรหัส -->
+                        <div class="row g-3 mb-2">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">รหัสผ่าน <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="password" name="password1" id="regPw1"
+                                           class="form-control {% if form.password1.errors %}is-invalid{% endif %}"
+                                           required minlength="6" placeholder="อย่างน้อย 6 ตัว">
+                                    <button aria-label="ดูรหัสผ่าน" class="btn btn-outline-secondary" type="button" id="togglePw1" title="ดูรหัสผ่าน">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                                {% if form.password1.errors %}
+                                <div class="invalid-feedback d-block">{{ form.password1.errors.0 }}</div>
+                                {% endif %}
                             </div>
-                            <div class="col-md-6 mb-3">
-                                <label class="form-label">ยืนยันรหัสผ่าน</label>
-                                <input type="password" name="password2" class="form-control" required minlength="6">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">ยืนยันรหัสผ่าน <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <input type="password" name="password2" id="regPw2"
+                                           class="form-control {% if form.password2.errors %}is-invalid{% endif %}"
+                                           required minlength="6" placeholder="กรอกอีกครั้ง">
+                                    <button aria-label="ดูรหัสผ่าน" class="btn btn-outline-secondary" type="button" id="togglePw2" title="ดูรหัสผ่าน">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                </div>
+                                {% if form.password2.errors %}
+                                <div class="invalid-feedback d-block">{{ form.password2.errors.0 }}</div>
+                                {% endif %}
                             </div>
                         </div>
-                        <button type="submit" class="btn btn-primary btn-lg w-100"><i class="bi bi-person-check me-1"></i> สมัครบัญชี</button>
+
+                        <!-- Real-time Password Strength Meter -->
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="small text-muted-apple hint-xs">ความแข็งแกร่งของรหัสผ่าน:</span>
+                                <span class="small fw-semibold hint-xs" id="pwStrengthLabel">-</span>
+                            </div>
+                            <div class="progress progress-slim">
+                                <div class="progress-bar transition-all" id="pwStrengthBar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        </div>
+
+                        <!-- Checkbox ยอมรับเงื่อนไข -->
+                        <div class="form-check mb-4">
+                            <input class="form-check-input" type="checkbox" name="agree_terms" id="agreeTerms" checked required>
+                            <label class="form-check-label small text-muted-apple" for="agreeTerms">
+                                ฉันยอมรับ <span class="text-primary">ข้อกำหนดการใช้งาน</span> และ <span class="text-primary">นโยบายความเป็นส่วนตัว</span>
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary btn-lg w-100 py-2 fw-semibold">
+                            <i class="bi bi-person-check me-1"></i> สมัครสมาชิก
+                        </button>
                     </form>
                 </div>
+
                 <p class="text-center text-muted-apple mt-3 small">
-                    มีบัญชีแล้ว? <a href="{% url 'account_login' %}" class="link-arrow">เข้าสู่ระบบ</a>
+                    มีบัญชีอยู่แล้ว? <a href="{% url 'account_login' %}{% if next %}?next={{ next|urlencode }}{% endif %}" class="link-arrow fw-semibold">เข้าสู่ระบบที่นี่</a>
                 </p>
             </div>
         </div>
     </div>
 </section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    // 1. Password Visibility Toggle
+    function setupToggle(btnId, inputId) {
+        var btn = document.getElementById(btnId);
+        var input = document.getElementById(inputId);
+        if (!btn || !input) return;
+        btn.addEventListener('click', function() {
+            var isText = input.type === 'text';
+            input.type = isText ? 'password' : 'text';
+            btn.innerHTML = isText ? '<i class="bi bi-eye"></i>' : '<i class="bi bi-eye-slash"></i>';
+        });
+    }
+    setupToggle('togglePw1', 'regPw1');
+    setupToggle('togglePw2', 'regPw2');
+
+    // 2. Real-time Password Strength Meter
+    var pwInput = document.getElementById('regPw1');
+    var bar = document.getElementById('pwStrengthBar');
+    var label = document.getElementById('pwStrengthLabel');
+
+    if (pwInput && bar && label) {
+        pwInput.addEventListener('input', function() {
+            var val = pwInput.value;
+            if (!val) {
+                bar.style.width = '0%';
+                bar.className = 'progress-bar';
+                label.textContent = '-';
+                label.className = 'small fw-semibold text-muted-apple';
+                return;
+            }
+
+            var score = 0;
+            if (val.length >= 6) score += 25;
+            if (val.length >= 10) score += 15;
+            if (/[0-9]/.test(val)) score += 20;
+            if (/[a-z]/.test(val) && /[A-Z]/.test(val)) score += 20;
+            if (/[^A-Za-z0-9]/.test(val)) score += 20;
+
+            if (score < 40) {
+                bar.style.width = '25%';
+                bar.className = 'progress-bar bg-danger';
+                label.textContent = 'ง่ายเกินไป (Weak)';
+                label.className = 'small fw-semibold text-danger';
+            } else if (score < 65) {
+                bar.style.width = '50%';
+                bar.className = 'progress-bar bg-warning';
+                label.textContent = 'ปานกลาง (Fair)';
+                label.className = 'small fw-semibold text-warning';
+            } else if (score < 85) {
+                bar.style.width = '75%';
+                bar.className = 'progress-bar bg-info';
+                label.textContent = 'ดี (Good)';
+                label.className = 'small fw-semibold text-info';
+            } else {
+                bar.style.width = '100%';
+                bar.className = 'progress-bar bg-success';
+                label.textContent = 'ปลอดภัยสูง (Strong)';
+                label.className = 'small fw-semibold text-success';
+            }
+        });
+    }
+})();
+</script>
 {% endblock %}

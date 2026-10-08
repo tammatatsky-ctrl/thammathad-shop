@@ -1,5 +1,6 @@
-{# ===== adminbase.html: เฟรมโซนผู้ดูแล (ต่อจาก basetemplate) — navbar จัดการ/รายงาน/logout เฉพาะ is_staff + admin-badge ===== #}
 {% extends "basetemplate.html" %}
+{# ===== adminbase.html: เฟรมโซนผู้ดูแล (ต่อจาก basetemplate) — navbar จัดการ/รายงาน/logout เฉพาะ is_staff + admin-badge ===== #}
+{% load shop_extras %}
 
 {# navbar แยกโซน: dropdown จัดการ(ออเดอร์/พนักงาน/สินค้า/ลูกค้า) + รายงาน(ขาย/การเงิน) + ลิงก์ Django /admin/ + ออกจากระบบ (POST) #}
 
@@ -25,6 +26,7 @@
                             <li><a class="dropdown-item" href="{% url 'employee_list' %}"><i class="bi bi-person-badge me-2"></i>พนักงาน</a></li>
                             <li><a class="dropdown-item" href="{% url 'product_manage' %}"><i class="bi bi-grid me-2"></i>สินค้า</a></li>
                             <li><a class="dropdown-item" href="{% url 'customer_list' %}"><i class="bi bi-people me-2"></i>ลูกค้า</a></li>
+                            <li><a class="dropdown-item" href="{% url 'staff_users' %}"><i class="bi bi-shield-lock me-2"></i>สิทธิ์ & บทบาท (RBAC)</a></li>
                         </ul>
                     </li>
 
@@ -43,6 +45,7 @@
                 <i class="bi bi-globe me-1"></i>ดูเว็บไซต์
             </a>
             {% if user.is_staff %}
+                <span class="me-2 d-none d-md-inline">{% user_role user %}</span>
                 <form method="POST" action="{% url 'staff_logout' %}" class="d-inline">
                     {% csrf_token %}
                     <button type="submit" class="btn btn-outline-danger btn-sm me-2"><i class="bi bi-box-arrow-right me-1"></i>ออกจากระบบ</button>
@@ -50,22 +53,25 @@
             {% else %}
                 <a href="{% url 'staff_login' %}" class="btn btn-primary btn-sm me-2"><i class="bi bi-shield-lock me-1"></i>เข้าสู่ระบบผู้ดูแล</a>
             {% endif %}
-            <button type="button" class="theme-switch" id="themeToggle" role="switch" aria-label="เปลี่ยนเป็นโหมดมืด" aria-checked="false" aria-pressed="false" title="สลับโหมดมืด/สว่าง">
-                <span class="theme-switch-track" aria-hidden="true">
-                    <i class="bi bi-sun-fill"></i>
-                    <span class="theme-switch-thumb"></span>
-                    <i class="bi bi-moon-fill"></i>
-                </span>
-                <span class="visually-hidden">สลับโหมดมืดและโหมดสว่าง</span>
-            </button>
-            <button type="button" class="motion-switch" id="motionToggle" role="switch" aria-label="ปิดอนิเมชั่น" aria-checked="true" aria-pressed="true" title="ปิดอนิเมชั่น">
-                <span class="motion-switch-track" aria-hidden="true">
-                    <i class="bi bi-lightning-fill"></i>
-                    <span class="motion-switch-thumb"></span>
-                    <i class="bi bi-pause-fill"></i>
-                </span>
-                <span class="visually-hidden">เปิด/ปิดอนิเมชั่น</span>
-            </button>
+            <div class="control-capsule ms-1">
+                <button type="button" class="theme-switch" id="themeToggle" role="switch" aria-label="เปลี่ยนเป็นโหมดมืด" aria-checked="false" aria-pressed="false" title="สลับโหมดมืด/สว่าง">
+                    <span class="theme-switch-track" aria-hidden="true">
+                        <i class="bi bi-sun-fill"></i>
+                        <span class="theme-switch-thumb"></span>
+                        <i class="bi bi-moon-fill"></i>
+                    </span>
+                    <span class="visually-hidden">สลับโหมดมืดและโหมดสว่าง</span>
+                </button>
+                <span class="control-capsule-sep" aria-hidden="true"></span>
+                <button type="button" class="motion-switch" id="motionToggle" role="switch" aria-label="ปิดอนิเมชั่น" aria-checked="true" aria-pressed="true" title="ปิดอนิเมชั่น">
+                    <span class="motion-switch-track" aria-hidden="true">
+                        <i class="bi bi-lightning-fill"></i>
+                        <span class="motion-switch-thumb"></span>
+                        <i class="bi bi-pause-fill"></i>
+                    </span>
+                    <span class="visually-hidden">เปิด/ปิดอนิเมชั่น</span>
+                </button>
+            </div>
         </div>
     </div>
 </nav>

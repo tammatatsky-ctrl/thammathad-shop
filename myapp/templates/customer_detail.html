@@ -1,5 +1,5 @@
-﻿{# ===== customer_detail.html: รายละเอียดลูกค้าสำหรับพนักงาน — ข้อมูลบัญชี + ออเดอร์ทั้งหมดของลูกค้า ===== #}
 {% extends "adminbase.html" %}
+{# ===== customer_detail.html: รายละเอียดลูกค้าสำหรับพนักงาน — ข้อมูลบัญชี + ออเดอร์ทั้งหมดของลูกค้า ===== #}
 {% load static %}
 
 {% block content %}
@@ -56,30 +56,32 @@
 
             <div class="card panel-card--wide" data-motion="reveal">
                 <h6 class="mb-3"><i class="bi bi-receipt me-2"></i>ประวัติสั่งซื้อ ({{ orders|length }} ออเดอร์)</h6>
-                <table class="table table-sm text-center mb-0 table-cardify">
-                    <thead><tr><th>#</th><th>สินค้า</th><th>ยอดรวม</th><th>สถานะ</th><th>วันที่</th></tr></thead>
-                    <tbody>
-                        {% for o in orders %}
-                        <tr>
-                            <td class="fw-bold" data-label="ออเดอร์">
-                                <a href="{% url 'order_detail' o.id %}">#{{ o.id }}</a>
-                            </td>
-                            <td class="text-start" data-label="สินค้า">
-                                {{ o.items.all.0.product.name }}{% if o.items.all|length > 1 %} +{{ o.items.all|length|add:"-1" }}{% endif %}
-                            </td>
-                            <td class="fw-bold" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>
-                            <td data-label="สถานะ">
-                                <span class="badge {% if o.status == 'pending' %}bg-warning{% elif o.status == 'paid' %}badge-success{% elif o.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">
-                                    {{ o.get_status_display }}
-                                </span>
-                            </td>
-                            <td data-label="วันที่">{{ o.created_at|date:"d/m/Y" }}</td>
-                        </tr>
-                        {% empty %}
-                        <tr><td colspan="5" class="text-muted-apple py-3">ยังไม่มีออเดอร์</td></tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-sm text-center mb-0 table-cardify">
+                                        <thead><tr><th scope="col">#</th><th scope="col">สินค้า</th><th scope="col">ยอดรวม</th><th scope="col">สถานะ</th><th scope="col">วันที่</th></tr></thead>
+                                        <tbody>
+                                            {% for o in orders %}
+                                            <tr>
+                                                <td class="fw-bold" data-label="ออเดอร์">
+                                                    <a href="{% url 'order_detail' o.id %}">#{{ o.id }}</a>
+                                                </td>
+                                                <td class="text-start" data-label="สินค้า">
+                                                    {{ o.items.all.0.product.name }}{% if o.items.all|length > 1 %} +{{ o.items.all|length|add:"-1" }}{% endif %}
+                                                </td>
+                                                <td class="fw-bold" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>
+                                                <td data-label="สถานะ">
+                                                    <span class="badge {% if o.status == 'pending' %}bg-warning{% elif o.status == 'paid' %}badge-success{% elif o.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">
+                                                        {{ o.get_status_display }}
+                                                    </span>
+                                                </td>
+                                                <td data-label="วันที่">{{ o.created_at|date:"d/m/Y" }}</td>
+                                            </tr>
+                                            {% empty %}
+                                            <tr><td colspan="5" class="text-muted-apple py-3">ยังไม่มีออเดอร์</td></tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                </div>
             </div>
         </div>
     </div>

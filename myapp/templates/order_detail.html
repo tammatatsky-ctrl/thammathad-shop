@@ -1,5 +1,5 @@
-﻿{# ===== order_detail.html: รายละเอียดออเดอร์ (staff) — ปุ่มเปลี่ยนสถานะเฉพาะขั้นถัดไปตามบันได OrderStatusService (paid ตั้งไม่ได้) + ประวัติแจ้งชำระ ===== #}
 {% extends "adminbase.html" %}
+{# ===== order_detail.html: รายละเอียดออเดอร์ (staff) — ปุ่มเปลี่ยนสถานะเฉพาะขั้นถัดไปตามบันได OrderStatusService (paid ตั้งไม่ได้) + ประวัติแจ้งชำระ ===== #}
 {% load static %}
 
 {% block content %}
@@ -21,9 +21,14 @@
                         <small class="text-muted-apple">บัญชี: {{ order.user.username }}</small>
                         {% endif %}
                     </div>
-                    <span class="badge status-badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %} fs-6">
-                        {{ order.get_status_display }}
-                    </span>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'order_invoice' order.id %}" target="_blank" rel="noopener" class="btn btn-sm btn-light lens-btn">
+                            <i class="bi bi-printer me-1"></i>พิมพ์ใบเสร็จ
+                        </a>
+                        <span class="badge status-badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %} fs-6">
+                            {{ order.get_status_display }}
+                        </span>
+                    </div>
                 </div>
 
                 {% if allowed_statuses %}
@@ -80,19 +85,21 @@
                         {% if remaining > 0 %}คงเหลือ ฿ {{ remaining|floatformat:2 }}{% else %}ชำระครบแล้ว{% endif %}
                     </span>
                 </div>
-                <table class="table table-sm text-center mb-0 table-cardify">
-                    <thead><tr><th>วันที่บันทึก</th><th>ยอด</th><th>วันที่โอน</th><th>หมายเหตุ</th></tr></thead>
-                    <tbody>
-                        {% for p in payments %}
-                        <tr>
-                            <td data-label="บันทึก">{{ p.created_at|date:"d/m H:i" }}</td>
-                            <td class="fw-bold" data-label="ยอด">฿ {{ p.amount|floatformat:2 }}</td>
-                            <td data-label="โอน">{{ p.transfer_date|date:"d/m/Y"|default:"—" }}</td>
-                            <td class="text-start" data-label="หมายเหตุ"><small>{{ p.note|default:"—" }}</small></td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-sm text-center mb-0 table-cardify">
+                                        <thead><tr><th scope="col">วันที่บันทึก</th><th scope="col">ยอด</th><th scope="col">วันที่โอน</th><th scope="col">หมายเหตุ</th></tr></thead>
+                                        <tbody>
+                                            {% for p in payments %}
+                                            <tr>
+                                                <td data-label="บันทึก">{{ p.created_at|date:"d/m H:i" }}</td>
+                                                <td class="fw-bold" data-label="ยอด">฿ {{ p.amount|floatformat:2 }}</td>
+                                                <td data-label="โอน">{{ p.transfer_date|date:"d/m/Y"|default:"—" }}</td>
+                                                <td class="text-start" data-label="หมายเหตุ"><small>{{ p.note|default:"—" }}</small></td>
+                                            </tr>
+                                            {% endfor %}
+                                        </tbody>
+                                    </table>
+                </div>
             </div>
             {% endif %}
         </div>

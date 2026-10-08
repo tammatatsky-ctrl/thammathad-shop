@@ -13,7 +13,7 @@
     {% for product in page_obj %}
     <tr>
         <td data-label="รูป">
-            <img src="{% static product.image %}" alt="{{ product.name }}" width="52" height="40" class="rounded-3" style="object-fit: cover;">
+            <img loading="lazy" src="{% static product.image %}" alt="{{ product.name }}" width="52" height="40" class="rounded-3 img-cover">
         </td>
         <td class="fw-medium text-start" data-label="ชื่อสินค้า">{{ product.name }}</td>
         <td class="fw-bold" data-label="ราคา">฿ {{ product.price|floatformat:2 }}</td>
@@ -27,7 +27,7 @@
         <td data-label="ปรับสต็อก">
             <div class="d-inline-flex align-items-center gap-1 stock-adjust" data-id="{{ product.id }}">
                 <button type="button" class="btn btn-sm btn-outline-danger stock-btn" data-delta="-1" {% if product.stock <= 0 %}disabled{% endif %}>−</button>
-                <span class="stock-num fw-bold" style="min-width:28px;text-align:center">{{ product.stock }}</span>
+                <span class="stock-num fw-bold">{{ product.stock }}</span>
                 <button type="button" class="btn btn-sm btn-outline-success stock-btn" data-delta="1">+</button>
             </div>
         </td>

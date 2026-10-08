@@ -1,8 +1,8 @@
-﻿{# ===== payment_list_rows.html: partial แถว Payment — แต่ละรายการ = "ยอดแจ้ง" ที่ PaymentService รวมแล้วขึ้นสถานะ paid อัตโนมัติ ===== #}
+{# ===== payment_list_rows.html: partial แถว Payment — แต่ละรายการ = "ยอดแจ้ง" ที่ PaymentService รวมแล้วขึ้นสถานะ paid อัตโนมัติ ===== #}
 {% load static %}
-<table class="table align-middle text-center mb-0 table-cardify">
+<table class="table align-middle text-center mb-0 table-cardify table-sticky-head">
     <thead>
-        <tr><th>เลขออเดอร์</th><th>ชื่อผู้แจ้ง</th><th>เบอร์</th><th>ยอดเงิน</th><th>วันที่โอน</th><th>หมายเหตุ</th><th>บันทึกเมื่อ</th></tr>
+        <tr><th scope="col">เลขออเดอร์</th><th scope="col">ชื่อผู้แจ้ง</th><th scope="col">เบอร์</th><th scope="col">ยอดเงิน</th><th scope="col">วันที่โอน</th><th scope="col">หมายเหตุ</th><th scope="col">บันทึกเมื่อ</th></tr>
     </thead>
     <tbody data-motion="stagger" class="in">
         {% for p in payments %}

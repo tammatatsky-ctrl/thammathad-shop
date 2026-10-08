@@ -1,18 +1,96 @@
-﻿{# ===== account.html: ลูกค้า — ประวัติออเดอร์ (สถานะตามบันได) + สมุดที่อยู่ + ออกจากระบบ (POST) ===== #}
 {% extends 'basetemplate.html' %}
+{# ===== account.html: ลูกค้า — ประวัติออเดอร์ (สถานะตามบันได) + สมุดที่อยู่ + ออกจากระบบ (POST) ===== #}
+{% load shop_extras %}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4" data-motion="reveal">
-            <div>
-                <p class="eyebrow mb-2"><i class="bi bi-person-circle"></i> บัญชีของฉัน</p>
-                <h1 class="page-title mb-0">สวัสดี {{ display_name }}</h1>
+        <!-- Profile Hero Header with Cover Banner & Avatar (Supports animated GIFs) -->
+        <div class="profile-hero-card mb-4" data-motion="reveal">
+            <div class="profile-cover-wrap">
+                {% if profile and profile.cover %}
+                <img loading="lazy" src="{{ profile.cover.url }}" alt="Profile Cover" class="profile-cover-img">
+                {% else %}
+                <div class="profile-cover-default">
+                    <div class="cover-mesh-aurora"></div>
+                </div>
+                {% endif %}
             </div>
-            <form method="POST" action="{% url 'account_logout' %}">
-                {% csrf_token %}
-                <button type="submit" class="btn btn-light"><i class="bi bi-box-arrow-right me-1"></i> ออกจากระบบ</button>
-            </form>
+            <div class="profile-hero-content">
+                <div class="profile-avatar-box">
+                    {% if profile and profile.avatar %}
+                    <img loading="lazy" src="{{ profile.avatar.url }}" alt="{{ display_name }}" class="profile-avatar-img">
+                    {% else %}
+                    <div class="profile-avatar-placeholder">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="profile-hero-details">
+                    <div class="d-flex align-items-center flex-wrap gap-2 mb-1">
+                        <h1 class="profile-hero-name mb-0">{{ display_name }}</h1>
+                        {% user_role user %}
+                        {% user_group_badges user %}
+                    </div>
+                    <p class="profile-hero-email text-muted-apple mb-0">
+                        <i class="bi bi-envelope me-1"></i>{{ user.email|default:user.username }}
+                        {% if profile and profile.phone %}
+                        <span class="mx-2 d-none d-sm-inline">·</span><span class="d-inline-block"><i class="bi bi-telephone me-1"></i>{{ profile.phone }}</span>
+                        {% endif %}
+                    </p>
+                    <div class="small text-muted-apple mt-1">
+                        {% if joined_thai %}<span class="me-2"><i class="bi bi-calendar-check me-1"></i>สมาชิกตั้งแต่: {{ joined_thai }}</span>{% endif %}
+                        {% if last_login %}<span class="d-none d-md-inline"><i class="bi bi-clock-history me-1"></i>เข้าสู่ระบบล่าสุด: {{ last_login|date:"d/m/Y H:i" }}</span>{% endif %}
+                    </div>
+                </div>
+                <div class="profile-hero-actions d-flex gap-2 align-items-center flex-wrap">
+                    <a href="{% url 'profile_edit' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-pencil-square me-1"></i> แก้ไขโปรไฟล์
+                    </a>
+                    <a href="{% url 'account_password_change' %}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-shield-lock me-1"></i> เปลี่ยนรหัสผ่าน
+                    </a>
+                    <form method="POST" action="{% url 'account_logout' %}" class="d-inline mb-0">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-sm btn-light">
+                            <i class="bi bi-box-arrow-right me-1"></i> ออกจากระบบ
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <!-- Profile Summary Ribbon (Swiss Technical & Anti-Slop Ribbon) -->
+        <div class="summary-ribbon mb-4" data-motion="reveal">
+            <div class="summary-ribbon-item">
+                <div class="summary-ribbon-icon is-info">
+                    <i class="bi bi-bag-check-fill"></i>
+                </div>
+                <div>
+                    <div class="summary-ribbon-label">ออเดอร์ทั้งหมด</div>
+                    <div class="summary-ribbon-val tabular-nums">{{ orders_count|default:0 }} <span class="small text-muted fw-normal">รายการ</span></div>
+                </div>
+            </div>
+            <div class="summary-ribbon-sep" aria-hidden="true"></div>
+            <div class="summary-ribbon-item">
+                <div class="summary-ribbon-icon is-success">
+                    <i class="bi bi-cash-stack"></i>
+                </div>
+                <div>
+                    <div class="summary-ribbon-label">ยอดสั่งซื้อสะสม</div>
+                    <div class="summary-ribbon-val tabular-nums text-primary">฿ {{ orders_total|floatformat:2 }}</div>
+                </div>
+            </div>
+            <div class="summary-ribbon-sep" aria-hidden="true"></div>
+            <div class="summary-ribbon-item">
+                <div class="summary-ribbon-icon {% if orders_pending %}is-warning{% endif %}">
+                    <i class="bi bi-hourglass-split"></i>
+                </div>
+                <div>
+                    <div class="summary-ribbon-label">รอการตรวจสอบ</div>
+                    <div class="summary-ribbon-val tabular-nums {% if orders_pending %}text-warning{% endif %}">{{ orders_pending|default:0 }} <span class="small text-muted fw-normal">รายการ</span></div>
+                </div>
+            </div>
         </div>
 
         <div class="row g-4">
@@ -23,14 +101,14 @@
                         <a href="{% url 'order_tracking' %}" class="small text-decoration-none"><i class="bi bi-box-seam me-1"></i>ติดตามสินค้า</a>
                     </div>
                     <div class="table-responsive mt-3">
-                        <table class="table align-middle text-center mb-0 table-cardify">
-                            <thead><tr><th>#</th><th>วันที่</th><th>ยอดรวม</th><th>ชำระแบบ</th><th>สถานะ</th><th></th></tr></thead>
+                        <table class="table align-middle text-center mb-0 table-cardify table-dense">
+                            <thead><tr><th scope="col">#</th><th scope="col">วันที่</th><th scope="col">ยอดรวม</th><th scope="col">ชำระแบบ</th><th scope="col">สถานะ</th><th scope="col"></th></tr></thead>
                             <tbody data-motion="stagger">
                                 {% for o in orders %}
                                 <tr>
-                                    <td class="fw-bold" data-label="#">#{{ o.id }}</td>
+                                    <td class="fw-bold font-mono" data-label="#">#{{ o.id }}</td>
                                     <td data-label="วันที่">{{ o.created_at|date:"d/m/Y" }}</td>
-                                    <td class="fw-bold" data-label="ยอดรวม">฿ {{ o.total|floatformat:2 }}</td>
+                                    <td class="fw-bold tabular-nums" data-label="ยอดรวม">฿ {{ o.total|floatformat:2 }}</td>
                                     <td data-label="ชำระแบบ">{{ o.get_payment_method_display }}</td>
                                     <td data-label="สถานะ">
                                         {% if o.status == 'pending' %}<span class="emp-status status-leave">รอตรวจ</span>
@@ -86,14 +164,38 @@
                 </div>
 
                 <div class="card panel-card--wide mb-4">
-                    <h5 class="mb-3"><i class="bi bi-geo-alt me-2"></i>ข้อมูลจัดส่ง (เดิม)</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0"><i class="bi bi-person-lines-fill me-2"></i>ข้อมูลส่วนตัว</h5>
+                        <a href="{% url 'profile_edit' %}" class="btn btn-xs btn-outline-primary"><i class="bi bi-pencil-square me-1"></i>แก้ไข</a>
+                    </div>
+                    <div class="d-flex align-items-center gap-3 mb-3">
+                        <div class="profile-card-mini-avatar">
+                            {% if profile and profile.avatar %}
+                            <img loading="lazy" src="{{ profile.avatar.url }}" alt="{{ display_name }}" class="mini-avatar-img">
+                            {% else %}
+                            <div class="mini-avatar-placeholder"><i class="bi bi-person-fill"></i></div>
+                            {% endif %}
+                        </div>
+                        <div class="min-w-0 flex-grow-1">
+                            <p class="mb-0 fw-bold text-truncate">{{ display_name }}</p>
+                            <p class="text-muted-apple small mb-0 text-truncate"><i class="bi bi-envelope me-1"></i>{{ user.email|default:user.username }}</p>
+                        </div>
+                    </div>
                     {% if profile %}
-                    <p class="mb-1"><strong>{{ display_name }}</strong></p>
-                    <p class="text-muted-apple small mb-1">{{ profile.phone }}</p>
-                    <p class="text-muted-apple small mb-0" style="white-space:pre-line;">{{ profile.address }}</p>
-                    {% else %}
-                    <p class="text-muted-apple small mb-0">— ใช้สมุดที่อยู่ด้านบนเป็นหลัก —</p>
+                    <p class="text-muted-apple small mb-1"><i class="bi bi-telephone me-1"></i>{{ profile.phone|default:"—" }}</p>
+                    <p class="text-muted-apple small mb-1"><i class="bi bi-people me-1"></i>กลุ่มสิทธิ์: {% user_group_badges user %}</p>
+                    {% if profile.address %}
+                    <p class="text-muted-apple small mb-0 text-preline"><i class="bi bi-geo-alt me-1"></i>{{ profile.address }}</p>
                     {% endif %}
+                    {% else %}
+                    <p class="text-muted-apple small mb-1"><i class="bi bi-people me-1"></i>กลุ่มสิทธิ์: {% user_group_badges user %}</p>
+                    <p class="text-muted-apple small mb-0">— ยังไม่ได้ระบุเบอร์โทรศัพท์ —</p>
+                    {% endif %}
+                </div>
+                <div class="card panel-card--wide mb-4">
+                    <h5 class="mb-3"><i class="bi bi-shield-lock me-2"></i>ความปลอดภัยของบัญชี</h5>
+                    <p class="text-muted-apple small mb-2">จัดการรหัสผ่านเพื่อความปลอดภัยของบัญชี</p>
+                    <a href="{% url 'password_change' %}" class="link-arrow">เปลี่ยนรหัสผ่าน <i class="bi bi-arrow-right"></i></a>
                 </div>
                 {% if user.is_staff %}
                 <div class="card panel-card--wide">

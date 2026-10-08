@@ -1,26 +1,41 @@
-﻿{# ===== order_manage_rows.html: partial แถวออเดอร์ — สถานะ badge pending/wait/paid/shipped/… ===== #}
+{# ===== order_manage_rows.html: partial แถวออเดอร์ — สถานะ badge pending/wait/paid/shipped/… ===== #}
 {% load static %}
-<table class="table align-middle text-center mb-0 table-cardify">
+<table class="table align-middle mb-0 table-cardify table-dense table-sticky-head table-hover">
     <thead>
-        <tr><th>#</th><th>ลูกค้า</th><th>เบอร์</th><th>ยอดรวม</th><th>สถานะ</th><th>วันที่</th><th></th></tr>
+        <tr>
+            <th scope="col" class="text-start">#</th>
+            <th scope="col" class="text-start">ลูกค้า</th>
+            <th scope="col" class="text-center">เบอร์</th>
+            <th scope="col" class="text-end">ยอดรวม</th>
+            <th scope="col" class="text-center">สถานะ</th>
+            <th scope="col" class="text-end">วันที่</th>
+            <th scope="col" class="text-end">จัดการ</th>
+        </tr>
     </thead>
     <tbody data-motion="stagger" class="in">
         {% for o in orders %}
-        <tr>
-            <td class="fw-bold" data-label="ออเดอร์">#{{ o.id }}</td>
-            <td class="text-start" data-label="ลูกค้า">{{ o.customer_name }}</td>
-            <td data-label="เบอร์">{{ o.phone }}</td>
-            <td class="fw-bold" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>
-            <td data-label="สถานะ">
-                <span class="badge {% if o.status == 'pending' %}bg-warning{% elif o.status == 'paid' %}badge-success{% elif o.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">
+        <tr class="order-clickable-row" data-order-id="{{ o.id }}">
+            <td class="fw-bold font-mono text-start" data-label="ออเดอร์">#{{ o.id }}</td>
+            <td class="text-start fw-medium" data-label="ลูกค้า">{{ o.customer_name }}</td>
+            <td class="text-center font-mono small text-muted-apple" data-label="เบอร์">{{ o.phone }}</td>
+            <td class="fw-bold tabular-nums text-end" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>
+            <td class="text-center" data-label="สถานะ">
+                <span class="badge {% if o.status == 'pending' %}bg-warning-subtle text-warning-emphasis{% elif o.status == 'paid' %}bg-success-subtle text-success{% elif o.status == 'shipped' %}bg-info-subtle text-info-emphasis{% else %}bg-success text-white{% endif %}" id="orderBadge-{{ o.id }}">
                     {{ o.get_status_display }}
                 </span>
             </td>
-            <td data-label="วันที่">{{ o.created_at|date:"d/m/Y H:i" }}</td>
-            <td><a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-light"><i class="bi bi-eye"></i></a></td>
+            <td class="tabular-nums text-end small text-muted-apple" data-label="วันที่">{{ o.created_at|date:"d/m/Y H:i" }}</td>
+            <td class="text-end text-nowrap">
+                <button aria-label="ตรวจงานใน Slide Drawer" type="button" class="btn btn-sm btn-primary py-1 px-2 btn-open-drawer" data-order-id="{{ o.id }}" title="ตรวจงานใน Slide Drawer">
+                    <i class="bi bi-layout-sidebar-reverse me-1"></i>ตรวจงาน
+                </button>
+                <a href="{% url 'order_detail' o.id %}" class="btn btn-sm btn-light py-1 px-2 ms-1" title="เปิดหน้าเต็ม">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                </a>
+            </td>
         </tr>
         {% empty %}
-        <tr><td colspan="7" class="text-muted-apple py-4">ไม่มีออเดอร์</td></tr>
+        <tr><td colspan="7" class="text-muted-apple text-center py-4">ไม่มีออเดอร์</td></tr>
         {% endfor %}
     </tbody>
 </table>

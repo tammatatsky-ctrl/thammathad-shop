@@ -1,5 +1,5 @@
-﻿{# ===== reports.html: รายงานขาย — ตัวกรองช่วงเวลา (today/week/month/year) · summary cards · Chart.js (dark-aware, rebuild on theme toggle) · ขายดี 5 อันดับ ===== #}
 {% extends "adminbase.html" %}
+{# ===== reports.html: รายงานขาย — ตัวกรองช่วงเวลา (today/week/month/year) · summary cards · Chart.js (dark-aware, rebuild on theme toggle) · ขายดี 5 อันดับ ===== #}
 {% load static %}
 
 {% block content %}
@@ -20,23 +20,35 @@
             <a href="?period=year" class="btn btn-sm {% if period == 'year' %}btn-primary{% else %}btn-light{% endif %}">ปีนี้</a>
         </div>
 
-        <div class="row g-4 mb-4" data-motion="stagger">
-            <div class="col-md-4">
-                <div class="card panel-card text-center p-4">
-                    <p class="eyebrow mb-1">รายได้ {{ period_label }}</p>
-                    <h3 class="summary-total mb-0">฿ {{ revenue|floatformat:2 }}</h3>
+        <!-- Financial Summary Ribbon (Swiss Technical & Anti-Slop Ribbon) -->
+        <div class="summary-ribbon mb-4" data-motion="reveal">
+            <div class="summary-ribbon-item">
+                <div class="summary-ribbon-icon is-primary">
+                    <i class="bi bi-wallet2"></i>
+                </div>
+                <div>
+                    <div class="summary-ribbon-label">รายได้ {{ period_label }}</div>
+                    <div class="summary-ribbon-val tabular-nums text-primary">฿ {{ revenue|floatformat:2 }}</div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card panel-card text-center p-4">
-                    <p class="eyebrow mb-1">จำนวนออเดอร์</p>
-                    <h3 class="summary-total mb-0">{{ order_count }}</h3>
+            <div class="summary-ribbon-sep" aria-hidden="true"></div>
+            <div class="summary-ribbon-item">
+                <div class="summary-ribbon-icon is-success">
+                    <i class="bi bi-receipt"></i>
+                </div>
+                <div>
+                    <div class="summary-ribbon-label">จำนวนออเดอร์ที่สำเร็จ</div>
+                    <div class="summary-ribbon-val tabular-nums">{{ order_count }} <span class="small text-muted fw-normal">รายการ</span></div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <div class="card panel-card text-center p-4">
-                    <p class="eyebrow mb-1">เฉลี่ยต่อออเดอร์</p>
-                    <h3 class="summary-total mb-0">฿ {{ avg_order|floatformat:2 }}</h3>
+            <div class="summary-ribbon-sep" aria-hidden="true"></div>
+            <div class="summary-ribbon-item">
+                <div class="summary-ribbon-icon is-warning">
+                    <i class="bi bi-calculator"></i>
+                </div>
+                <div>
+                    <div class="summary-ribbon-label">เฉลี่ยต่อออเดอร์ (AOV)</div>
+                    <div class="summary-ribbon-val tabular-nums">฿ {{ avg_order|floatformat:2 }}</div>
                 </div>
             </div>
         </div>
@@ -79,7 +91,7 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script src="{% static 'vendor/js/chart.umd.min.js' %}"></script>
 <script>
 (function () {
     var canvas = document.getElementById('revenueChart');

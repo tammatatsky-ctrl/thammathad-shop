@@ -13,20 +13,20 @@
     <tr>
         <td data-label="รูป">
             {% if employee.avatar %}
-                <img src="{{ employee.avatar.url }}" alt="{{ employee.name }}" width="40" height="40" class="rounded-circle emp-avatar table-avatar">
+                <img loading="lazy" src="{{ employee.avatar.url }}" alt="{{ employee.name }}" width="40" height="40" class="rounded-circle emp-avatar table-avatar">
             {% else %}
                 <div class="rounded-circle d-inline-flex align-items-center justify-content-center emp-avatar table-avatar placeholder-avatar"><i class="bi bi-person"></i></div>
             {% endif %}
         </td>
-        <td class="fw-bold employee-code" data-label="รหัส">{{ employee.emp_code }}</td>
+        <td class="fw-bold employee-code font-mono" data-label="รหัส">{{ employee.emp_code }}</td>
         <td class="fw-medium text-start" data-label="ชื่อ-นามสกุล">{{ employee.name }}</td>
         <td class="text-muted-apple" data-label="เพศ">{{ employee.get_gender_display }}</td>
         <td data-label="แผนก"><span class="badge bg-info-subtle department-badge">{{ employee.department }}</span></td>
         <td class="text-muted-apple small" data-label="เบอร์โทร">{{ employee.phone|default:"—" }}</td>
         <td class="text-muted-apple small" data-label="อีเมล">{{ employee.email|default:"—" }}</td>
         <td data-label="สถานะ"><span class="emp-status status-{{ employee.status }}">{{ employee.get_status_display }}</span></td>
-        <td class="fw-bold" data-label="เงินเดือน">฿ {{ employee.salary|floatformat:2 }}</td>
-        <td class="text-muted-apple small" data-label="วันเริ่มงาน">{{ employee.hire_date|date:"d/m/Y" }}</td>
+        <td class="fw-bold tabular-nums" data-label="เงินเดือน">฿ {{ employee.salary|floatformat:2 }}</td>
+        <td class="text-muted-apple small tabular-nums" data-label="วันเริ่มงาน">{{ employee.hire_date|date:"d/m/Y" }}</td>
         {% if user.is_staff %}
             <td class="actions-cell" data-label="จัดการ">
                 <a href="{% url 'employee_update' employee.pk %}" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil me-1"></i> แก้ไข</a>

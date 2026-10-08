@@ -1,5 +1,5 @@
-﻿{# ===== product_form.html: เพิ่ม/แก้ไขสินค้า — รูป + ราคา + สต็อก · ปุ่ม AI ช่วยเขียนคำอธิบาย (แสดงเมื่อ GEMINI_API_KEY มีค่า) · alert ใช้ islandAlert (ไม่ใช่ native) ===== #}
 {% extends "adminbase.html" %}
+{# ===== product_form.html: เพิ่ม/แก้ไขสินค้า — รูป + ราคา + สต็อก · ปุ่ม AI ช่วยเขียนคำอธิบาย (แสดงเมื่อ GEMINI_API_KEY มีค่า) · alert ใช้ islandAlert (ไม่ใช่ native) ===== #}
 {% load static %}
 
 {% block content %}
@@ -41,11 +41,16 @@
                         <div class="mb-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <label class="form-label" for="prodDesc">รายละเอียด</label>
-                                {% if ai_enabled %}
-                                <button type="button" id="aiBtn" class="btn btn-sm btn-outline-primary ai-btn">
-                                    <i class="bi bi-stars me-1"></i> AI ช่วยเขียน
-                                </button>
-                                {% endif %}
+                                <div class="d-flex gap-2">
+                                    <button type="button" id="translateBtn" class="btn btn-sm btn-outline-secondary">
+                                        <i class="bi bi-translate me-1"></i> แปล EN→TH
+                                    </button>
+                                    {% if ai_enabled %}
+                                    <button type="button" id="aiBtn" class="btn btn-sm btn-outline-primary ai-btn">
+                                        <i class="bi bi-stars me-1"></i> AI ช่วยเขียน
+                                    </button>
+                                    {% endif %}
+                                </div>
                             </div>
                             <textarea name="description" id="prodDesc" rows="3" class="form-control" placeholder="รายละเอียดสินค้า" data-live="desc">{{ product.description|default:'' }}</textarea>
                             <div class="form-hint ai-hint d-none"><i class="bi bi-hourglass-split"></i> AI กำลังเขียน...</div>
@@ -73,6 +78,12 @@
                             <div class="form-hint"><i class="bi bi-info-circle"></i> ไฟล์ที่มีในระบบ: prod1.jpg, prod2.jpg, prod3.jpg — พรีวิวอัปเดตทันทีที่แก้พาธ</div>
                         </div>
 
+                        <div class="mb-3">
+                            <label class="form-label" for="prodModel3d">โมเดล 3D (ไฟล์ .glb ใน static/models/)</label>
+                            <input type="text" name="model_3d" id="prodModel3d" value="{{ product.model_3d|default:'' }}" class="form-control" placeholder="models/prod1.glb">
+                            <div class="form-hint"><i class="bi bi-box"></i> เว้นว่าง = แสดงรูป 2D ปกติ / กรอกพาธ .glb = หน้า detail หมุนดูโมเดลได้</div>
+                        </div>
+
                         <div class="form-check form-switch mb-4">
                             <input type="checkbox" name="is_active" class="form-check-input" role="switch" id="isActive" {% if product.is_active or not product %}checked{% endif %} data-live="active">
                             <label class="form-check-label" for="isActive">แสดงสินค้าบนหน้าร้าน</label>
@@ -94,7 +105,7 @@
                 <div class="emp-aside">
                     <div class="card panel-card text-center">
                         <p class="eyebrow mb-3"><i class="bi bi-eye"></i> พรีวิวหน้าร้าน</p>
-                        <img id="pvImage" src="{% static product.image|default:'images/prod1.jpg' %}" alt="" class="product-img mb-3">
+                        <img loading="lazy" id="pvImage" src="{% static product.image|default:'images/prod1.jpg' %}" alt="" class="product-img mb-3">
                         <h5 class="mb-1" id="pvName">{{ product.name|default:"ชื่อสินค้า" }}</h5>
                         <p class="catalog-tag mb-2" id="pvCategory" {% if not product.category %}style="display:none"{% endif %}>{{ product.category|default:'' }}</p>
                         <p class="text-muted-apple small mb-2" id="pvDesc">{{ product.description|default:"รายละเอียดสินค้า" }}</p>
@@ -219,6 +230,43 @@
                     aiBtn.disabled = false;
                     aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> AI ช่วยเขียน';
                     if (aiHint) aiHint.classList.add('d-none');
+                });
+        });
+    }
+
+    /* ---- ปุ่มแปลอัตโนมัติ (MyMemory — ใช้ได้โดยไม่ต้องมี API key; คู่หูของ AI ช่วยเขียน) ---- */
+    var trBtn = document.getElementById('translateBtn');
+    if (trBtn) {
+        trBtn.addEventListener('click', function () {
+            var desc = document.getElementById('prodDesc');
+            if (!desc.value.trim()) {
+                desc.classList.add('is-invalid');
+                desc.focus();
+                return;
+            }
+            trBtn.disabled = true;
+            trBtn.innerHTML = '<i class="bi bi-translate me-1"></i> กำลังแปล...';
+            /* ส่งฟอร์มเดิม (มี description + csrf) + target — เหมือนปุ่ม AI */
+            var fd = new FormData(form);
+            fd.append('target', 'th');
+            fetch("{% url 'product_translate' %}", {
+                method: 'POST',
+                headers: { 'X-Requested-With': 'fetch' },
+                body: fd
+            })
+                .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
+                .then(function (res) {
+                    if (res.ok && res.j.text) {
+                        desc.value = res.j.text;
+                        desc.dispatchEvent(new Event('input', { bubbles: true }));
+                    } else {
+                        islandAlert(res.j.error || 'แปลไม่สำเร็จ', 'แปลไม่สำเร็จ');
+                    }
+                })
+                .catch(function () { islandAlert('เชื่อมต่อบริการแปลไม่สำเร็จ'); })
+                .finally(function () {
+                    trBtn.disabled = false;
+                    trBtn.innerHTML = '<i class="bi bi-translate me-1"></i> แปล EN→TH';
                 });
         });
     }

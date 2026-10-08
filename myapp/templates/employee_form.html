@@ -1,5 +1,5 @@
-﻿{# ===== employee_form.html: เพิ่ม/แก้ไขพนักงาน — emp_code สร้างอัตโนมัติ (next_code) ถ้ายังไม่มีใน form ===== #}
 {% extends "adminbase.html" %}
+{# ===== employee_form.html: เพิ่ม/แก้ไขพนักงาน — emp_code สร้างอัตโนมัติ (next_code) ถ้ายังไม่มีใน form ===== #}
 
 {% block content %}
 <section class="page-section">
@@ -106,7 +106,7 @@
                             <label class="form-label"><i class="bi bi-image me-1"></i>{{ form.avatar.label }}</label>
                             <div class="d-flex align-items-center gap-3 mb-2">
                                 {% if employee and employee.avatar %}
-                                    <img src="{{ employee.avatar.url }}" alt="{{ employee.name }}" class="avatar-preview rounded-circle" id="avatarPreview">
+                                    <img loading="lazy" src="{{ employee.avatar.url }}" alt="{{ employee.name }}" class="avatar-preview rounded-circle" id="avatarPreview">
                                     <small class="text-muted-apple">มีรูปเดิม — เลือกไฟล์ใหม่หากต้องการเปลี่ยน</small>
                                 {% endif %}
                             </div>
@@ -133,7 +133,7 @@
                         <p class="eyebrow mb-3"><i class="bi bi-eye"></i> พรีวิวข้อมูล</p>
                         <div class="d-flex justify-content-center mb-3" id="pvAvatarWrap">
                             {% if employee and employee.avatar %}
-                                <img src="{{ employee.avatar.url }}" alt="" class="avatar-xl" id="pvAvatar">
+                                <img loading="lazy" src="{{ employee.avatar.url }}" alt="" class="avatar-xl" id="pvAvatar">
                             {% else %}
                                 <span class="avatar-initial" id="pvInitial">?</span>
                             {% endif %}

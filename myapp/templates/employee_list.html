@@ -1,5 +1,5 @@
-﻿{# ===== employee_list.html: จัดการพนักงาน — live search (AJAX fetch + ตัวกรอง + sort) · ตารางอยู่ใน employee_rows.html · เพิ่ม/ส่งออก CSV ===== #}
 {% extends 'adminbase.html' %}
+{# ===== employee_list.html: จัดการพนักงาน — live search (AJAX fetch + ตัวกรอง + sort) · ตารางอยู่ใน employee_rows.html · เพิ่ม/ส่งออก CSV ===== #}
 
 {% block content %}
 <section class="page-section">
@@ -22,8 +22,9 @@
         {# ตัวกรองส่งผ่าน GET แบบ realtime → view รับแล้ว render employee_rows.html กลับมา (สล็อต count/rows/pagination) #}
         <div class="card panel-card--tight mb-4" data-motion="reveal" data-dir="zoom">
             <form method="GET" id="empSearchForm" class="emp-search-form">
-                <div class="row g-2 align-items-center">
-                    <div class="col-lg-5">
+                <!-- Row 1: Primary Search Input & Action Buttons -->
+                <div class="row g-2 align-items-center mb-2">
+                    <div class="col-md-9 col-lg-10">
                         <div class="input-group emp-search-group">
                             <span class="input-group-text emp-search-icon">
                                 <i class="bi bi-search"></i>
@@ -32,41 +33,45 @@
                             <input type="text" name="q" value="{{ query }}" class="form-control" id="empSearchInput" placeholder="ค้นหาจาก รหัสพนักงาน / ชื่อ / แผนก ..." autocomplete="off">
                         </div>
                     </div>
-                    <div class="col-6 col-lg-2">
-                        <select name="department" class="form-select" aria-label="กรองตามแผนก">
+                    <div class="col-md-3 col-lg-2 d-flex gap-2">
+                        <button type="submit" class="btn btn-primary flex-fill emp-submit">ค้นหา</button>
+                        <button aria-label="ล้างตัวกรองทั้งหมด" type="button" id="empClear" class="btn btn-light emp-clear d-none" title="ล้างตัวกรองทั้งหมด"><i class="bi bi-x-lg"></i></button>
+                    </div>
+                </div>
+
+                <!-- Row 2: Secondary Facets & Sorting (Balanced 4x3 Grid) -->
+                <div class="row g-2 align-items-center">
+                    <div class="col-6 col-md-3">
+                        <select name="department" class="form-select form-select-sm" aria-label="กรองตามแผนก">
                             <option value="">ทุกแผนก</option>
                             {% for dep in departments %}
                                 <option value="{{ dep }}" {% if department == dep %}selected{% endif %}>{{ dep }}</option>
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="col-6 col-lg-2">
-                        <select name="gender" class="form-select" aria-label="กรองตามเพศ">
+                    <div class="col-6 col-md-3">
+                        <select name="gender" class="form-select form-select-sm" aria-label="กรองตามเพศ">
                             <option value="">ทุกเพศ</option>
                             <option value="M" {% if gender == 'M' %}selected{% endif %}>ชาย</option>
                             <option value="F" {% if gender == 'F' %}selected{% endif %}>หญิง</option>
                         </select>
                     </div>
-                    <div class="col-6 col-lg-2">
-                        <select name="status" class="form-select" aria-label="กรองตามสถานะ">
+                    <div class="col-6 col-md-3">
+                        <select name="status" class="form-select form-select-sm" aria-label="กรองตามสถานะ">
                             <option value="">ทุกสถานะ</option>
                             <option value="active" {% if status == 'active' %}selected{% endif %}>ทำงานอยู่</option>
                             <option value="leave" {% if status == 'leave' %}selected{% endif %}>ลาพัก</option>
                             <option value="resigned" {% if status == 'resigned' %}selected{% endif %}>ลาออกแล้ว</option>
                         </select>
                     </div>
-                    <div class="col-6 col-lg-2">
-                        <select name="sort" class="form-select" aria-label="เรียงลำดับ">
+                    <div class="col-6 col-md-3">
+                        <select name="sort" class="form-select form-select-sm" aria-label="เรียงลำดับ">
                             <option value="newest" {% if sort == 'newest' %}selected{% endif %}>เพิ่มล่าสุด</option>
                             <option value="name" {% if sort == 'name' %}selected{% endif %}>เรียงตามชื่อ</option>
                             <option value="salary_desc" {% if sort == 'salary_desc' %}selected{% endif %}>เงินเดือนสูง→ต่ำ</option>
                             <option value="salary_asc" {% if sort == 'salary_asc' %}selected{% endif %}>เงินเดือนต่ำ→สูง</option>
                             <option value="tenure" {% if sort == 'tenure' %}selected{% endif %}>อายุงานมากสุด</option>
                         </select>
-                    </div>
-                    <div class="col-6 col-lg-1 d-flex gap-2">
-                        <button type="submit" class="btn btn-primary flex-fill emp-submit">ค้นหา</button>
-                        <button type="button" id="empClear" class="btn btn-light emp-clear d-none" title="ล้างตัวกรองทั้งหมด"><i class="bi bi-x-lg"></i></button>
                     </div>
                 </div>
                 <div class="form-hint mt-2 emp-live-hint"><i class="bi bi-lightning-charge"></i> ผลค้นหาอัปเดตทันทีขณะพิมพ์</div>
@@ -83,12 +88,12 @@
 
         <div class="card panel-card--flush" data-motion="reveal" data-dir="zoom">
             <div class="table-responsive">
-                <table class="table align-middle text-center mb-0 table-cardify">
+                <table class="table align-middle text-center mb-0 table-cardify table-dense table-sticky-head table-hover">
                     <thead>
                         <tr>
-                            <th>รูป</th><th>รหัสพนักงาน</th><th>ชื่อ-นามสกุล</th><th>เพศ</th>
-                            <th>แผนก</th><th>เบอร์โทร</th><th>อีเมล</th><th>สถานะ</th><th>เงินเดือน</th><th>วันเริ่มงาน</th>
-                            {% if user.is_staff %}<th>จัดการ</th>{% endif %}
+                            <th scope="col">รูป</th><th scope="col">รหัสพนักงาน</th><th scope="col">ชื่อ-นามสกุล</th><th scope="col">เพศ</th>
+                            <th scope="col">แผนก</th><th scope="col">เบอร์โทร</th><th scope="col">อีเมล</th><th scope="col">สถานะ</th><th scope="col">เงินเดือน</th><th scope="col">วันเริ่มงาน</th>
+                            {% if user.is_staff %}<th scope="col">จัดการ</th>{% endif %}
                         </tr>
                     </thead>
                     <tbody data-motion="stagger" id="empTableBody" class="live-fade">
@@ -96,20 +101,20 @@
                         <tr>
                             <td data-label="รูป">
                                 {% if employee.avatar %}
-                                    <img src="{{ employee.avatar.url }}" alt="{{ employee.name }}" width="40" height="40" class="rounded-circle emp-avatar table-avatar">
+                                    <img loading="lazy" src="{{ employee.avatar.url }}" alt="{{ employee.name }}" width="40" height="40" class="rounded-circle emp-avatar table-avatar">
                                 {% else %}
                                     <div class="rounded-circle d-inline-flex align-items-center justify-content-center emp-avatar table-avatar placeholder-avatar"><i class="bi bi-person"></i></div>
                                 {% endif %}
                             </td>
-                            <td class="fw-bold employee-code" data-label="รหัส">{{ employee.emp_code }}</td>
+                            <td class="fw-bold employee-code font-mono" data-label="รหัส">{{ employee.emp_code }}</td>
                             <td class="fw-medium text-start" data-label="ชื่อ-นามสกุล">{{ employee.name }}</td>
                             <td class="text-muted-apple" data-label="เพศ">{{ employee.get_gender_display }}</td>
                             <td data-label="แผนก"><span class="badge bg-info-subtle department-badge">{{ employee.department }}</span></td>
                             <td class="text-muted-apple small" data-label="เบอร์โทร">{{ employee.phone|default:"—" }}</td>
                             <td class="text-muted-apple small" data-label="อีเมล">{{ employee.email|default:"—" }}</td>
                             <td data-label="สถานะ"><span class="emp-status status-{{ employee.status }}">{{ employee.get_status_display }}</span></td>
-                            <td class="fw-bold" data-label="เงินเดือน">฿ {{ employee.salary|floatformat:2 }}</td>
-                            <td class="text-muted-apple small" data-label="วันเริ่มงาน">{{ employee.hire_date|date:"d/m/Y" }}</td>
+                            <td class="fw-bold tabular-nums" data-label="เงินเดือน">฿ {{ employee.salary|floatformat:2 }}</td>
+                            <td class="text-muted-apple small tabular-nums" data-label="วันเริ่มงาน">{{ employee.hire_date|date:"d/m/Y" }}</td>
                             {% if user.is_staff %}
                                 <td class="actions-cell" data-label="จัดการ">
                                     <a href="{% url 'employee_update' employee.pk %}" class="btn btn-sm btn-outline-warning"><i class="bi bi-pencil me-1"></i> แก้ไข</a>

@@ -1,5 +1,5 @@
-﻿{# ===== product.html: แคตตาล็อก (ค้นหา/หมวด/เรียง) — catalog pills + AJAX ?partial=1: เจอหัวส่ง fetch 350ms ปรับ #catalogResults ===== #}
 {% extends 'basetemplate.html' %}
+{# ===== product.html: แคตตาล็อก (ค้นหา/หมวด/เรียง) — catalog pills + AJAX ?partial=1: เจอหัวส่ง fetch 350ms ปรับ #catalogResults ===== #}
 {% load static %}
 
 {% block content %}
@@ -27,7 +27,7 @@
                class="catalog-pill {% if active_cat == cat %}catalog-pill--on{% endif %}">{{ cat }}</a>
             {% endfor %}
             <div class="ms-auto d-flex align-items-center gap-2">
-                <label for="catalogSort" class="text-muted-apple small mb-0">เรียงตาม</label>
+                <label for="catalogSort" class="text-muted-apple small mb-0 catalog-sort-label">เรียงตาม</label>
                 <select id="catalogSort" class="form-select form-select-sm catalog-sort">
                     <option value="newest" {% if sort == 'newest' %}selected{% endif %}>ใหม่สุด</option>
                     <option value="name" {% if sort == 'name' %}selected{% endif %}>ชื่อ A-Z</option>
@@ -64,14 +64,36 @@
         return p.toString();
     }
 
+    /* reveal(box) — ปลุกเอฟเฟกต์ entry บนผลลัพธ์ใหม่ที่เพิ่งโหลดผ่าน AJAX (partial).
+     * 1) การ์ด/บล็อกที่อยู่ในหน้าจอตอนนี้ → ใส่ .in ทันที (เห็นผลตอบสนองทันทีที่กรอง/ค้นหา)
+     * 2) ส่วนที่อยู่ใต้จอ → ปล่อยให้ EntryEngine เป็นคน observe แล้วเล่นเมื่อเลื่อนถึง
+     *    (กัน "โผล่พร้อมกันหมดทีเดียว" — ให้สอดคล้องกับคง reveal/stagger ทั้งเว็บ)
+     * 3) re-collect การ์ด [data-card-parallax] ใหม่ให้ fx-card-pop (array เดิมยังชี้ DOM เก่า
+     *    ที่ถูกลบไปตอน AJAX — ไม่งั้น center-pop เงียบค้างจนกว่าจะ resize/login/โทเกิล motion)
+     * 4) re-observe ผ่าน EntryEngine.refresh() ให้ element ใหม่เข้า IO เพื่อเล่นบน scroll.
+     * Motion: ถ้าปิดระบบ (⚡ off) — โลจิกด้านล่างจะเห็น Motion.reduced() เป็น true
+     * แล้วไหวน์ไปลบ .in/สังเกตได้ถูกต้อง เพราะ CSS html[data-motion="off"] ครอบ reveal/stagger อยู่แล้ว. */
     function reveal(box) {
+        var page = box.querySelectorAll('[data-motion="reveal"],[data-motion="stagger"]');
+        var lim = (window.innerHeight || document.documentElement.clientHeight) - 40;
         box.querySelectorAll('[data-motion="stagger"]').forEach(function (st) {
             Array.prototype.forEach.call(st.children, function (c, i) {
                 c.style.setProperty('--d', Math.min(i * 70, 420) + 'ms');
             });
         });
         requestAnimationFrame(function () {
-            box.querySelectorAll('[data-motion="reveal"],[data-motion="stagger"]').forEach(function (el) { el.classList.add('in'); });
+            page.forEach(function (el) {
+                var r = el.getBoundingClientRect();
+                if (r.top < lim && r.bottom > 0) {
+                    el.classList.add('in');
+                } else if (window.EntryEngine && window.EntryEngine._obs) {
+                    window.EntryEngine._obs.observe(el);
+                } else {
+                    el.classList.add('in');
+                }
+            });
+            /* re-collect card-parallax ใหม่ (fx-card-pop เปิด hook ไว้แล้ว) — กัน center-pop ค้าง */
+            if (window.__cardParallaxCollect) window.__cardParallaxCollect();
         });
     }
 

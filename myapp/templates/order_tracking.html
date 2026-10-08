@@ -1,5 +1,5 @@
-﻿{# ===== order_tracking.html: ติดตามสถานะ — โหมดบัญชี (ออเดอร์ตัวเอง) / guest (ค้นหา id+เบอร์) · บันไดสถานะ 4 ขั้น · ประวัติแจ้งชำระ (+ ยอดคงเหลือ) · แจ้งจ่าย 1 คลิก + slip OCR ===== #}
 {% extends "basetemplate.html" %}
+{# ===== order_tracking.html: ติดตามสถานะ — โหมดบัญชี (ออเดอร์ตัวเอง) / guest (ค้นหา id+เบอร์) · บันไดสถานะ 4 ขั้น · ประวัติแจ้งชำระ (+ ยอดคงเหลือ) · แจ้งจ่าย 1 คลิก + slip OCR ===== #}
 {% load static %}
 
 {% block content %}
@@ -46,7 +46,7 @@
                 </div>
 
                 <details class="mb-4">
-                    <summary class="text-muted-apple small" style="cursor:pointer;">ค้นหาด้วยหมายเลขออเดอร์ + เบอร์โทร (สำหรับออเดอร์ของคนอื่น/ไม่มีบัญชี)</summary>
+                    <summary class="text-muted-apple small is-clickable">ค้นหาด้วยหมายเลขออเดอร์ + เบอร์โทร (สำหรับออเดอร์ของคนอื่น/ไม่มีบัญชี)</summary>
                     <div class="card panel-card--wide mt-3">
                         <form method="POST" class="row g-3 align-items-end">
                             {% csrf_token %}
@@ -93,16 +93,21 @@
                         <div>
                             <h3 class="mb-1 d-flex align-items-center gap-2">
                                 ออเดอร์ #{{ order.id }}
-                                <button type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ order.id }}" title="คัดลอกเลขออเดอร์"><i class="bi bi-clipboard"></i></button>
+                                <button aria-label="คัดลอกเลขออเดอร์" type="button" class="btn btn-sm btn-light copy-btn" data-copy="{{ order.id }}" title="คัดลอกเลขออเดอร์"><i class="bi bi-clipboard"></i></button>
                             </h3>
                             <p class="text-muted-apple small mb-0">คุณ {{ order.customer_name }} — {{ order.created_at|date:"d/m/Y H:i" }}</p>
                         </div>
-                        <span class="badge status-badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">{{ order.get_status_display }}</span>
+                        <div class="d-flex align-items-center gap-2">
+                            <a href="{% url 'order_invoice' order.id %}?phone={{ order.phone }}" target="_blank" rel="noopener" class="btn btn-sm btn-light lens-btn">
+                                <i class="bi bi-printer me-1"></i>พิมพ์ใบเสร็จ
+                            </a>
+                            <span class="badge status-badge {% if order.status == 'pending' %}bg-warning{% elif order.status == 'paid' %}badge-success{% elif order.status == 'shipped' %}bg-info{% else %}bg-success{% endif %}">{{ order.get_status_display }}</span>
+                        </div>
                     </div>
 
                     <div class="mb-4 d-flex flex-wrap gap-3 align-items-center">
                         {% for item in order.items.all %}
-                        <img src="{% static item.product.image %}" alt="{{ item.product.name }}" class="track-thumb" title="{{ item.product.name }}">
+                        <img loading="lazy" src="{% static item.product.image %}" alt="{{ item.product.name }}" class="track-thumb" title="{{ item.product.name }}">
                         {% endfor %}
                         <span class="badge badge-light border">{{ order.get_payment_method_display }}</span>
                     </div>
@@ -165,7 +170,7 @@
                     </div>
                     <div class="table-responsive">
                         <table class="table table-sm text-center mb-2 table-cardify">
-                            <thead><tr><th>แจ้งเมื่อ</th><th>ยอดที่แจ้ง</th><th>วันที่โอน</th><th>หมายเหตุ</th></tr></thead>
+                            <thead><tr><th scope="col">แจ้งเมื่อ</th><th scope="col">ยอดที่แจ้ง</th><th scope="col">วันที่โอน</th><th scope="col">หมายเหตุ</th></tr></thead>
                             <tbody>
                                 {% for p in payments %}
                                 <tr>

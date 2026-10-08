@@ -1,11 +1,22 @@
-﻿{# ===== dashboard.html: หน้าแรกโซนผู้ดูแล — สถิติ countup (Employee.stats / revenue) + QR ลิงก์มือถือ + คิวตรวจแจ้งชำระ (ยืนยัน → PaymentService) + ตารางล่าสุด ===== #}
 {% extends "adminbase.html" %}
+{# ===== dashboard.html: หน้าแรกโซนผู้ดูแล — จัดวางตามหลัก Dashboard Design (Few / NN-g / Carbon) ===== #}
+{# ลำดับชั้นข้อมูลแบบ inverted pyramid (F-pattern: ซ้ายบน = สำคัญสุด): #}
+{#   1) KPI 4 ตัว เรียงตามความสำคัญธุรกิจ (ออเดอร์ → สินค้า → มูลค่าสต็อก → พนักงาน) #}
+{#   2) "ต้องดำเนินการตอนนี้" (exception-first) — งานค้างที่ต้องลงมือ + มี empty state เมื่อเคลียร์แล้ว #}
+{#   3) เครื่องมือลัด (rail แนวนอน) #}
+{#   4) ปฏิบัติการ: คิวตรวจการแจ้งชำระ (#reports = ปลายทาง redirect ของ PaymentVerifyView) + สต็อกเฝ้าระวัง #}
+{#   5) รายละเอียด: ออเดอร์ล่าสุด + พนักงานล่าสุด #}
+{#   6) เครื่องมือ/ยูทิลิตี้: แผนก + QR เปิดบนมือถือ (สร้างฝั่งเซิร์ฟเวอร์ ไม่โหลดไลบรารีจาก CDN) #}
+{# หลักการที่ใช้: 5-second rule · จำกัด KPI ≤7 · grid/gutter สม่ำเสมอ (g-4) · action layer ทุกการ์ด #}
+{#              · ตัวเลขการเงิน tabular-nums · สถานะ dual-encoding (สี + ไอคอน/ข้อความ) · ข้อมูล ณ เวลาจริง #}
 {% load static %}
 
 {% block content %}
 <section class="page-section">
     <div class="container">
-        <div class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-5" data-motion="reveal">
+
+        {# ---------- Top-rail: ชื่อหน้า + บริบท (วันที่ · เวลาข้อมูล) + action หลัก ---------- #}
+        <header class="d-flex justify-content-between align-items-end flex-wrap gap-3 mb-4" data-motion="reveal">
             <div>
                 <p class="eyebrow mb-2"><i class="bi bi-speedometer2"></i> โซนผู้ดูแล</p>
                 <h1 class="page-title mb-2">แดชบอร์ด</h1>
@@ -13,32 +24,34 @@
                     <span class="greet-hi">{{ greeting }}{% if user.first_name %}, {{ user.first_name }}{% endif %}</span>
                     <span class="greet-sep"></span>
                     <span class="greet-date"><i class="bi bi-calendar3"></i>{{ thai_date }}</span>
+                    <span class="greet-sep"></span>
+                    <span class="greet-date"><i class="bi bi-clock-history"></i>ข้อมูล ณ {% now "H:i" %} น.</span>
                 </p>
             </div>
             <div class="d-flex gap-2">
-                <a href="{% url 'employee_export' %}" class="btn btn-light lens-btn"><i class="bi bi-filetype-csv me-1"></i> ส่งออก CSV</a>
                 <a href="{% url 'index' %}" class="btn btn-light lens-btn"><i class="bi bi-globe me-1"></i> ดูเว็บไซต์</a>
             </div>
-        </div>
+        </header>
 
-        {# สถิติภาพรวม — ตัวเลขจาก QuerySets (Employee.stats, Product.stock_value, Order.revenue); .count-up → fx-countup วิ่งขึ้น ===== #}
-        <div class="row g-4 mb-4" data-motion="stagger">
+        {# ---------- Zone 1: KPI หลัก (เรียงความสำคัญ ซ้าย→ขวา ตาม F-pattern) ---------- #}
+        {# ตัวเลขจาก QuerySets: Order.stats / Product.stats / inventory_value / Employee.stats — countup วิ่งขึ้น #}
+        <div class="row g-4 mb-4" data-motion="stagger" aria-label="ตัวชี้วัดหลัก">
             <div class="col-md-6 col-xl-3">
                 <div class="apple-tile stat-tile h-100" data-card-parallax>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #0071e3, #64d2ff);"><i class="bi bi-people-fill"></i></div>
-                    <div class="stat-num count-up" data-motion="countup">{{ emp_total }}</div>
-                    <div class="stat-label">พนักงานทั้งหมด</div>
+                    <div class="stat-icon stat-icon--blue"><i class="bi bi-receipt"></i></div>
+                    <div class="stat-num count-up tabular-nums" data-motion="countup">{{ order_total }}</div>
+                    <div class="stat-label">ออเดอร์ทั้งหมด</div>
                     <div class="stat-sub">
-                        <span class="emp-status status-active">{{ emp_active }} ทำงานอยู่</span>
-                        {% if emp_leave %}<span class="emp-status status-leave">{{ emp_leave }} ลาพัก</span>{% endif %}
+                        {% if order_pending %}<span class="emp-status status-leave">{{ order_pending }} รอตรวจ</span>{% endif %}
+                        <span class="text-muted-apple small tabular-nums">รายได้ ฿ {{ revenue|floatformat:0 }}</span>
                     </div>
-                    <a href="{% url 'employee_list' %}" class="stat-link">จัดการพนักงาน <i class="bi bi-arrow-right"></i></a>
+                    <a href="{% url 'order_manage' %}" class="stat-link">จัดการออเดอร์ <i class="bi bi-arrow-right"></i></a>
                 </div>
             </div>
             <div class="col-md-6 col-xl-3">
                 <div class="apple-tile stat-tile h-100" data-card-parallax>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #34c759, #30d158);"><i class="bi bi-box-seam-fill"></i></div>
-                    <div class="stat-num count-up" data-motion="countup">{{ prod_total }}</div>
+                    <div class="stat-icon stat-icon--green"><i class="bi bi-box-seam-fill"></i></div>
+                    <div class="stat-num count-up tabular-nums" data-motion="countup">{{ prod_total }}</div>
                     <div class="stat-label">สินค้าในระบบ</div>
                     <div class="stat-sub">
                         <span class="emp-status status-active">{{ prod_active }} แสดง</span>
@@ -49,8 +62,8 @@
             </div>
             <div class="col-md-6 col-xl-3">
                 <div class="apple-tile stat-tile h-100" data-card-parallax>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #ff9f0a, #ffd60a);"><i class="bi bi-cash-stack"></i></div>
-                    <div class="stat-num count-up" data-motion="countup">฿ {{ stock_value|floatformat:0 }}</div>
+                    <div class="stat-icon stat-icon--amber"><i class="bi bi-cash-stack"></i></div>
+                    <div class="stat-num count-up tabular-nums" data-motion="countup">฿ {{ stock_value|floatformat:0 }}</div>
                     <div class="stat-label">มูลค่าสต็อกรวม</div>
                     <div class="stat-sub text-muted-apple small">ราคา × จำนวนคงเหลือทุกรายการ</div>
                     <a href="{% url 'product_manage' %}?sort=stock_asc" class="stat-link">ดูใกล้หมดก่อน <i class="bi bi-arrow-right"></i></a>
@@ -58,115 +71,135 @@
             </div>
             <div class="col-md-6 col-xl-3">
                 <div class="apple-tile stat-tile h-100" data-card-parallax>
-                    <div class="stat-icon" style="background: linear-gradient(135deg, #ff375f, #ff6482);"><i class="bi bi-receipt"></i></div>
-                    <div class="stat-num count-up" data-motion="countup">{{ order_total }}</div>
-                    <div class="stat-label">ออเดอร์ทั้งหมด</div>
+                    <div class="stat-icon stat-icon--bronze"><i class="bi bi-people-fill"></i></div>
+                    <div class="stat-num count-up tabular-nums" data-motion="countup">{{ emp_total }}</div>
+                    <div class="stat-label">พนักงานทั้งหมด</div>
                     <div class="stat-sub">
-                        {% if order_pending %}<span class="emp-status status-leave">{{ order_pending }} รอตรวจ</span>{% endif %}
-                        <span class="text-muted-apple small">รายได้ ฿ {{ revenue|floatformat:0 }}</span>
+                        <span class="emp-status status-active">{{ emp_active }} ทำงานอยู่</span>
+                        {% if emp_leave %}<span class="emp-status status-leave">{{ emp_leave }} ลาพัก</span>{% endif %}
                     </div>
-                    <a href="{% url 'order_manage' %}" class="stat-link">จัดการออเดอร์ <i class="bi bi-arrow-right"></i></a>
+                    <a href="{% url 'employee_list' %}" class="stat-link">จัดการพนักงาน <i class="bi bi-arrow-right"></i></a>
                 </div>
             </div>
         </div>
 
-        {# ทางลัด + QR สแกนเปิดบนมือถือ (target = /employees/) ===== #}
-        <div class="d-flex flex-wrap align-items-stretch gap-2 mb-4" data-motion="reveal">
-            <div class="d-flex flex-wrap gap-2 align-items-center flex-grow-1">
-                <a href="{% url 'order_manage' %}" class="btn btn-primary"><i class="bi bi-receipt me-1"></i> จัดการออเดอร์</a>
-                <a href="{% url 'customer_list' %}" class="btn btn-primary"><i class="bi bi-people me-1"></i> ลูกค้า</a>
-                <a href="{% url 'reports' %}" class="btn btn-light"><i class="bi bi-graph-up me-1"></i> รายงานขาย</a>
-                <a href="{% url 'payment_list' %}" class="btn btn-light"><i class="bi bi-cash-stack me-1"></i> ประวัติการเงิน</a>
-                <a href="{% url 'employee_create' %}" class="btn btn-light lens-btn"><i class="bi bi-person-plus me-1"></i> เพิ่มพนักงาน</a>
-                <a href="{% url 'product_add' %}" class="btn btn-light lens-btn"><i class="bi bi-plus-circle me-1"></i> เพิ่มสินค้า</a>
-                <a href="{% url 'employee_export' %}" class="btn btn-light lens-btn"><i class="bi bi-download me-1"></i> ส่งออก CSV</a>
-            </div>
-            <div class="card panel-card--tight d-flex align-items-center gap-3 qr-card">
-                <div id="qrBox" aria-label="QR Code ลิงก์ระบบ"></div>
-                <div>
-                    <div class="fw-semibold small"><i class="bi bi-qr-code me-1 text-primary"></i>เปิดบนมือถือ</div>
-                    <small class="text-muted-apple d-block">สแกนเพื่อเปิดระบบพนักงานทันที</small>
-                    <small class="text-primary text-break" id="qrUrl"></small>
+        {# ---------- Zone 2: Action layer — exception-first (งานที่ต้องลงมือตอนนี้) ---------- #}
+        {% if order_pending or low_stock or order_paid %}
+        <div class="urgent-queue mb-4" data-motion="reveal" aria-label="งานที่ต้องดำเนินการ">
+            <div class="urgent-queue-header">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-warning text-dark px-3 py-1 fw-bold">
+                        <i class="bi bi-exclamation-octagon-fill me-1"></i> ต้องดำเนินการ
+                    </span>
+                    <span class="fw-semibold small">คิวงานที่ต้องจัดการตอนนี้</span>
                 </div>
-            </div>
-        </div>
-
-        <div class="row g-4 mb-4">
-            <!-- พนักงานล่าสุด -->
-            <div class="col-lg-7" data-motion="reveal">
-                <div class="card panel-card--flush h-100">
-                    <div class="d-flex justify-content-between align-items-center px-4 pt-4">
-                        <h5 class="mb-0"><i class="bi bi-clock-history me-2 text-primary"></i>พนักงานที่เพิ่มล่าสุด</h5>
-                        <a href="{% url 'employee_list' %}" class="small text-decoration-none">ดูทั้งหมด</a>
-                    </div>
-                    <div class="table-responsive mt-3">
-                        <table class="table align-middle text-center mb-0 table-cardify">
-                            <thead><tr><th>รหัส</th><th>ชื่อ-นามสกุล</th><th>แผนก</th><th>สถานะ</th></tr></thead>
-                            <tbody>
-                                {% for employee in recent_emps %}
-                                <tr>
-                                    <td class="fw-bold employee-code" data-label="รหัส">{{ employee.emp_code }}</td>
-                                    <td class="fw-medium text-start" data-label="ชื่อ-นามสกุล">{{ employee.name }}</td>
-                                    <td data-label="แผนก"><span class="badge bg-info-subtle department-badge">{{ employee.department }}</span></td>
-                                    <td data-label="สถานะ"><span class="emp-status status-{{ employee.status }}">{{ employee.get_status_display }}</span></td>
-                                </tr>
-                                {% empty %}
-                                <tr><td colspan="4" class="text-center py-4 text-muted-apple">ยังไม่มีพนักงาน</td></tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
+                <span class="font-mono small text-muted-apple">
+                    <i class="bi bi-clock-history me-1"></i>ข้อมูล ณ {% now "H:i" %} น.
+                </span>
             </div>
 
-            <!-- สินค้าใกล้หมด -->
-            <div class="col-lg-5" data-motion="reveal">
-                <div class="card panel-card--flush h-100">
-                    <div class="d-flex justify-content-between align-items-center px-4 pt-4">
-                        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>สต็อกต้องเฝ้าระวัง</h5>
-                        <a href="{% url 'product_manage' %}?sort=stock_asc" class="small text-decoration-none">ดูทั้งหมด</a>
-                    </div>
-                    <div class="px-4 py-3">
-                        {% for product in low_stock %}
-                        <div class="d-flex justify-content-between align-items-center py-2 low-stock-row">
-                            <div>
-                                <div class="fw-medium">{{ product.name }}</div>
-                                <small class="text-muted-apple">฿ {{ product.price|floatformat:2 }}</small>
-                            </div>
-                            {% if product.stock <= 0 %}
-                                <span class="emp-status status-resigned">หมด</span>
-                            {% else %}
-                                <span class="emp-status status-leave">เหลือ {{ product.stock }}</span>
-                            {% endif %}
+            <div class="d-flex flex-column gap-2">
+                {% if order_pending %}
+                <div class="urgent-item">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="text-warning fs-4"><i class="bi bi-receipt"></i></div>
+                        <div>
+                            <strong class="d-block font-mono">{{ order_pending }} ออเดอร์รอตรวจสอบการชำระเงิน</strong>
+                            <small class="text-muted-apple">ลูกค้าสั่งซื้อแล้ว รอการตรวจสอบยอดหรือสลิปเพื่อปรับสถานะเป็นชำระแล้ว</small>
                         </div>
-                        {% empty %}
-                        <p class="text-muted-apple text-center py-4 mb-0">สต็อกทุกรายการพร้อมขาย</p>
-                        {% endfor %}
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'order_manage' %}?status=pending" class="btn btn-sm btn-warning fw-semibold">
+                            <i class="bi bi-check-circle me-1"></i> ตรวจออเดอร์ ({{ order_pending }})
+                        </a>
                     </div>
                 </div>
+                {% endif %}
+
+                {% if order_paid %}
+                <div class="urgent-item">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="text-success fs-4"><i class="bi bi-box-seam"></i></div>
+                        <div>
+                            <strong class="d-block font-mono">{{ order_paid }} ออเดอร์พร้อมแพ็กจัดส่ง</strong>
+                            <small class="text-muted-apple">ยอดเงินครบถ้วนแล้ว พร้อมสำหรับการบรรจุกล่อง พิมพ์ใบเสร็จ และออกเลขพัสดุ</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'order_manage' %}?status=paid" class="btn btn-sm btn-success fw-semibold">
+                            <i class="bi bi-truck me-1"></i> จัดการส่ง ({{ order_paid }})
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
+
+                {% if low_stock %}
+                <div class="urgent-item">
+                    <div class="d-flex align-items-center gap-3">
+                        <div class="text-danger fs-4"><i class="bi bi-exclamation-triangle"></i></div>
+                        <div>
+                            <strong class="d-block font-mono">
+                                แจ้งเตือนสต็อกสินค้าวิกฤต: พบ {{ low_stock|length }} รายการ
+                                {% if prod_out %}<span class="text-danger fw-bold">(หมด {{ prod_out }} รายการ)</span>{% endif %}
+                            </strong>
+                            <small class="text-muted-apple">สินค้าเหลือต่ำกว่าเกณฑ์ความปลอดภัย ควรเร่งประสานซัพพลายเออร์เพื่อเติมสต็อก</small>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <a href="{% url 'product_manage' %}?sort=stock_asc" class="btn btn-sm btn-outline-danger fw-semibold">
+                            <i class="bi bi-box-arrow-up-right me-1"></i> เติมสต็อก
+                        </a>
+                    </div>
+                </div>
+                {% endif %}
             </div>
         </div>
+        {% else %}
+        {# empty state (state completeness): ระบบตรวจแล้วและไม่มีงานค้าง — ผู้ใช้ต้องรู้ว่าถูกตรวจแล้ว #}
+        <div class="queue-clear mb-4" data-motion="reveal">
+            <i class="bi bi-check2-circle" aria-hidden="true"></i>
+            <div>
+                <strong class="d-block">ทุกอย่างเรียบร้อย — ไม่มีงานค้างที่ต้องดำเนินการ</strong>
+                <small>ไม่มีออเดอร์รอตรวจ ไม่มีออเดอร์ค้างจัดส่ง และสต็อกทุกรายการอยู่ในเกณฑ์ปลอดภัย</small>
+            </div>
+        </div>
+        {% endif %}
 
-        <div class="row g-4">
-            {# คิวตรวจเงิน: ปุ่ม ยืนยัน → POST payment_verify → PaymentService.record_payment → จ่ายครบขึ้น paid อัตโนมัติ (no manual paid) #}
-            <div class="col-12" id="reports" data-motion="reveal">
-                <div class="card panel-card--flush">
+        {# ---------- Zone 3: เครื่องมือลัด (rail แนวนอน) ---------- #}
+        <div class="tech-toolbar mb-4" data-motion="reveal" aria-label="เมนูลัด">
+            <span class="small text-muted-apple me-2 fw-medium"><i class="bi bi-lightning-charge-fill text-warning me-1"></i>เมนูลัด:</span>
+            <a href="{% url 'order_manage' %}" class="btn btn-sm btn-primary"><i class="bi bi-receipt me-1"></i> จัดการออเดอร์</a>
+            <a href="{% url 'customer_list' %}" class="btn btn-sm btn-light lens-btn"><i class="bi bi-people me-1"></i> ลูกค้า</a>
+            <a href="{% url 'reports' %}" class="btn btn-sm btn-light lens-btn"><i class="bi bi-graph-up me-1"></i> รายงานขาย</a>
+            <a href="{% url 'payment_list' %}" class="btn btn-sm btn-light lens-btn"><i class="bi bi-cash-stack me-1"></i> ประวัติการเงิน</a>
+            <span class="text-secondary opacity-50 d-none d-md-inline">|</span>
+            <a href="{% url 'product_add' %}" class="btn btn-sm btn-light lens-btn"><i class="bi bi-plus-circle me-1"></i> +สินค้า</a>
+            <a href="{% url 'employee_create' %}" class="btn btn-sm btn-light lens-btn"><i class="bi bi-person-plus me-1"></i> +พนักงาน</a>
+            <a href="{% url 'order_export' %}" class="btn btn-sm btn-light lens-btn" title="ส่งออก CSV ออเดอร์"><i class="bi bi-filetype-csv me-1"></i> CSV ออเดอร์</a>
+            <a href="{% url 'employee_export' %}" class="btn btn-sm btn-light lens-btn" title="ส่งออก CSV พนักงาน"><i class="bi bi-download me-1"></i> CSV พนักงาน</a>
+        </div>
+
+        {# ---------- Zone 4: ปฏิบัติการ — คิวเงิน (สำคัญสุดของสายงาน) + สต็อกเฝ้าระวัง ---------- #}
+        <div class="row g-4 mb-4">
+            <div class="col-xl-8" id="reports" data-motion="reveal">
+                <div class="card panel-card--flush h-100">
                     <div class="d-flex justify-content-between align-items-center px-4 pt-4 flex-wrap gap-2">
                         <h5 class="mb-0"><i class="bi bi-cash-coin me-2 text-primary"></i>คิวตรวจการแจ้งชำระเงิน</h5>
-                        <span class="text-muted-apple small">ออเดอร์ที่ยัง pending — ตรวจสลิปแล้วกดยืนยัน</span>
+                        <a href="{% url 'payment_list' %}" class="small text-decoration-none">ดูประวัติการเงินทั้งหมด</a>
                     </div>
+                    <p class="px-4 mb-0 text-muted-apple small">ตรวจสลิป/ยอดแล้วกดยืนยัน — ระบบจะปรับสถานะเป็น “ชำระแล้ว” อัตโนมัติเมื่อครบยอด</p>
                     <div class="table-responsive mt-3">
-                        <table class="table align-middle text-center mb-0 table-cardify">
-                            <thead><tr><th>แจ้งเมื่อ</th><th>ออเดอร์</th><th>ผู้แจ้ง</th><th>ยอดที่แจ้ง</th><th>สะสม/ยอดรวม</th><th></th></tr></thead>
+                        <table class="table align-middle text-center mb-0 table-cardify table-dense table-hover table-sticky-head">
+                            <thead><tr><th scope="col">แจ้งเมื่อ</th><th scope="col">ออเดอร์</th><th scope="col">ผู้แจ้ง</th><th scope="col">ยอดที่แจ้ง</th><th scope="col">สะสม/ยอดรวม</th><th scope="col"><span class="visually-hidden">การจัดการ</span></th></tr></thead>
                             <tbody>
                                 {% for row in pending_reports %}
                                 <tr>
-                                    <td data-label="แจ้งเมื่อ">{{ row.payment.created_at|date:"d/m H:i" }}</td>
-                                    <td class="fw-bold" data-label="ออเดอร์">#{{ row.payment.order_id }}</td>
-                                    <td class="text-start" data-label="ผู้แจ้ง">{{ row.payment.name }}<br><small class="text-muted-apple">{{ row.payment.phone }}</small></td>
-                                    <td class="fw-bold" data-label="ยอด">฿ {{ row.payment.amount|floatformat:2 }}</td>
-                                    <td data-label="สะสม"><small>{{ row.reported|floatformat:2 }} / {{ row.payment.order.total|floatformat:2 }}
-                                        {% if row.remaining > 0 %}<span class="badge bg-warning ms-1">ขาด {{ row.remaining|floatformat:0 }}</span>{% endif %}</small></td>
+                                    <td data-label="แจ้งเมื่อ" class="font-mono text-muted-apple">{{ row.payment.created_at|date:"d/m H:i" }}</td>
+                                    <td class="fw-bold font-mono" data-label="ออเดอร์">#{{ row.payment.order_id }}</td>
+                                    <td class="text-start" data-label="ผู้แจ้ง">{{ row.payment.name }}<br><small class="text-muted-apple font-mono">{{ row.payment.phone }}</small></td>
+                                    <td class="fw-bold font-mono tabular-nums" data-label="ยอด">฿ {{ row.payment.amount|floatformat:2 }}</td>
+                                    <td data-label="สะสม" class="font-mono tabular-nums"><small>{{ row.reported|floatformat:2 }} / {{ row.payment.order.total|floatformat:2 }}
+                                        {% if row.remaining > 0 %}<span class="badge bg-warning text-dark ms-1">ขาด {{ row.remaining|floatformat:0 }}</span>{% endif %}</small></td>
                                     <td data-label="ยืนยัน">
                                         <form method="POST" action="{% url 'payment_verify' row.payment.id %}" class="d-inline">
                                             {% csrf_token %}
@@ -183,32 +216,74 @@
                 </div>
             </div>
 
-            <!-- ออเดอร์ล่าสุด -->
+            <div class="col-xl-4" data-motion="reveal">
+                <div class="card panel-card--flush h-100">
+                    <div class="d-flex justify-content-between align-items-center px-4 pt-4">
+                        <h5 class="mb-0"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>สต็อกต้องเฝ้าระวัง</h5>
+                        <a href="{% url 'product_manage' %}?sort=stock_asc" class="small text-decoration-none">ดูทั้งหมด</a>
+                    </div>
+                    <div class="px-4 py-3">
+                        {% for product in low_stock %}
+                        <div class="d-flex justify-content-between align-items-center py-2 low-stock-row">
+                            <div>
+                                <div class="fw-medium">
+                                    <a href="{% url 'product_edit' product.id %}" class="text-decoration-none text-reset" title="คลิกเพื่อแก้ไขสินค้า">
+                                        {{ product.name }} <i class="bi bi-pencil-square small text-muted-apple ms-1"></i>
+                                    </a>
+                                </div>
+                                <small class="text-muted-apple font-mono tabular-nums">฿ {{ product.price|floatformat:2 }}</small>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                {% if product.stock <= 0 %}
+                                    <span class="badge bg-danger-subtle text-danger font-mono"><i class="bi bi-x-octagon me-1"></i>หมด</span>
+                                {% else %}
+                                    <span class="badge bg-warning-subtle text-warning-emphasis font-mono"><i class="bi bi-exclamation-triangle me-1"></i>เหลือ {{ product.stock }}</span>
+                                {% endif %}
+                                <form method="POST" action="{% url 'stock_adjust' product.id %}" class="d-inline">
+                                    {% csrf_token %}
+                                    <input type="hidden" name="delta" value="5">
+                                    <button aria-label="เติมสต็อกทันที +5 ชิ้น" type="submit" class="btn btn-sm btn-light border py-0 px-2" title="เติมสต็อกทันที +5 ชิ้น">
+                                        <i class="bi bi-plus"></i>5
+                                    </button>
+                                </form>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <p class="text-muted-apple text-center py-4 mb-0"><i class="bi bi-check2-circle me-1"></i>สต็อกทุกรายการพร้อมขาย</p>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ---------- Zone 5: รายละเอียด — ออเดอร์ล่าสุด + พนักงานล่าสุด ---------- #}
+        <div class="row g-4 mb-4">
             <div class="col-lg-7" data-motion="reveal">
                 <div class="card panel-card--flush h-100">
                     <div class="d-flex justify-content-between align-items-center px-4 pt-4">
                         <h5 class="mb-0"><i class="bi bi-receipt me-2 text-primary"></i>ออเดอร์ล่าสุด</h5>
-                        <a href="{% url 'order_tracking' %}" class="small text-decoration-none">ติดตามออเดอร์</a>
+                        <a href="{% url 'order_manage' %}" class="small text-decoration-none">จัดการออเดอร์ทั้งหมด</a>
                     </div>
                     <div class="table-responsive mt-3">
-                        <table class="table align-middle text-center mb-0 table-cardify">
-                            <thead><tr><th>#</th><th>ผู้สั่งซื้อ</th><th>ยอดรวม</th><th>สถานะ</th></tr></thead>
+                        <table class="table align-middle text-center mb-0 table-cardify table-dense table-hover table-sticky-head">
+                            <thead><tr><th scope="col">#</th><th scope="col">ผู้สั่งซื้อ</th><th scope="col">เมื่อ</th><th scope="col">ยอดรวม</th><th scope="col">สถานะ</th></tr></thead>
                             <tbody>
                                 {% for order in recent_orders %}
                                 <tr>
-                                    <td class="fw-bold" data-label="ออเดอร์">#{{ order.id }}</td>
+                                    <td class="fw-bold font-mono" data-label="ออเดอร์">#{{ order.id }}</td>
                                     <td class="text-start" data-label="ผู้สั่งซื้อ">{{ order.customer_name }}</td>
-                                    <td class="fw-bold" data-label="ยอดรวม">฿ {{ order.total|floatformat:2 }}</td>
+                                    <td class="font-mono text-muted-apple" data-label="เมื่อ">{{ order.created_at|date:"d/m H:i" }}</td>
+                                    <td class="fw-bold font-mono tabular-nums" data-label="ยอดรวม">฿ {{ order.total|floatformat:2 }}</td>
                                     <td data-label="สถานะ">
-                                        {% if order.status == 'pending' %}<span class="emp-status status-leave">รอตรวจ</span>
-                                        {% elif order.status == 'paid' %}<span class="emp-status status-active">ชำระแล้ว</span>
-                                        {% elif order.status == 'shipped' %}<span class="emp-status status-active">จัดส่งแล้ว</span>
-                                        {% elif order.status == 'delivered' %}<span class="emp-status status-active">สำเร็จ</span>
-                                        {% else %}<span class="emp-status status-resigned">{{ order.get_status_display }}</span>{% endif %}
+                                        {% if order.status == 'pending' %}<span class="badge bg-warning-subtle text-warning-emphasis"><i class="bi bi-hourglass-split me-1"></i>รอตรวจ</span>
+                                        {% elif order.status == 'paid' %}<span class="badge bg-success-subtle text-success"><i class="bi bi-check-circle me-1"></i>ชำระแล้ว</span>
+                                        {% elif order.status == 'shipped' %}<span class="badge bg-info-subtle text-info-emphasis"><i class="bi bi-truck me-1"></i>จัดส่งแล้ว</span>
+                                        {% elif order.status == 'delivered' %}<span class="badge bg-success text-white"><i class="bi bi-check2-all me-1"></i>สำเร็จ</span>
+                                        {% else %}<span class="badge bg-secondary-subtle">{{ order.get_status_display }}</span>{% endif %}
                                     </td>
                                 </tr>
                                 {% empty %}
-                                <tr><td colspan="4" class="text-center py-4 text-muted-apple">ยังไม่มีออเดอร์</td></tr>
+                                <tr><td colspan="5" class="text-center py-4 text-muted-apple">ยังไม่มีออเดอร์</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -216,15 +291,46 @@
                 </div>
             </div>
 
-            <!-- พนักงานตามแผนก -->
             <div class="col-lg-5" data-motion="reveal">
+                <div class="card panel-card--flush h-100">
+                    <div class="d-flex justify-content-between align-items-center px-4 pt-4">
+                        <h5 class="mb-0"><i class="bi bi-person-badge me-2 text-primary"></i>พนักงานที่เพิ่มล่าสุด</h5>
+                        <a href="{% url 'employee_list' %}" class="small text-decoration-none">ดูทั้งหมด</a>
+                    </div>
+                    <div class="table-responsive mt-3">
+                        <table class="table align-middle text-center mb-0 table-cardify table-dense table-hover table-sticky-head">
+                            <thead><tr><th scope="col">รหัส</th><th scope="col">ชื่อ-นามสกุล</th><th scope="col">แผนก</th><th scope="col">สถานะ</th></tr></thead>
+                            <tbody>
+                                {% for employee in recent_emps %}
+                                <tr>
+                                    <td class="fw-bold employee-code font-mono" data-label="รหัส">{{ employee.emp_code }}</td>
+                                    <td class="fw-medium text-start" data-label="ชื่อ-นามสกุล">{{ employee.name }}</td>
+                                    <td data-label="แผนก"><span class="badge bg-info-subtle department-badge">{{ employee.department }}</span></td>
+                                    <td data-label="สถานะ"><span class="emp-status status-{{ employee.status }}"><i class="bi bi-circle-fill me-1 small" aria-hidden="true"></i>{{ employee.get_status_display }}</span></td>
+                                </tr>
+                                {% empty %}
+                                <tr><td colspan="4" class="text-center py-4 text-muted-apple">ยังไม่มีพนักงาน</td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {# ---------- Zone 6: ยูทิลิตี้ — โครงสร้างแผนก + QR เปิดระบบบนมือถือ (ฝั่งเซิร์ฟเวอร์) ---------- #}
+        <div class="row g-4">
+            <div class="col-lg-7" data-motion="reveal">
                 <div class="card panel-card h-100">
-                    <h5 class="mb-4"><i class="bi bi-bar-chart me-2 text-primary"></i>พนักงานตามแผนก</h5>
+                    <div class="d-flex justify-content-between align-items-center mb-4">
+                        <h5 class="mb-0"><i class="bi bi-bar-chart me-2 text-primary"></i>พนักงานตามแผนก</h5>
+                        <a href="{% url 'employee_list' %}" class="small text-decoration-none">ดูรายชื่อทั้งหมด</a>
+                    </div>
                     {% for dep in departments %}
                     <div class="mb-3">
                         <div class="d-flex justify-content-between small mb-1">
                             <span class="fw-medium">{{ dep.department }}</span>
-                            <span class="text-muted-apple">{{ dep.n }} คน</span>
+                            <span class="text-muted-apple font-mono tabular-nums">{{ dep.n }} คน</span>
                         </div>
                         <div class="dept-track"><div class="dept-fill" style="width: {% widthratio dep.n dept_max 100 %}%;"></div></div>
                     </div>
@@ -233,20 +339,41 @@
                     {% endfor %}
                 </div>
             </div>
+
+            <div class="col-lg-5" data-motion="reveal">
+                <div class="card panel-card--tight h-100 qr-card d-flex align-items-center gap-3">
+                    {% if mobile_qr_uri %}
+                    <img src="{{ mobile_qr_uri }}" alt="QR Code สำหรับเปิดระบบพนักงานบนมือถือ"
+                         width="92" height="92" loading="lazy" class="qr-img">
+                    {% else %}
+                    <i class="bi bi-qr-code empty-icon-lg text-muted-apple" aria-hidden="true"></i>
+                    {% endif %}
+                    <div>
+                        <div class="fw-semibold small"><i class="bi bi-phone me-1 text-primary"></i>เปิดระบบบนมือถือ</div>
+                        <small class="text-muted-apple d-block">สแกน QR เพื่อเปิดโซนพนักงานบนมือถือ — สร้างจาก URL จริงของเซิร์ฟเวอร์ (ไม่พึ่ง CDN)</small>
+                        <small class="text-primary text-break font-mono">{{ mobile_qr_display }}</small>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </section>
 
 <style>
+/* ===== Dashboard: เฉพาะหน้านี้ (ใช้ token ของธีมเท่านั้น) ===== */
 .dash-greet { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; font-size: .95rem; color: var(--muted); }
 .greet-hi { color: var(--ink); font-weight: 600; }
 .greet-sep { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .55; }
 .greet-date { display: inline-flex; align-items: center; gap: 6px; }
 .greet-date i { color: var(--apple-blue); font-size: .9rem; }
+
+/* KPI tiles — hierarchy ชัด: ตัวเลขใหญ่ > ป้ายชื่อ > บริบท > ลิงก์จัดการ
+   หมายเหตุ: ไม่ตั้ง `color` ที่ base — สีไอคอนมาจาก .stat-icon--{blue,green,amber,bronze} ใน theme.css
+   (ถ้าตั้ง color:#fff ที่นี่จะทับ variant เพราะ style block มาหลัง theme.css) */
 .stat-tile { padding: 26px; display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .stat-icon {
     width: 52px; height: 52px; border-radius: 15px; display: grid; place-items: center;
-    color: #fff; font-size: 1.45rem; margin-bottom: 8px;
+    font-size: 1.45rem; margin-bottom: 8px;
     box-shadow: 0 10px 24px rgba(0,0,0,.18);
 }
 .stat-num { font-size: 2.4rem; font-weight: 700; letter-spacing: -.04em; line-height: 1.05; }
@@ -258,36 +385,32 @@
     transition: gap .25s var(--ease-apple);
 }
 .stat-link:hover { gap: 9px; color: var(--apple-blue); }
+.stat-link:focus-visible { outline: 2px solid var(--apple-blue); outline-offset: 2px; border-radius: 6px; }
+
+/* empty state ของคิวงาน (dual-encoding: ไอคอน + ข้อความ + สี) */
+.queue-clear {
+    display: flex; align-items: center; gap: 14px; padding: 16px 20px; border-radius: 16px;
+    background: var(--semantic-success-bg); border: 1px solid var(--semantic-success-border);
+    color: var(--semantic-success-fg);
+}
+.queue-clear i { font-size: 1.5rem; }
+.queue-clear small { color: inherit; opacity: .85; }
+
+/* สต็อกเฝ้าระวัง */
 .low-stock-row + .low-stock-row { border-top: 1px solid var(--gray-border-soft); }
+
+/* แผนก */
 .dept-track { height: 9px; border-radius: 980px; background: var(--gray-bg); overflow: hidden; }
 .dept-fill {
     height: 100%; border-radius: 980px;
     background: linear-gradient(90deg, var(--apple-blue), #64d2ff);
     animation: deptGrow 1s var(--ease-apple) backwards;
+    transform-origin: 0 50%;
 }
-.dept-fill { transform-origin: 0 50%; }
 @keyframes deptGrow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* QR (เรนเดอร์ฝั่งเซิร์ฟเวอร์ — เป็น <img> ไม่ต้องมี JS) */
 .qr-card { gap: 14px; }
-.qr-card img, .qr-card canvas, .qr-card table { border-radius: 12px; background: #fff; padding: 6px; }
+.qr-img { border-radius: 12px; background: #fff; padding: 6px; }
 </style>
-{% endblock %}
-
-{% block extra_js %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-<script>
-(function () {
-    'use strict';
-
-    /* ---- QR ลิงก์ระบบ: อาจารย์สแกนเปิดบนมือถือได้ทันที ---- */
-    var box = document.getElementById('qrBox');
-    var target = window.location.origin + '/employees/';
-    var urlEl = document.getElementById('qrUrl');
-    if (urlEl) urlEl.textContent = target.replace(/^https?:\/\//, '');
-    if (box && window.QRCode) {
-        new QRCode(box, { text: target, width: 92, height: 92, colorDark: '#1d1d1f', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.M });
-    } else if (box) {
-        box.innerHTML = '<i class="bi bi-qr-code" style="font-size:3rem;color:var(--muted)"></i>';
-    }
-})();
-</script>
 {% endblock %}

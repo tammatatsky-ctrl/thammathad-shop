@@ -1,0 +1,232 @@
+{% extends 'basetemplate.html' %}
+{# ===== account_profile_edit.html: หน้าแก้ไขข้อมูลโปรไฟล์ผู้ใช้ (ชื่อ, นามสกุล, อีเมล, เบอร์โทร, ที่อยู่หลัก) ===== #}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-lg-7 col-md-9" data-motion="reveal" data-dir="zoom">
+                <div class="mb-3">
+                    <a href="{% url 'account' %}" class="link-arrow text-decoration-none small">
+                        <i class="bi bi-arrow-left me-1"></i> กลับหน้าบัญชีของฉัน
+                    </a>
+                </div>
+
+                <p class="eyebrow mb-2"><i class="bi bi-person-gear"></i> จัดการข้อมูลส่วนตัว</p>
+                <h1 class="page-title mb-4">แก้ไขโปรไฟล์</h1>
+
+                <div class="card panel-card">
+                    {% if form.non_field_errors %}
+                    <div class="alert alert-danger py-2 small mb-4">
+                        {% for err in form.non_field_errors %}
+                        <div><i class="bi bi-exclamation-triangle-fill me-1"></i> {{ err }}</div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <form method="POST" enctype="multipart/form-data">
+                        {% csrf_token %}
+
+                        <!-- โซนอัปโหลดรูปโปรไฟล์และภาพหน้าปก (รองรับ GIF ขยับได้) -->
+                        <div class="row g-4 mb-4">
+                            <!-- รูปโปรไฟล์ (Avatar) -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="id_avatar">
+                                    <i class="bi bi-person-bounding-box me-1"></i> รูปโปรไฟล์
+                                    <span class="group-badge group-badge-staff ms-1">GIF / PNG / JPG</span>
+                                </label>
+                                <div class="d-flex align-items-center gap-3 mb-2">
+                                    <div class="profile-preview-avatar">
+                                        {% if profile and profile.avatar %}
+                                        <img loading="lazy" id="avatarPreviewImg" src="{{ profile.avatar.url }}" alt="Avatar" class="avatar-preview-img">
+                                        {% else %}
+                                        <div id="avatarPlaceholder" class="avatar-preview-placeholder">
+                                            <i class="bi bi-person-fill"></i>
+                                        </div>
+                                        <img loading="lazy" id="avatarPreviewImg" src="" alt="Avatar" class="avatar-preview-img d-none">
+                                        {% endif %}
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        {{ form.avatar }}
+                                        <div class="form-text small text-muted-apple">รองรับไฟล์ GIF ขยับได้ (ไม่เกิน 5MB)</div>
+                                        {% if profile and profile.avatar %}
+                                        <div class="form-check mt-1">
+                                            <input class="form-check-input" type="checkbox" name="avatar_clear" id="id_avatar_clear">
+                                            <label class="form-check-label small text-danger" for="id_avatar_clear">
+                                                <i class="bi bi-trash3 me-1"></i> ลบรูปโปรไฟล์ปัจจุบัน
+                                            </label>
+                                        </div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                {% if form.avatar.errors %}
+                                <div class="text-danger small mt-1">{{ form.avatar.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+
+                            <!-- ภาพพื้นหลังหน้าปก (Cover Banner) -->
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="id_cover">
+                                    <i class="bi bi-image me-1"></i> ภาพพื้นหลังหน้าปก
+                                    <span class="group-badge group-badge-manager ms-1">GIF / PNG / JPG</span>
+                                </label>
+                                <div class="profile-preview-cover mb-2">
+                                    {% if profile and profile.cover %}
+                                    <img loading="lazy" id="coverPreviewImg" src="{{ profile.cover.url }}" alt="Cover" class="cover-preview-img">
+                                    {% else %}
+                                    <div id="coverPlaceholder" class="cover-preview-placeholder">
+                                        <i class="bi bi-card-image me-1"></i> พื้นหลังเริ่มต้น (Aurora Glass)
+                                    </div>
+                                    <img loading="lazy" id="coverPreviewImg" src="" alt="Cover" class="cover-preview-img d-none">
+                                    {% endif %}
+                                </div>
+                                {{ form.cover }}
+                                <div class="form-text small text-muted-apple">แนะนำภาพแนวนอน รองรับ GIF (ไม่เกิน 8MB)</div>
+                                {% if profile and profile.cover %}
+                                <div class="form-check mt-1">
+                                    <input class="form-check-input" type="checkbox" name="cover_clear" id="id_cover_clear">
+                                    <label class="form-check-label small text-danger" for="id_cover_clear">
+                                        <i class="bi bi-trash3 me-1"></i> ลบภาพหน้าปกปัจจุบัน
+                                    </label>
+                                </div>
+                                {% endif %}
+                                {% if form.cover.errors %}
+                                <div class="text-danger small mt-1">{{ form.cover.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <hr class="apple-divider my-4">
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="{{ form.first_name.id_for_label }}">
+                                    ชื่อ <span class="text-danger">*</span>
+                                </label>
+                                {{ form.first_name }}
+                                {% if form.first_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.first_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="{{ form.last_name.id_for_label }}">
+                                    นามสกุล
+                                </label>
+                                {{ form.last_name }}
+                                {% if form.last_name.errors %}
+                                <div class="text-danger small mt-1">{{ form.last_name.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="{{ form.email.id_for_label }}">
+                                    อีเมล (ใช้เข้าสู่ระบบ) <span class="text-danger">*</span>
+                                </label>
+                                {{ form.email }}
+                                <div class="form-text small text-muted-apple">หากเปลี่ยนอีเมล ให้ใช้อีเมลใหม่นี้ในการเข้าสู่ระบบครั้งถัดไป</div>
+                                {% if form.email.errors %}
+                                <div class="text-danger small mt-1">{{ form.email.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold" for="{{ form.phone.id_for_label }}">
+                                    เบอร์โทรศัพท์ <span class="text-danger">*</span>
+                                </label>
+                                {{ form.phone }}
+                                <div class="form-text small text-muted-apple">รูปแบบเบอร์มือถือไทย เช่น 0812345678</div>
+                                {% if form.phone.errors %}
+                                <div class="text-danger small mt-1">{{ form.phone.errors.0 }}</div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label fw-semibold" for="{{ form.address.id_for_label }}">
+                                ที่อยู่จัดส่งหลัก
+                            </label>
+                            {{ form.address }}
+                            <div class="form-text small text-muted-apple">ที่อยู่นี้จะใช้เป็นค่าตั้งต้นในการสั่งซื้อ (สามารถจัดการที่อยู่เพิ่มเติมได้ในสมุดที่อยู่)</div>
+                            {% if form.address.errors %}
+                            <div class="text-danger small mt-1">{{ form.address.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <hr class="apple-divider my-4">
+
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <a href="{% url 'account' %}" class="btn btn-light">
+                                <i class="bi bi-x-lg me-1"></i> ยกเลิก
+                            </a>
+                            <button type="submit" class="btn btn-primary px-4">
+                                <i class="bi bi-check2-circle me-1"></i> บันทึกข้อมูล
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="card panel-card--wide mt-4 text-center">
+                    <p class="text-muted-apple small mb-2">ต้องการเปลี่ยนรหัสผ่านเพื่อความปลอดภัยหรือไม่?</p>
+                    <div>
+                        <a href="{% url 'password_change' %}" class="btn btn-sm btn-outline-secondary">
+                            <i class="bi bi-key me-1"></i> เปลี่ยนรหัสผ่านของบัญชีนี้
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Live preview for Avatar
+    const avatarInput = document.getElementById('id_avatar');
+    const avatarImg = document.getElementById('avatarPreviewImg');
+    const avatarPlaceholder = document.getElementById('avatarPlaceholder');
+
+    if (avatarInput) {
+        avatarInput.addEventListener('change', function(e) {
+            const file = e.target.files && e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    if (avatarImg) {
+                        avatarImg.src = evt.target.result;
+                        avatarImg.classList.remove('d-none');
+                    }
+                    if (avatarPlaceholder) avatarPlaceholder.classList.add('d-none');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+
+    // Live preview for Cover
+    const coverInput = document.getElementById('id_cover');
+    const coverImg = document.getElementById('coverPreviewImg');
+    const coverPlaceholder = document.getElementById('coverPlaceholder');
+
+    if (coverInput) {
+        coverInput.addEventListener('change', function(e) {
+            const file = e.target.files && e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(evt) {
+                    if (coverImg) {
+                        coverImg.src = evt.target.result;
+                        coverImg.classList.remove('d-none');
+                    }
+                    if (coverPlaceholder) coverPlaceholder.classList.add('d-none');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

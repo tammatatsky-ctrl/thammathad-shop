@@ -1,8 +1,8 @@
-﻿{# ===== customer_list_rows.html: partial แถวลูกค้า (ลิสต์เต็ม) — ตาราง + pagination คง query ===== #}
+{# ===== customer_list_rows.html: partial แถวลูกค้า (ลิสต์เต็ม) — ตาราง + pagination คง query ===== #}
 {% load static %}
-<table class="table align-middle text-center mb-0 table-cardify">
+<table class="table align-middle text-center mb-0 table-cardify table-sticky-head">
     <thead>
-        <tr><th>ชื่อ</th><th>อีเมล</th><th>เบอร์</th><th>ออเดอร์</th><th>สมัครเมื่อ</th><th></th></tr>
+        <tr><th scope="col">ชื่อ</th><th scope="col">อีเมล</th><th scope="col">เบอร์</th><th scope="col">ออเดอร์</th><th scope="col">สมัครเมื่อ</th><th scope="col"></th></tr>
     </thead>
     <tbody data-motion="stagger" class="in">
         {% for u in customers %}

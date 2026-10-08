@@ -1,0 +1,189 @@
+{% extends "adminbase.html" %}
+{# ===== staff_users.html: ผู้จัดการ/แอดมิน — จัดการบทบาทผู้ใช้และสิทธิ์ (Django Groups & Permissions) ===== #}
+{% load shop_extras %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <!-- Header -->
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+                <p class="eyebrow mb-1"><i class="bi bi-shield-lock-fill text-primary"></i> DJANGO GROUPS & PERMISSIONS</p>
+                <h2 class="page-title mb-0" data-motion="reveal">จัดการบทบาทและสิทธิ์ผู้ใช้</h2>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-2 fw-semibold">
+                    <i class="bi bi-people-fill me-1"></i> รวม {{ paginator.count|default:"0" }} ผู้ใช้ในระบบ
+                </span>
+            </div>
+        </div>
+
+        <!-- Filter & Search Toolbar -->
+        <div class="card panel-card--wide mb-4" data-motion="reveal">
+            <form method="GET" class="row g-2 align-items-center">
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-transparent border-end-0"><i class="bi bi-search text-muted-apple"></i></span>
+                        <input type="search" name="q" class="form-control border-start-0" placeholder="ค้นหาตามชื่อ, อีเมล, หรือชื่อผู้ใช้..." value="{{ query }}">
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <select name="role" class="form-select" onchange="this.form.submit()">
+                        <option value="">-- กรองตามบทบาททั้งหมด --</option>
+                        <option value="Manager" {% if role_filter == 'Manager' %}selected{% endif %}>👑 ผู้จัดการ (Manager)</option>
+                        <option value="Staff" {% if role_filter == 'Staff' %}selected{% endif %}>🛠️ เจ้าหน้าที่ (Staff)</option>
+                        <option value="Member" {% if role_filter == 'Member' %}selected{% endif %}>👤 สมาชิกทั่วไป (Member)</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary">ค้นหา</button>
+                </div>
+            </form>
+        </div>
+
+        <!-- Users Table -->
+        <div class="card panel-card--flush mb-4 shadow-sm" data-motion="reveal">
+            <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0 text-center table-cardify table-sticky-head">
+                    <thead class="table-light">
+                        <tr>
+                            <th scope="col" class="text-start ps-4">ผู้ใช้งาน</th>
+                            <th scope="col">วันที่สมัคร</th>
+                            <th scope="col">เข้าสู่ระบบล่าสุด</th>
+                            <th scope="col">สิทธิ์เจ้าหน้าที่ (is_staff)</th>
+                            <th scope="col">บทบาทปัจจุบัน (Role / Group)</th>
+                            <th scope="col" class="pe-4 text-end">เปลี่ยนบทบาท</th>
+                        </tr>
+                    </thead>
+                    <tbody data-motion="stagger">
+                        {% for u in user_list %}
+                        <tr>
+                            <!-- User Info -->
+                            <td class="text-start ps-4" data-label="ผู้ใช้งาน">
+                                <div class="d-flex align-items-center gap-3">
+                                    <div class="rounded-circle overflow-hidden d-flex align-items-center justify-content-center bg-secondary-subtle avatar-frame">
+                                        {% if u.customer_profile and u.customer_profile.avatar %}
+                                        <img loading="lazy" src="{{ u.customer_profile.avatar.url }}" alt="{{ u.username }}" class="avatar-fill">
+                                        {% else %}
+                                        <i class="bi bi-person-fill text-muted-apple"></i>
+                                        {% endif %}
+                                    </div>
+                                    <div>
+                                        <div class="fw-bold text-dark-emphasis">
+                                            {{ u.get_full_name|default:u.username }}
+                                            {% if u == request.user %}
+                                            <span class="badge bg-info-subtle text-info rounded-pill ms-1 badge-xs">บัญชีคุณ</span>
+                                            {% endif %}
+                                        </div>
+                                        <div class="small text-muted-apple">{{ u.email|default:u.username }}</div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            <!-- Date Joined -->
+                            <td data-label="วันที่สมัคร" class="small text-muted-apple">
+                                {{ u.date_joined|date:"d/m/Y H:i" }}
+                            </td>
+
+                            <!-- Last Login -->
+                            <td data-label="เข้าสู่ระบบล่าสุด" class="small text-muted-apple">
+                                {% if u.last_login %}{{ u.last_login|date:"d/m/Y H:i" }}{% else %}<span class="text-muted">-</span>{% endif %}
+                            </td>
+
+                            <!-- Is Staff -->
+                            <td data-label="สิทธิ์เจ้าหน้าที่">
+                                {% if u.is_superuser %}
+                                <span class="badge bg-danger-subtle text-danger rounded-pill px-2 py-1"><i class="bi bi-shield-fill-check me-1"></i>Superuser</span>
+                                {% elif u.is_staff %}
+                                <span class="badge bg-success-subtle text-success rounded-pill px-2 py-1"><i class="bi bi-check-circle-fill me-1"></i>Staff (เปิด)</span>
+                                {% else %}
+                                <span class="badge bg-secondary-subtle text-secondary rounded-pill px-2 py-1">Member (ปิด)</span>
+                                {% endif %}
+                            </td>
+
+                            <!-- Role Badges -->
+                            <td data-label="บทบาท">
+                                <div class="d-flex justify-content-center gap-1 flex-wrap">
+                                    {% user_role u %}
+                                    {% user_group_badges u %}
+                                </div>
+                            </td>
+
+                            <!-- Action Role Change Dropdown -->
+                            <td class="pe-4 text-end" data-label="เปลี่ยนบทบาท">
+                                <div class="dropdown d-inline-block">
+                                    <button aria-label="ไม่สามารถเปลี่ยนบทบาทของตนเองได้" class="btn btn-sm btn-outline-primary dropdown-toggle rounded-pill px-3"
+                                            type="button" data-bs-toggle="dropdown" aria-expanded="false"
+                                            {% if u == request.user and not request.user.is_superuser %}disabled title="ไม่สามารถเปลี่ยนบทบาทของตนเองได้"{% endif %}>
+                                        <i class="bi bi-sliders me-1"></i> กำหนดสิทธิ์
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+                                        <li><h6 class="dropdown-header">เลือกบทบาทสำหรับ {{ u.username }}</h6></li>
+                                        <li>
+                                            <form method="POST" action="{% url 'staff_user_role_update' u.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="role" value="Manager">
+                                                <button type="submit" class="dropdown-item d-flex align-items-center gap-2">
+                                                    <i class="bi bi-shield-shaded text-warning"></i>
+                                                    <span>👑 ผู้จัดการ (Manager)</span>
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li>
+                                            <form method="POST" action="{% url 'staff_user_role_update' u.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="role" value="Staff">
+                                                <button type="submit" class="dropdown-item d-flex align-items-center gap-2">
+                                                    <i class="bi bi-tools text-primary"></i>
+                                                    <span>🛠️ เจ้าหน้าที่ (Staff)</span>
+                                                </button>
+                                            </form>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <form method="POST" action="{% url 'staff_user_role_update' u.id %}">
+                                                {% csrf_token %}
+                                                <input type="hidden" name="role" value="Member">
+                                                <button type="submit" class="dropdown-item d-flex align-items-center gap-2 text-secondary">
+                                                    <i class="bi bi-person text-secondary"></i>
+                                                    <span>👤 สมาชิกร้านค้า (Member)</span>
+                                                </button>
+                                            </form>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="6" class="py-5 text-center text-muted-apple">
+                                <i class="bi bi-search d-block mb-2 empty-icon-lg"></i>
+                                ไม่พบข้อมูลผู้ใช้ที่ตรงกับเงื่อนไขการค้นหา
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Pagination -->
+            {% if is_paginated %}
+            <div class="d-flex justify-content-between align-items-center p-3 border-top">
+                <span class="small text-muted-apple">
+                    หน้า {{ page_obj.number }} จาก {{ paginator.num_pages }}
+                </span>
+                <div class="btn-group btn-group-sm">
+                    {% if page_obj.has_previous %}
+                    <a href="?page={{ page_obj.previous_page_number }}{% if query %}&q={{ query }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}" class="btn btn-outline-secondary">ก่อนหน้า</a>
+                    {% endif %}
+                    {% if page_obj.has_next %}
+                    <a href="?page={{ page_obj.next_page_number }}{% if query %}&q={{ query }}{% endif %}{% if role_filter %}&role={{ role_filter }}{% endif %}" class="btn btn-outline-secondary">ถัดไป</a>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</section>
+{% endblock %}

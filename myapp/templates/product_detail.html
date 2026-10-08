@@ -1,5 +1,5 @@
-﻿{# ===== product_detail.html: รายละเอียดสินค้า — เพิ่มตะกร้า (POST กันเกินสต็อก) · ราคา USD (|usd) · zoom/lightbox · related ===== #}
 {% extends 'basetemplate.html' %}
+{# ===== product_detail.html: รายละเอียดสินค้า — เพิ่มตะกร้า (POST กันเกินสต็อก) · ราคา USD (|usd) · zoom/lightbox · related ===== #}
 {% load static %}
 {% load shop_extras %}
 
@@ -20,12 +20,32 @@
 
         <div class="row justify-content-center">
             <div class="col-lg-10">
-                <div class="row g-5 align-items-center" data-motion="reveal" data-dir="zoom">
-                    <div class="col-md-6">
+                <div class="row g-5 align-items-start" data-motion="reveal" data-dir="zoom">
+                    <div class="col-md-6 sticky-media-col">
+                        {% if product.model_3d %}
+                        <div class="apple-tile product-detail-media product-detail-media--3d">
+                            <model-viewer
+                                src="{% static product.model_3d %}"
+                                alt="โมเดล 3D ของ {{ product.name }}"
+                                camera-controls
+                                auto-rotate
+                                shadow-intensity="1"
+                                exposure="1"
+                                camera-orbit="35deg 75deg 105%"
+                                style="width:100%; height:100%; min-height:380px;"
+                                class="product-viewer">
+                                <div class="viewer-fallback" slot="progress-bar" aria-hidden="true">
+                                    <div class="viewer-progress"></div>
+                                </div>
+                            </model-viewer>
+                            <span class="viewer-hint"><i class="bi bi-box-arrow-in-up-right"></i> เลื่อน/หมุนดูโมเดล 3D ได้</span>
+                        </div>
+                        {% else %}
                         <div class="apple-tile product-detail-media zoomable-media" id="zoomBox" title="คลิกเพื่อขยายรูป">
                             <img src="{% static product.image %}" class="product-img-square product-detail-image" alt="{{ product.name }}" id="prodImg">
                             <span class="zoom-hint"><i class="bi bi-arrows-fullscreen"></i> ขยายรูป</span>
                         </div>
+                        {% endif %}
                     </div>
                     <div class="col-md-6">
                         {% if product.category %}<p class="catalog-tag mb-2">{{ product.category }}</p>{% endif %}
@@ -46,11 +66,51 @@
                             {% endif %}
                         </p>
 
-                        <form method="POST" action="{% url 'cart_add' product.id %}" class="d-flex align-items-center gap-3 mb-4">
+                        <form method="POST" action="{% url 'cart_add' product.id %}" class="d-flex align-items-center gap-3 mb-4" id="mainBuyForm">
                             {% csrf_token %}
                             <input type="number" name="quantity" value="1" min="1" max="{{ product.stock }}" class="form-control quantity-control" {% if product.stock == 0 %}disabled{% endif %}>
-                            <button type="submit" class="btn btn-primary btn-lg" {% if product.stock == 0 %}disabled{% endif %}><i class="bi bi-bag-plus me-1"></i> เพิ่มลงตะกร้า</button>
+                            <button type="submit" class="btn btn-primary btn-lg" id="mainBuyBtn" {% if product.stock == 0 %}disabled{% endif %}><i class="bi bi-bag-plus me-1"></i> เพิ่มลงตะกร้า</button>
                         </form>
+
+                        <!-- Trust & Delivery Matrix -->
+                        <div class="d-flex flex-wrap gap-3 py-3 my-3 border-top border-bottom border-secondary-subtle small text-muted-apple">
+                            <div><i class="bi bi-shield-check text-success me-1"></i>ประกันศูนย์ไทย 2 ปี</div>
+                            <div><i class="bi bi-arrow-repeat text-primary me-1"></i>เปลี่ยนตัวใหม่ใน 7 วัน</div>
+                            <div><i class="bi bi-truck text-warning me-1"></i>ส่งด่วน Kerry/Flash</div>
+                        </div>
+
+                        <!-- Technical Spec Sheet (Swiss Technical Utilitarian) -->
+                        <div class="mt-4 mb-4">
+                            <h6 class="fw-bold mb-2"><i class="bi bi-cpu me-2"></i>ข้อมูลจำเพาะทางเทคนิค (Technical Specs)</h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-dense mb-0">
+                                                                <tbody>
+                                                                    <tr>
+                                                                        <td class="text-muted-apple" style="width: 38%;">หมวดหมู่</td>
+                                                                        <td class="fw-medium">{{ product.category|default:"อุปกรณ์คอมพิวเตอร์" }}</td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-muted-apple">รหัสสินค้า</td>
+                                                                        <td class="font-mono">PRD-{{ product.id|stringformat:"04d" }}</td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-muted-apple">สถานะสต็อก</td>
+                                                                        <td>
+                                                                            {% if product.stock > 0 %}
+                                                                            <span class="badge bg-success-subtle text-success">มีสินค้าพร้อมส่ง ({{ product.stock }} ชิ้น)</span>
+                                                                            {% else %}
+                                                                            <span class="badge bg-danger-subtle text-danger">สินค้าหมดชั่วคราว</span>
+                                                                            {% endif %}
+                                                                        </td>
+                                                                    </tr>
+                                                                    <tr>
+                                                                        <td class="text-muted-apple">การรองรับระบบ</td>
+                                                                        <td class="fw-medium">รองรับ Windows / macOS / iPadOS / Android</td>
+                                                                    </tr>
+                                                                </tbody>
+                                                            </table>
+                            </div>
+                        </div>
 
                         <a href="{% url 'product' %}" class="link-arrow"><i class="bi bi-arrow-left"></i> กลับสู่ร้านค้า</a>
                     </div>
@@ -79,16 +139,88 @@
     </div>
 </section>
 
-{# Lightbox ขยายรูป — ควบคุมใน extra_js ด้านล่าง (Escape/คลิก backdrop ปิด) #}
+{# Lightbox ขยายรูป — เฉพาะโหมด 2D (ไม่มีโมเดล 3D) เพราะโมเดลหมุนเองได้; ควบคุมใน extra_js ด้านล่าง #}
+{% if not product.model_3d %}
 <div class="lightbox" id="lightbox" aria-hidden="true" role="dialog" aria-label="รูปสินค้าขยาย">
     <button type="button" class="lightbox-close" id="lightboxClose" aria-label="ปิด"><i class="bi bi-x-lg"></i></button>
     <img src="" alt="" id="lightboxImg">
 </div>
+{% endif %}
+
+<!-- Sticky Buy Action Ribbon (Action Availability on long scroll) -->
+<div class="sticky-buy-bar" id="stickyBuyBar">
+    <img loading="lazy" src="{% static product.image %}" alt="{{ product.name }}" class="sticky-buy-thumb">
+    <div class="d-none d-sm-block">
+        <div class="fw-semibold small text-truncate" style="max-width: 220px;">{{ product.name }}</div>
+        <div class="font-mono tabular-nums text-primary fw-bold small">฿ {{ product.price|floatformat:2 }}</div>
+    </div>
+    <form method="POST" action="{% url 'cart_add' product.id %}" class="d-flex align-items-center gap-2 m-0">
+        {% csrf_token %}
+        <input type="hidden" name="quantity" value="1">
+        <button type="submit" class="btn btn-sm btn-primary rounded-pill px-3 text-nowrap" {% if product.stock == 0 %}disabled{% endif %}>
+            <i class="bi bi-bag-plus me-1"></i> เพิ่มลงตะกร้า
+        </button>
+    </form>
+</div>
 {% endblock %}
 
 {% block extra_js %}
+{% if product.model_3d %}
+{# Perf B4: lazy-by-proximity — ฉีด module script ของ model-viewer (~913KB) เฉพาะเมื่อกล่อง 3D ใกล้ viewport 200px; IO บาง env ไม่ fire -> มี inViewport ตรวจ + fallback timer 800ms ประกันโหลดเสมอ. หมายเหตุ: ห้ามคอมเมนต์ #{} แบบหลายบรรทัด (Django ไม่ strip รั่วเป็น HTML) และห้ามฝังคำว่า script-tag ในคอมเมนต์ #}
 <script>
 (function () {
+    var media = document.querySelector('.product-detail-media--3d');
+    if (!media) return;
+    var loaded = false;
+    /* ซ่อนแถบโหลดตกแต่ง (.viewer-fallback) เมื่อโมเดลโหลดเสร็จ —
+       model-viewer ไม่ได้ลบ slot="progress-bar" ให้อัตโนมัติในเวอร์ชันนี้
+       (เจอจริง: โมเดล load แล้ว แต่ bar ยัง display:flex ทับอยู่นาน) */
+    function hideFallback() {
+        var fb = media.querySelector('.viewer-fallback');
+        if (fb) { fb.style.display = 'none'; }
+    }
+    function bindHide() {
+        var m = media.querySelector('model-viewer');
+        if (!m) return;
+        m.addEventListener('load', hideFallback);
+        m.addEventListener('progress', function (e) {
+            var d = e.detail || {};
+            if (d.totalProgress >= 1) hideFallback();
+        });
+    }
+    function inject() {
+        if (loaded) return;
+        loaded = true;
+        bindHide(); // ผูกก่อน/หลัง module โหลดก็ได้ — event กระจายบน host element
+        var s = document.createElement('script');
+        s.type = 'module';
+        s.src = '{% static "vendor/js/model-viewer.min.js" %}';
+        document.head.appendChild(s);
+    }
+    function inViewport() {
+        var r = media.getBoundingClientRect();
+        return r.bottom > -200 && r.top < (window.innerHeight + 200);
+    }
+    if ('IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) { inject(); io.disconnect(); }
+            });
+        }, { rootMargin: '200px 0px' });
+        io.observe(media);
+        /* กันพลาด (1): อยู่ในจอแล้วแต่ IO เงียบ → inject ทันที */
+        if (inViewport()) inject();
+    } else {
+        inject(); // fallback เบราว์เซอร์เก่า: โหลดทันที
+    }
+    /* กันพลาด (2): IO ไม่ยิงหรือยิงช้าเกิน → ประกัน inject หลัง 800ms */
+    setTimeout(inject, 800);
+})();
+</script>
+{% endif %}
+<script>
+(function () {
+    /* ---- โหมด 2D (ไม่มีโมเดล 3D): zoom + lightbox เดิม ---- */
     var img = document.getElementById('prodImg');
     var box = document.getElementById('zoomBox');
     if (img && box) {
@@ -121,8 +253,23 @@
     }
     if (box) box.addEventListener('click', openLb);
     if (lb) lb.addEventListener('click', function (e) { if (e.target === lb) closeLb(); });
-    if (lbClose) lbClose.addEventListener('click', closeLb);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeLb(); });
+
+    // Sticky Buy Bar on Scroll
+    var mainBuyBtn = document.getElementById('mainBuyBtn');
+    var stickyBuyBar = document.getElementById('stickyBuyBar');
+    if (mainBuyBtn && stickyBuyBar && window.IntersectionObserver) {
+        var observer = new IntersectionObserver(function (entries) {
+            entries.forEach(function (entry) {
+                if (!entry.isIntersecting && entry.boundingClientRect.top < 0) {
+                    stickyBuyBar.classList.add('is-visible');
+                } else {
+                    stickyBuyBar.classList.remove('is-visible');
+                }
+            });
+        }, { threshold: 0 });
+        observer.observe(mainBuyBtn);
+    }
 })();
 </script>
 {% endblock %}
