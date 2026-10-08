@@ -15,6 +15,9 @@ myapp/static/test/
 .env
 .env.*
 
+# สำรองฐานข้อมูล (manage.py backup_db) — เป็นข้อมูลจริงของร้าน ไม่ใช่โค้ด
+backups/
+
 # IDE
 .vscode/
 .idea/
