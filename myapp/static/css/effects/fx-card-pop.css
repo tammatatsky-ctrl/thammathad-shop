@@ -4,14 +4,21 @@
 .apple-tile[data-card-parallax] {
   transform: translate3d(0, var(--p-y, 0px), 0) translateY(var(--h-y, 0px))
     scale(var(--p-z, 1));
+  /* ออก (hover-off): ใช้ --ease-apple นุ่ม กลับลื่น */
   transition:
-    transform 0.35s var(--ease-apple),
-    background-color 0.35s var(--ease-apple),
-    color 0.35s var(--ease-apple),
-    border-color 0.35s var(--ease-apple);
+    transform 0.32s var(--ease-apple),
+    background-color 0.32s var(--ease-apple),
+    color 0.32s var(--ease-apple),
+    border-color 0.32s var(--ease-apple);
 }
 .apple-tile[data-card-parallax]:hover {
-  --h-y: -4px;
+  /* เข้า (hover-on): ใช้ --ease-apple-out ตั้งไวขึ้น + แรงยก — รู้สึก "ตอบสนอง" แบบ Apple สั้น ๆ */
+  transition:
+    transform 0.26s var(--ease-apple-out),
+    background-color 0.26s var(--ease-apple-out),
+    color 0.26s var(--ease-apple-out),
+    border-color 0.26s var(--ease-apple-out);
+  --h-y: -5px;
   border-color: var(--gray-border);
 }
 .apple-tile[data-card-parallax]:active {

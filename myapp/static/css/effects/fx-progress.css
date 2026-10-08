@@ -14,4 +14,26 @@
 }
 html[data-motion="off"] #scrollProgress {
   transition: none !important;
+  display: none !important;
+}
+
+/* =========================================================================
+   Modern Web Standards: Native CSS Scroll-Driven Animations (GPU Compositor)
+   ขับเคลื่อนแถบอ่านหน้าบน GPU Compositor Thread 100% โดยไม่ต้องใช้ JavaScript
+   ========================================================================= */
+@supports (animation-timeline: scroll()) {
+  @keyframes growScrollProgress {
+    from {
+      transform: scaleX(0);
+    }
+    to {
+      transform: scaleX(1);
+    }
+  }
+
+  #scrollProgress {
+    animation: growScrollProgress auto linear;
+    animation-timeline: scroll(root);
+    will-change: transform;
+  }
 }

@@ -2,23 +2,81 @@
 /*  THAMMATHAD SHOP — Motion Core + FX Loader  (สถาปัตยกรรม mod-loader)          */
 /*                                                                            */
 /*  ไฟล์นี้ = "แกนระบบ" ที่โหลดก่อนเสมอ ไม่บรรจุเอฟเฟกต์ติดมาด้วย:                */
-/*  - Motion           : ตัวเดียวที่จัดการ "เปิด/ปิดอนิเมชั่น" ด้วยปุ่ม ⚡ (จุด broadcast) */
+/*  - FXBus (EventBus)  : บัสเหตุการณ์เดียว 'cfx:*' — toggle/scroll/move/boot lifecycle */
+/*                        วิ่งผ่านกันหมด (fan-out จุดเดียว แรงบันดาลใจ Neoforge IEventBus) */
+/*  - Motion           : ตัวเดียวที่จัดการ "เปิด/ปิดอนิเมชั่น" ด้วยปุ่ม ⚡ (+ subscribe ผ่าน FXBus) */
 /*  - FX loader        : Registry ให้ mod register() — โมเดล "loader + mods"      */
-/*  - ScrollEngine     : 1 scroll listener + rAF → แจก scroll state ให้ทุก subscriber */
+/*  - ScrollEngine     : 1 scroll listener + rAF → แจก scroll state (ผ่าน FXBus)  */
 /*  - EntryEngine      : 1 IntersectionObserver → จัดการ reveal/stagger/countup   */
-/*  - InteractionEngine: 1 mousemove + rAF → แจกพิกัดเมาส์                        */
+/*  - InteractionEngine: 1 mousemove + rAF → แจกพิกัดเมาส์ (ผ่าน FXBus)            */
 /*  เอฟเฟกต์อยู่ที่ js/effects/fx-*.js — register ผ่าน FX.register({id, boot(ctx)}) */
 /*  แล้ว FX.boot() (ท้าย basetemplate) เรียก boot ทุก mod แยก try ป้องกันตัวพัง    */
 /*  สำคัญ: ห้ามผูก OS prefers-reduced-motion — มีปุ่ม ⚡ เท่านั้นคุมสถานะ            */
 /* ============================================================================ */
+
+/* ==================== 0. EVENT BUS (cfx) ==================== */
+/*  FXBus — บัสเหตุการณ์เดียวของระบบ (แรงบันดาลใจ Neoforge IEventBus แต่ตัดให้พอดี):
+ *  - subscribe(name, fn[, priority]): เก็บแบบเรียง priority (HIGHEST→LOWEST) แบบ stable
+ *    (ค่าเท่ากัน = ลำดับที่ลงข้อแรก) → คืน unsubscribe() สำหรับถอดทีหลัง
+ *  - off(name, fn): ถอดโดย identity (fn ตัวเดิม) — เวอร์ชันที่ไม่มี unsubscribe handle
+ *  - emit(name, ...args): เรียกทุก handler + แยก try ต่อตัว (ตัวพังไม่ฉุดตัวอื่น)
+ *  - งด TriState/cancellable/result ตั้งใจ: ระบบเราไม่มีผู้ฟังต้อง "สั่งยกเลิก/โหวต" เหตุการณ์
+ *  เหตุการณ์ทั้งหมดใช้ namespace 'cfx:' (เดียวกับ prefix effect) กันชนกับ DOM event ตัวจริง
+ *  — ส่วนที่ core ใช้: 'cfx:toggle' | 'cfx:scroll' | 'cfx:move' | 'cfx:boot:start/mod/done'
+ */
+var FXBus = {
+    /** ค่าลำดับความสำคัญ (เลียนแบบ Neoforge EventPriority — ตัวเลข มากสุดฟังก่อน). */
+    PRIORITY: { HIGHEST: 100, HIGH: 50, NORMAL: 0, LOW: -50, LOWEST: -100 },
+    /** @type {Object<string, Array<{fn:Function, p:number}>>} เก็บต่อ event เรียง priority อยู่แล้ว. */
+    _handlers: {},
+    /** ลงทะเบียนฟังเหตุการณ์ — เก็บแบบเรียง priority (ไม่ sort ตอน emit = ปลอดภัยกับ
+     *  'cfx:scroll' ที่ยิงทุก rAF).
+     *  @param {string} name ชื่อเหตุการณ์ 'cfx:...'
+     *  @param {Function} fn รับ (...args) ตามที่ emit ส่งมา
+     *  @param {number} [priority] FXBus.PRIORITY (default NORMAL=0)
+     *  @returns {Function} unsubscribe() — ถอด handler นี้ทิ้ง
+     */
+    subscribe: function (name, fn, priority) {
+        var p = typeof priority === "number" ? priority : 0;
+        var list = this._handlers[name] || (this._handlers[name] = []);
+        var idx = 0;
+        while (idx < list.length && list[idx].p >= p) idx++;
+        list.splice(idx, 0, { fn: fn, p: p });
+        var self = this;
+        return function () {
+            self.off(name, fn);
+        };
+    },
+    /** ถอด handler โดย identity (fn ตัวเดิม) — ใช้เมื่อเรียก subscribe โดยไม่ถือ unsubscribe. */
+    off: function (name, fn) {
+        var list = this._handlers[name];
+        if (!list) return;
+        for (var i = 0; i < list.length; i++) {
+            if (list[i].fn === fn) {
+                list.splice(i, 1);
+                return;
+            }
+        }
+    },
+    /** เรียก handler ทั้งหมดของเหตุการณ์ — แยก try ต่อตัว: อันหนึ่ง throw ไม่ฉุดตัวที่เหลือ. */
+    emit: function (name, a, b) {
+        var list = this._handlers[name];
+        if (!list) return;
+        for (var i = 0; i < list.length; i++) {
+            try {
+                list[i].fn(a, b);
+            } catch (e) { }
+        }
+    },
+};
 
 /* ==================== 1. MOTION CONFIG ==================== */
 /**
  * Motion — จุดเดียวที่รู้สถานะเปิด/ปิดอนิเมชั่นของทั้งเว็บ (ปุ่ม ⚡ #motionToggle).
  *
  * - enabled เก็บใน localStorage('thammathad-motion') + ฉายลง html[data-motion="on|off"]
- * - mod/engine ลงทะเบียน listener ผ่าน Motion.on(fn) → โทเกิลจะเรียกทุกตัว
- *   (จุด broadcast เดียว; fx-parallax/fx-card-pop ใช้ผ่าน ctx.onToggle)
+ * - mod/engine ลงทะเบียน listener ผ่าน Motion.on(fn) (เบื้องหลัง = FXBus 'cfx:toggle')
+ *   → โทเกิลจะเรียกทุกตัว เฉพาะตอน "เปิดกลับ" (ตอนปิดไม่ broadcast — ดู toggle)
  * - HARD RULE: ห้ามผูก `prefers-reduced-motion` ของ OS (AGENTS.md recipe #3)
  */
 var Motion = {
@@ -29,13 +87,14 @@ var Motion = {
     },
     duration: { fast: 200, normal: 350, slow: 600, entrance: 900 },
     enabled: true,
-    /** @type {Function[]} listeners — เรียกหมดทุกครั้งที่ toggle (รับ (enabled)) */
-    _listeners: [],
-    /** ลงทะเบียน listener ตอบสนองปุ่ม ⚡ — ถูกเรียกด้วย (enabled: boolean) เมื่อ toggle.
+    /** ลงทะเบียน listener ตอบสนองปุ่ม ⚡ — ถูกเรียกด้วย (enabled: boolean) ตอนเปิดกลับ.
+     *  เบื้องหลังลง FXBus 'cfx:toggle' (fan-out จุดเดียวของระบบ).
      *  @param {Function} fn callback
+     *  @returns {Function} unsubscribe() — ถอดจาก bus ได้
      */
     on: function (fn) {
-        if (typeof fn === "function") this._listeners.push(fn);
+        if (typeof fn !== "function") return;
+        return FXBus.subscribe("cfx:toggle", fn);
     },
     /** โหลดสถานะจาก localStorage + ฉายลง html[data-motion] (เรียกครั้งเดียวตอนเริ่ม).
      *  default = ON เสมอ — ผู้ใช้ที่ไม่เคยกดปุ่ม/ค่าเสียหายจะได้ animation เต็ม.
@@ -105,37 +164,15 @@ var Motion = {
                     } else if (EntryEngine._obs) EntryEngine._obs.observe(el);
                 });
             });
-            for (var i = 0; i < this._listeners.length; i++) {
-                try {
-                    this._listeners[i](this.enabled);
-                } catch (e) { }
-            }
+            /* broadcast ผ่าน FXBus — เรียก listener เฉพาะตอนเปิดกลับเท่านั้น (ตอนปิดเงียบ
+             * เหมือน ระบบเดิม; mod ฟังแล้วเช็ค enabled เอง ถ้าอยาก rerun ตอนเปิด) */
+            FXBus.emit("cfx:toggle", this.enabled);
         }
-        var stack = document.getElementById("islandStack");
-        if (stack) {
-            var toast = document.createElement("div");
-            toast.className = "island-toast";
-            toast.setAttribute("data-level", "success");
-            toast.setAttribute("role", "status");
-            toast.innerHTML =
-                '<span class="island-icon"><i class="bi bi-' +
-                (this.enabled ? "play-circle-fill" : "pause-circle-fill") +
-                '"></i></span>' +
-                '<span class="island-text">' +
-                (this.enabled ? "เปิดอนิเมชั่นแล้ว" : "ปิดอนิเมชั่นแล้ว") +
-                "</span>";
-            stack.appendChild(toast);
-            setTimeout(function () {
-                toast.classList.add("show");
-            }, 10);
-            setTimeout(function () {
-                toast.classList.remove("show");
-                toast.classList.add("hide");
-                setTimeout(function () {
-                    if (toast.parentNode) toast.parentNode.removeChild(toast);
-                }, 550);
-            }, 3000);
-        }
+        FX.toast(
+            this.enabled ? "เปิดอนิเมชั่นแล้ว" : "ปิดอนิเมชั่นแล้ว",
+            "success",
+            this.enabled ? "play-circle-fill" : "pause-circle-fill",
+        );
     },
     /** ตัวเดียวที่ใช้ตรวจ "ปิดอนิเมชั่น" ทั้งระบบ (แทน matchMedia ของ OS).
      *  @returns {boolean} true = ปิดอยู่ (เอฟเฟกต์ข้าม animation ได้)
@@ -153,7 +190,8 @@ Motion.init();
 /**
  * FX — Registry/Dispatcher ของเอฟเฟกต์ (โมเดล "loader + mods")
  * mod ลงทะเบียน = FX.register({id, boot(ctx)}) → เมื่อโหลดครบ FX.boot() เรียก boot
- * ของทุก mod พร้อม ctx ที่แจกเครื่องมือ core มาให้ (Motion/scroll/move/onToggle)
+ * ของทุก mod พร้อม ctx ที่แจกเครื่องมือ core มาให้ (Motion/scroll/move/onToggle/on)
+ * on(name, fn) = ฟัง event FXBus ตรง ๆ เช่น 'cfx:boot:mod' (subscribe "mod bus" ได้โดยไม่แตะ core)
  * อีกช่อง = actor registry: FX.actor('countup', fn) → เรียกผ่าน FX.callActor(type, el)
  */
 var FX = {
@@ -167,17 +205,25 @@ var FX = {
         this._mods[mod.id] = mod;
         this._order.push(mod.id);
     },
-    /** เริ่ม boot ทุก mod ตามลำดับ register — แยก try/catch: ตัวพังไม่ฉุดตัวอื่น. */
+    /** เริ่ม boot ทุก mod ตามลำดับ register — แยก try/catch: ตัวพังไม่ฉุดตัวอื่น.
+     *  emit lifecycle ผ่าน FXBus ('cfx:boot:start' / 'cfx:boot:mod' / 'cfx:boot:done')
+     *  ให้ "mod อื่น" ดักว่า mod ไหน boot เสร็จแล้วโดยไม่ต้องแตะ core (เทียบ mod bus Neoforge).
+     */
     boot: function () {
+        FXBus.emit("cfx:boot:start");
         for (var i = 0; i < this._order.length; i++) {
-            var mod = this._mods[this._order[i]];
+            var id = this._order[i];
+            var mod = this._mods[id];
+            var ok = false;
             try {
                 if (mod.boot) mod.boot(this.ctx());
+                ok = true;
             } catch (e) {
-                if (window.console && console.error)
-                    console.error("[fx] " + this._order[i] + " boot failed:", e);
+                this._report("fx-mod", id, e);
             }
+            FXBus.emit("cfx:boot:mod", { id: id, ok: ok });
         }
+        FXBus.emit("cfx:boot:done");
     },
     /** เตรียม "ชุดเครื่องมือ" ให้ mod (ctx) — สร้างใหม่ทุก boot กัน state ตัวตรวจข้าม boot. */
     ctx: function () {
@@ -196,7 +242,10 @@ var FX = {
                 InteractionEngine.offMove(fn);
             },
             onToggle: function (fn) {
-                Motion.on(fn);
+                return Motion.on(fn);
+            },
+            on: function (name, fn, priority) {
+                return FXBus.subscribe(name, fn, priority);
             },
         };
     },
@@ -216,7 +265,145 @@ var FX = {
             } catch (e) { }
         }
     },
+
+    /** แสดง toast กล่องแก้วใน islandStack — ตัวเดียวของระบบ (Motion.toggle ก็เรียกตัวนี้).
+     *  @param {string} msg ข้อความ
+     *  @param {string} [level] success|danger|warning (default success)
+     *  @param {string} [icon] ชื่อ bootstrap icon เช่น 'play-circle-fill'
+     *  @param {number} [dur] ระยะเวลาแสดง ms (default 3000)
+     */
+    toast: function (msg, level, icon, dur) {
+        var stack = document.getElementById("islandStack");
+        if (!stack) return;
+        var toast = document.createElement("div");
+        toast.className = "island-toast";
+        toast.setAttribute("data-level", level || "success");
+        toast.setAttribute("role", "status");
+        toast.innerHTML =
+            '<span class="island-icon"><i class="bi bi-' +
+            (icon || "check-circle-fill") +
+            '"></i></span>' +
+            '<span class="island-text">' + msg + "</span>";
+        stack.appendChild(toast);
+        setTimeout(function () {
+            toast.classList.add("show");
+        }, 10);
+        setTimeout(function () {
+            toast.classList.remove("show");
+            toast.classList.add("hide");
+            setTimeout(function () {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            }, 550);
+        }, dur || 3000);
+    },
+
+    /** ฝัง "watch attribute" ที่ปลอดภัยจาก infinite loop (AGENTS recipe #9) —
+     *  ใช้แทนการเขียน MutationObserver ที่ handles เขียน attribute เดียวกับที่ตัวเองฟัง.
+     *
+     *  ทำไม safety: MutationObserver callback เป็น async microtask (รันทีหลัง synchronous เสมอ)
+     *  → guard แบบ boolean (`suppress=true; setAttribute(...); suppress=false`) ใช้คุมไม่ได้
+     *  เพราะตอน callback ทำงาน flag ถูก reset แล้ว → เขียนซ้ำ → คิวไม่อั้น = หน้าแพ. วิธีที่ถูก
+     *  คือ**เทียบค่า**: จด `lastWritten` ที่ตัวเองเขียนล่าสุด แล้ว callback ข้ามถ้าค่าเห็น == ค่านั้น
+     *  (echo ของตัวเองอ่านได้ทีหลัง จึงปล่อยให้ "คนอื่น" (เช่น fx-drag) เขียนแล้วค่อย onChange).
+     *
+     *  @param {HTMLElement} node - ตัวที่อยากฟัง attribute
+     *  @param {string} attr - ชื่อ attribute ที่ฟัง (เช่น data-drag-idx)
+     *  @param {Function} onChange - เรียกเมื่อ คนอื่น เปลี่ยนค่าจริง (ไม่ใช่ echo ของเรา);
+     *                               รับ (newVal: string|null, api: {set}) — อยากตอบกลับเขียนผ่าน api.set()
+     *  @returns {{set: Function, disconnect: Function}} set(v)=เขียน attr + จดค่า (กัน loop),
+     *           disconnect()=เลิกฟัง
+     */
+    watchAttr: function (node, attr, onChange) {
+        var lastWritten = null;
+        function read() {
+            return node && node.getAttribute
+                ? node.getAttribute(attr)
+                : null;
+        }
+        function set(v) {
+            var sv = String(v);
+            if (node && node.setAttribute) node.setAttribute(attr, sv);
+            lastWritten = sv;
+        }
+        var obs = null;
+        if (window.MutationObserver && node) {
+            obs = new MutationObserver(function () {
+                var v = read();
+                if (v === lastWritten) return; /* echo ของ set() ตัวเอง → ข้าม */
+                if (typeof onChange === "function") {
+                    try {
+                        onChange(v, {
+                            set: set,
+                            get: read,
+                        });
+                    } catch (e) { }
+                }
+            });
+            obs.observe(node, { attributes: true, attributeFilter: [attr] });
+        }
+        return {
+            set: set,
+            disconnect: function () {
+                if (obs) obs.disconnect();
+            },
+        };
+    },
+
+    /** รายงาน error เข้าศูนย์กลาง + ทางออกตรวจ (debug-only toast / console)
+     *  — ตัวนี้ "เห็น error", ไม่ได้ "กันค้าง": main-thread freeze แบบ recipe #9 ไม่มีโค้ดได้รัน
+     *  จะไปเร่งบอกไม่ได้ (watchAttr/การ์ดค่าเป็นตัวกันที่ต้นทาง).
+     *  @param {string} tag กลุ่ม (fx-mod / window / promise)
+     *  @param {string} label ป้ายเล่า เช่น mod id หรือไฟล์
+     *  @param {*} e error object / ข้อความ
+     */
+    _report: function (tag, label, e) {
+        var msg = (e && e.message) ? e.message : String(e);
+        if (window.console && console.error) {
+            console.groupCollapsed("[fx] " + tag + (label ? " :: " + label : "") + " failed");
+            console.error(e);
+            try { console.trace(); } catch (err) { }
+            console.groupEnd();
+        }
+        if (window.__DEBUG__) {
+            var stack = document.getElementById("islandStack");
+            if (stack) {
+                var t = typeof this.toast === "function" ? this.toast : null;
+                var short = msg.length > 90 ? msg.slice(0, 90) + "…" : msg;
+                if (t) {
+                    this.toast(
+                        (label ? label + ": " : "") + short,
+                        "danger",
+                        "exclamation-triangle-fill",
+                        5000,
+                    );
+                }
+            }
+        }
+    },
 };
+
+/* ---- Runtime error watch (debug only) — เก็บทุก uncaught error + unhandled promise
+       แล้วส่งเข้า FX._report → toast/console พร้อมแหล่งที่มา (ห้ามลบ: ใช้เวลาอาจารย์
+       เปิดหน้าแล้วเจอ error รู้ทันทีว่ามาจาก mod/script ไหน) ---- */
+(function () {
+    if (window.__DEBUG__) {
+        window.addEventListener("error", function (e) {
+            try {
+                FX._report(
+                    "window",
+                    (e && e.filename ? e.filename.split("/").pop() : "runtime") +
+                        (e && e.lineno ? ":" + e.lineno : ""),
+                    e && e.error ? e.error : (e ? e.message : "unknown"),
+                );
+            } catch (ignore) { }
+        });
+        window.addEventListener("unhandledrejection", function (e) {
+            try {
+                FX._report("promise", "unhandledrejection", (e && e.reason) || "Promise rejected");
+            } catch (ignore) { }
+        });
+    }
+})();
 
 /* ==================== 2. SCROLL ENGINE ==================== */
 /**
@@ -228,20 +415,24 @@ var ScrollEngine = {
     prevY: 0,
     direction: "down",
     velocity: 0,
-    _subs: [],
     _ticking: false,
-    /** ลงทะเบียน subscriber — ถูกเรียกทุกเฟรมที่ scroll ด้วย object สถานะ (.y/.direction/.velocity). */
-    subscribe: function (fn) {
-        this._subs.push(fn);
+    /** ลงทะเบียน subscriber ผ่าน FXBus ('cfx:scroll') — ถูกเรียกทุกเฟรมที่ scroll ด้วย
+     *  object สถานะ (.y/.direction/.velocity). รองรับ priority (def NORMAL);
+     *  @param {Function} fn - รับ ScrollEngine ตัวมันเอง (สถานะใน props)
+     *  @param {number} [priority] FXBus.PRIORITY
+     *  @returns {Function} unsubscribe()
+     */
+    subscribe: function (fn, priority) {
+        return FXBus.subscribe("cfx:scroll", fn, priority);
     },
-    /** (internal) เรียก subscriber ทั้งหมดในเฟรม — เก็บค่าใหม่ก่อน broadcast. */
+    /** (internal) อัปเดตสถานะ แล้ว broadcast ผ่าน FXBus — ยัง 1 ครั้งต่อ rAF เท่าเดิม. */
     _flush: function () {
         this._ticking = false;
         var y = window.scrollY;
         this.direction = y > this.prevY ? "down" : "up";
         this.velocity = Math.abs(y - this.prevY);
         this.y = y;
-        for (var i = 0; i < this._subs.length; i++) this._subs[i](this);
+        FXBus.emit("cfx:scroll", this);
     },
     schedule: function () {
         if (!this._ticking) {
@@ -345,19 +536,19 @@ var InteractionEngine = {
     mouseX: 0,
     mouseY: 0,
     _ticking: false,
-    _moveHandlers: [],
-    /** ลงทะเบียน handler รับ (mouseX, mouseY) — ต้อง offMove เองเมื่อเลิกใช้.
+    /** ลงทะเบียน handler รับ (mouseX, mouseY) ผ่าน FXBus ('cfx:move') — ต้อง offMove เอง
+     *  เมื่อเลิกใช้ (pattern fx-liquid/fx-halo). คืน fn เดิม เพื่อให้ offMove(fn) ถอดได้
+     *  โดย identity (HARD: อย่าเปลี่ยน return เป็นอย่างอื่น — ที่เก่ากลับ fn เดิม).
      *  @param {Function} fn - รับพิกัดเมาส์ 2 args
-     *  @returns {Function} ตัว fn เดิม (เผื่ออยาก offMove ภายหลัง)
+     *  @returns {Function} ตัว fn เดิม
      */
     onMove: function (fn) {
-        this._moveHandlers.push(fn);
+        FXBus.subscribe("cfx:move", fn, 0);
         return fn;
     },
-    /** เลิกส่งค่าให้ handler นี้ (ถอดออกจากรายการ). */
+    /** เลิกส่งค่าให้ handler นี้ (ถอดจาก bus 'cfx:move' โดย identity). */
     offMove: function (fn) {
-        var i = this._moveHandlers.indexOf(fn);
-        if (i >= 0) this._moveHandlers.splice(i, 1);
+        FXBus.off("cfx:move", fn);
     },
     /** ผูก mousemove ระดับ document หนึ่งครั้ง (passive) → กัน handler ท่วม. */
     init: function () {
@@ -379,9 +570,7 @@ var InteractionEngine = {
     },
     _flush: function () {
         this._ticking = false;
-        for (var i = 0; i < this._moveHandlers.length; i++) {
-            this._moveHandlers[i](this.mouseX, this.mouseY);
-        }
+        FXBus.emit("cfx:move", this.mouseX, this.mouseY);
     },
 };
 InteractionEngine.init();
@@ -456,6 +645,98 @@ try {
         "use strict";
         requestAnimationFrame(function () {
             document.body.classList.add("loaded");
+        });
+
+        /* ---- Tahoe Liquid Glass: Directional Specular & Bevel Light Physics ---- */
+        var tahoeItems = [];
+        var tahoeDirty = true;
+        function updateTahoeRects() {
+            var els = document.querySelectorAll(
+                ".btn-tahoe, .btn-liquid-glass, .lens-btn"
+            );
+            tahoeItems.length = 0;
+            var sy = window.scrollY || 0;
+            for (var k = 0; k < els.length; k++) {
+                var el = els[k];
+                var r = el.getBoundingClientRect();
+                tahoeItems.push({
+                    el: el,
+                    docCx: r.left + r.width / 2,
+                    docCy: r.top + sy + r.height / 2,
+                    docTop: r.top + sy,
+                    docBottom: r.bottom + sy,
+                    cx: r.left + r.width / 2,
+                    cy: r.top + r.height / 2,
+                    top: r.top,
+                    bottom: r.bottom,
+                    cos: "",
+                    sin: "",
+                    int: ""
+                });
+            }
+            tahoeDirty = false;
+        }
+        function queryTahoeButtons() {
+            tahoeDirty = true;
+        }
+        window.addEventListener("resize", queryTahoeButtons, { passive: true });
+        ScrollEngine.subscribe(function (s) {
+            if (tahoeDirty) {
+                updateTahoeRects();
+                return;
+            }
+            var sy = s.y;
+            for (var k = 0; k < tahoeItems.length; k++) {
+                var item = tahoeItems[k];
+                item.cy = item.docCy - sy;
+                item.top = item.docTop - sy;
+                item.bottom = item.docBottom - sy;
+            }
+        });
+
+        InteractionEngine.onMove(function (mx, my) {
+            if (tahoeDirty) updateTahoeRects();
+            if (tahoeItems.length === 0) return;
+            var vh = window.innerHeight;
+            for (var i = 0; i < tahoeItems.length; i++) {
+                var item = tahoeItems[i];
+                if (item.bottom < -50 || item.top > vh + 50) continue;
+                var dx = mx - item.cx;
+                var dy = my - item.cy;
+                var dist = Math.sqrt(dx * dx + dy * dy);
+                var MAX_DIST = 380;
+                if (dist < MAX_DIST) {
+                    var angle = Math.atan2(dy, dx);
+                    var t = 1 - (dist / MAX_DIST);
+                    var smoothT = t * t * (3 - 2 * t);
+                    var targetCos = -Math.cos(angle);
+                    var targetSin = -Math.sin(angle);
+                    var cos = (targetCos * smoothT * 0.85).toFixed(3);
+                    var sin = (targetSin * smoothT * 0.85).toFixed(3);
+                    var intensity = (0.45 + 0.55 * smoothT).toFixed(2);
+                    if (item.cos !== cos) {
+                        item.cos = cos;
+                        item.el.style.setProperty("--cos", cos);
+                    }
+                    if (item.sin !== sin) {
+                        item.sin = sin;
+                        item.el.style.setProperty("--sin", sin);
+                    }
+                    if (item.int !== intensity) {
+                        item.int = intensity;
+                        item.el.style.setProperty("--rim-intensity", intensity);
+                    }
+                } else {
+                    if (item.cos !== "0") {
+                        item.cos = "0";
+                        item.sin = "0";
+                        item.int = "0.45";
+                        item.el.style.setProperty("--cos", "0");
+                        item.el.style.setProperty("--sin", "0");
+                        item.el.style.setProperty("--rim-intensity", "0.45");
+                    }
+                }
+            }
         });
 
         /* ---- Body load fade-in ---- */

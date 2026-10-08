@@ -34,31 +34,31 @@ html[data-theme="dark"] .liquid-glass .eyebrow {
   background:
     radial-gradient(
       340px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
-      rgba(105, 115, 130, calc(var(--bg-spec, 0) * 0.5)),
-      rgba(105, 115, 130, calc(var(--bg-spec, 0) * 0.2)) 40%,
+      rgba(0, 113, 227, calc(var(--bg-spec, 0) * 0.12)),
+      rgba(0, 113, 227, calc(var(--bg-spec, 0) * 0.04)) 40%,
       transparent 70%
     ),
     radial-gradient(
       780px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
-      rgba(105, 115, 130, calc(var(--bg-bloom, 0) * 0.16)),
+      rgba(100, 210, 255, calc(var(--bg-bloom, 0) * 0.08)),
       transparent 70%
     );
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
 }
 html[data-theme="dark"] #bgLight {
   background:
     radial-gradient(
       340px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
-      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.3)),
-      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.12)) 40%,
+      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.16)),
+      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.05)) 40%,
       transparent 70%
     ),
     radial-gradient(
       780px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
-      rgba(255, 255, 255, calc(var(--bg-bloom, 0) * 0.14)),
+      rgba(100, 180, 255, calc(var(--bg-bloom, 0) * 0.08)),
       transparent 70%
     );
-  mix-blend-mode: screen;
+  mix-blend-mode: normal;
 }
 .liquid-mesh {
   position: absolute;
@@ -124,28 +124,28 @@ html[data-theme="dark"] #bgLight {
   background:
     radial-gradient(
       180px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(105, 115, 130, var(--spec-o, 0)) 0%,
-      rgba(105, 115, 130, calc(var(--spec-o, 0) * 0.4)) 40%,
+      rgba(105, 115, 130, calc(var(--spec-o, 0) * 0.35)) 0%,
+      rgba(105, 115, 130, calc(var(--spec-o, 0) * 0.12)) 40%,
       transparent 72%
     ),
     radial-gradient(
       520px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(160, 168, 180, calc(var(--bloom-o, 0) * 0.22)) 0%,
-      rgba(160, 168, 180, calc(var(--bloom-o, 0) * 0.09)) 45%,
+      rgba(160, 168, 180, calc(var(--bloom-o, 0) * 0.12)) 0%,
+      rgba(160, 168, 180, calc(var(--bloom-o, 0) * 0.04)) 45%,
       transparent 68%
     );
-  mix-blend-mode: multiply;
+  mix-blend-mode: normal;
 }
 
-/* Chromium: ใช้ SVG filter ใน backdrop-filter — คลื่นหลังเลนส์หักเหบิดจริง (Safari/FF ได้ blur 8px ตามฐาน) */
-@supports (backdrop-filter: url(#liquid-distort)) {
+/* Fast Hardware-Accelerated Glass (Compositor Plane, Zero GPU Readback) */
+@supports (backdrop-filter: blur(1px)) {
   .liquid-glass {
-    backdrop-filter: url(#liquid-distort) blur(3px) saturate(150%) !important;
-    -webkit-backdrop-filter: blur(8px) saturate(160%) contrast(110%) !important;
+    backdrop-filter: blur(16px) saturate(180%) contrast(105%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(180%) contrast(105%) !important;
   }
   html[data-theme="dark"] .liquid-glass {
-    backdrop-filter: url(#liquid-distort) blur(3px) saturate(140%) !important;
-    -webkit-backdrop-filter: blur(8px) saturate(150%) contrast(110%) !important;
+    backdrop-filter: blur(16px) saturate(170%) contrast(105%) !important;
+    -webkit-backdrop-filter: blur(16px) saturate(170%) contrast(105%) !important;
   }
 }
 
@@ -186,7 +186,9 @@ html[data-theme="dark"] #bgLight {
     linear-gradient(#fff 0 0) content-box,
     linear-gradient(#fff 0 0);
   mask-composite: exclude;
-  filter: url(#liquid-distort);
+  /* filter: url(#liquid-distort) ที่นี่ถูกถอดแล้ว — rim ตอนนี้เป็น gradient ล้วน
+     (เดิม distort รัน 2 ตัว/เฟรม = ราคา raster ซ้ำกับ .liquid-glass ตัวหลัก;
+     เหลือ distort ไว้บนตัวแก้วเลนส์ (look หลัก) เท่านั้น) */
   pointer-events: none;
   z-index: 3;
   opacity: calc(0.7 + var(--rim-o, 0) * 0.3);
@@ -211,34 +213,27 @@ html[data-theme="dark"] .liquid-glass {
   border-top: 1.5px solid rgba(255, 255, 255, 0.32) !important;
   border-left: 1.5px solid rgba(255, 255, 255, 0.2) !important;
   box-shadow:
-    inset var(--hi-offset-x, 0px) var(--hi-offset-y, 1.5px) 2px
-      rgba(255, 255, 255, 0.22),
-    inset var(--shadow-offset-x, 0px) var(--shadow-offset-y, -1.5px) 3px
-      rgba(0, 0, 0, 0.35),
-    inset 10px 0 14px -8px rgba(255, 255, 255, 0.1),
-    inset -10px 0 14px -8px rgba(255, 255, 255, 0.1),
-    inset 0 10px 14px -8px rgba(255, 255, 255, 0.14),
-    inset 0 -12px 16px -10px rgba(180, 200, 255, 0.06),
-    inset 0 -4px 10px -4px rgba(0, 0, 0, 0.35),
+    inset var(--hi-offset-x, 0px) var(--hi-offset-y, 1.5px) 2px rgba(255, 255, 255, 0.22),
+    inset var(--shadow-offset-x, 0px) var(--shadow-offset-y, -1.5px) 3px rgba(0, 0, 0, 0.35),
     inset 0 0 0 1px rgba(255, 255, 255, 0.08),
-    var(--cast-x, 0px) var(--cast-y, 28px) 56px -14px rgba(0, 0, 0, 0.55) !important;
+    var(--cast-x, 0px) var(--cast-y, 22px) 40px -10px rgba(0, 0, 0, 0.5) !important;
 }
 html[data-theme="dark"] .liquid-glass::before {
   /* แสงสมจริงโหมดมืด: แกนขาว + บลูมขาวนวล (screen บนพื้นดำ) */
   background:
     radial-gradient(
       180px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.9)) 0%,
-      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.36)) 40%,
+      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.45)) 0%,
+      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.18)) 40%,
       transparent 72%
     ),
     radial-gradient(
       520px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(255, 255, 255, calc(var(--bloom-o, 0) * 0.35)) 0%,
-      rgba(255, 255, 255, calc(var(--bloom-o, 0) * 0.12)) 45%,
+      rgba(255, 255, 255, calc(var(--bloom-o, 0) * 0.16)) 0%,
+      rgba(255, 255, 255, calc(var(--bloom-o, 0) * 0.05)) 45%,
       transparent 68%
     );
-  mix-blend-mode: screen;
+  mix-blend-mode: normal;
 }
 html[data-theme="dark"] .liquid-glass::after {
   /* ขอบ WWDC25 โหมดมืด: chromatic fringe + หรี่จ้า */
@@ -287,4 +282,319 @@ html[data-theme="dark"] .liquid-mesh::before {
     rgba(255, 255, 255, calc(var(--bg-o, 0) * 0.04)) 42%,
     transparent 70%
   );
+}
+
+/* =========================================
+   5. Prismatic Dispersion & Apple Bento Grid (21st.dev Inspired)
+   ========================================= */
+
+/* Prismatic Badge: แคปซูลแก้วมินิมอล */
+.prismatic-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 18px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(12px) saturate(160%);
+  -webkit-backdrop-filter: blur(12px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  color: var(--ink);
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.05);
+  margin-bottom: 1.5rem;
+  transition: transform 0.3s var(--ease-apple), box-shadow 0.3s ease;
+}
+.prismatic-badge:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.08);
+}
+html[data-theme="dark"] .prismatic-badge {
+  background: rgba(30, 30, 35, 0.55);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: #f5f5f7;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.3);
+}
+
+/* Chromatic Text: ตัวหนังสือพาดหัวพร้อมประกายเลนส์แก้ว */
+.chromatic-title {
+  font-size: clamp(2.5rem, 5.5vw, 4.2rem);
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+  margin-bottom: 1.25rem;
+  background: linear-gradient(180deg, #111113 20%, #44444a 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  position: relative;
+}
+html[data-theme="dark"] .chromatic-title {
+  background: linear-gradient(180deg, #ffffff 30%, rgba(240, 240, 245, 0.72) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 30px rgba(255, 255, 255, 0.15);
+}
+
+/* Prismatic Glass Card: แผ่นแก้วขอบปริซึมเจียระไน */
+.prismatic-glass {
+  position: relative;
+  border-radius: 36px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0.12) 100%
+  ) !important;
+  backdrop-filter: blur(20px) saturate(180%) contrast(102%) !important;
+  -webkit-backdrop-filter: blur(20px) saturate(180%) contrast(102%) !important;
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.8),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.05),
+    0 24px 48px -12px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  overflow: hidden;
+  transition: transform 0.35s var(--ease-apple), box-shadow 0.35s ease;
+}
+.prismatic-glass::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    var(--ring-angle, 135deg),
+    rgba(255, 90, 80, 0.55) 0%,
+    rgba(255, 215, 0, 0.45) 25%,
+    rgba(0, 242, 254, 0.55) 60%,
+    rgba(160, 100, 255, 0.65) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  opacity: 0.7;
+  transition: opacity 0.3s ease;
+}
+html[data-theme="dark"] .prismatic-glass {
+  background: linear-gradient(
+    135deg,
+    rgba(35, 35, 42, 0.45) 0%,
+    rgba(18, 18, 22, 0.3) 50%,
+    rgba(28, 28, 34, 0.38) 100%
+  ) !important;
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 2px rgba(255, 255, 255, 0.25),
+    inset 0 -1px 2px rgba(0, 0, 0, 0.4),
+    0 24px 56px -12px rgba(0, 0, 0, 0.5) !important;
+}
+html[data-theme="dark"] .prismatic-glass::after {
+  opacity: 0.85;
+}
+
+/* =========================================
+   Apple Bento Grid System
+   ========================================= */
+.bento-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 1.5rem;
+}
+.bento-col-8 { grid-column: span 8; }
+.bento-col-4 { grid-column: span 4; }
+.bento-col-6 { grid-column: span 6; }
+.bento-col-12 { grid-column: span 12; }
+
+@media (max-width: 991px) {
+  .bento-col-8, .bento-col-4, .bento-col-6 {
+    grid-column: span 12;
+  }
+}
+
+.bento-card {
+  position: relative;
+  border-radius: 28px;
+  padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.35) 0%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.2) 100%
+  );
+  backdrop-filter: blur(16px) saturate(170%);
+  -webkit-backdrop-filter: blur(16px) saturate(170%);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  transition: transform 0.35s var(--ease-apple), box-shadow 0.35s ease, border-color 0.3s ease;
+  transform: translate3d(0, 0, 0);
+}
+.bento-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.1);
+  border-color: rgba(255, 255, 255, 0.75);
+}
+html[data-theme="dark"] .bento-card {
+  background: linear-gradient(
+    135deg,
+    rgba(30, 30, 36, 0.5) 0%,
+    rgba(18, 18, 22, 0.35) 50%,
+    rgba(26, 26, 32, 0.42) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.12);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.35);
+}
+html[data-theme="dark"] .bento-card:hover {
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.55);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* Holographic Foil Sheen (21st.dev HolographicCard Inspired) */
+.holographic-sheen {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 20%,
+    rgba(255, 255, 255, 0.08) 35%,
+    rgba(0, 242, 254, 0.14) 45%,
+    rgba(255, 45, 85, 0.14) 55%,
+    transparent 70%
+  );
+  opacity: 0;
+  transition: opacity 0.4s ease, transform 0.6s var(--ease-apple);
+  transform: translateX(-100%);
+}
+.bento-card:hover .holographic-sheen,
+.apple-card-glow:hover .holographic-sheen {
+  opacity: 1;
+  transform: translateX(100%);
+}
+
+/* Category Pills in Bento */
+.bento-pills-wrap {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+.bento-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  backdrop-filter: blur(8px);
+  transition: all 0.25s var(--ease-apple);
+}
+.bento-pill:hover {
+  background: var(--apple-blue);
+  color: #ffffff;
+  border-color: var(--apple-blue);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px -2px rgba(0, 113, 227, 0.35);
+}
+html[data-theme="dark"] .bento-pill {
+  background: rgba(40, 40, 48, 0.6);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #f5f5f7;
+}
+html[data-theme="dark"] .bento-pill:hover {
+  background: var(--apple-blue);
+  color: #ffffff;
+  border-color: var(--apple-blue);
+}
+
+/* Bento Grid Internal Layouts */
+.bento-flagship {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+}
+.bento-flagship-content {
+  flex: 1;
+  z-index: 2;
+}
+.bento-flagship-visual {
+  flex: 0 0 240px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1;
+}
+.bento-flagship-img {
+  max-width: 100%;
+  max-height: 200px;
+  border-radius: 18px;
+  object-fit: contain;
+  filter: drop-shadow(0 16px 30px rgba(0, 0, 0, 0.22));
+  transition: transform 0.4s var(--ease-apple);
+}
+.bento-card:hover .bento-flagship-img {
+  transform: scale(1.06) translateY(-4px);
+}
+@media (max-width: 768px) {
+  .bento-flagship {
+    flex-direction: column;
+    text-align: center;
+  }
+  .bento-flagship-visual {
+    margin-top: 1rem;
+  }
+}
+
+.bento-icon-circle {
+  width: 52px;
+  height: 52px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  margin-bottom: 1.25rem;
+  background: rgba(0, 113, 227, 0.1);
+  color: var(--apple-blue);
+  border: 1px solid rgba(0, 113, 227, 0.2);
+}
+html[data-theme="dark"] .bento-icon-circle {
+  background: rgba(10, 132, 255, 0.15);
+  border-color: rgba(10, 132, 255, 0.3);
+  color: #64d2ff;
+}
+.bento-icon-circle--success {
+  background: rgba(52, 199, 89, 0.1);
+  color: #34c759;
+  border-color: rgba(52, 199, 89, 0.2);
+}
+html[data-theme="dark"] .bento-icon-circle--success {
+  background: rgba(48, 209, 88, 0.15);
+  color: #30d158;
+  border-color: rgba(48, 209, 88, 0.3);
+}
+
+.prismatic-product-card {
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.35s var(--ease-apple), box-shadow 0.35s ease;
+}
+.prismatic-product-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.12);
+}
+html[data-theme="dark"] .prismatic-product-card:hover {
+  box-shadow: 0 20px 48px -10px rgba(0, 0, 0, 0.55);
 }

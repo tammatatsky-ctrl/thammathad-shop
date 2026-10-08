@@ -13,24 +13,38 @@ FX.register({
     var parallaxItems = [];
     function collectParallax() {
       parallaxItems = [];
+      var sy = window.scrollY || 0;
       document
         .querySelectorAll('[data-motion="parallax"]')
         .forEach(function (el) {
           var speed = parseFloat(el.getAttribute("data-speed")) || 0.3;
-          parallaxItems.push({ el: el, speed: speed });
+          var r = el.getBoundingClientRect();
+          parallaxItems.push({
+            el: el,
+            speed: speed,
+            docTop: r.top + sy,
+            docBottom: r.bottom + sy,
+            height: r.height,
+            lastT: ""
+          });
         });
     }
     ScrollEngine.subscribe(function (s) {
       if (Motion.reduced()) return;
       var vh = window.innerHeight;
+      var sy = s.y;
       for (var i = 0; i < parallaxItems.length; i++) {
         var p = parallaxItems[i];
-        var r = p.el.getBoundingClientRect();
-        if (r.bottom < -100 || r.top > vh + 100) continue;
-        var center = r.top + r.height / 2;
+        var top = p.docTop - sy;
+        var bottom = p.docBottom - sy;
+        if (bottom < -100 || top > vh + 100) continue;
+        var center = top + p.height / 2;
         var offset = (center - vh / 2) * p.speed;
-        p.el.style.transform =
-          "translate3d(0," + (-offset).toFixed(2) + "px,0)";
+        var t = "translate3d(0," + (-offset).toFixed(2) + "px,0)";
+        if (p.lastT !== t) {
+          p.lastT = t;
+          p.el.style.transform = t;
+        }
       }
     });
     window.addEventListener("resize", collectParallax, { passive: true });

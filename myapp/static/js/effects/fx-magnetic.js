@@ -19,20 +19,24 @@ FX.register({
       MAG_KX = 0.07,
       MAG_KY = 0.05,
       MAG_LERP = 0.14;
-    /** cacheMagRects() — จับคู่ปุ่มปัจจุบัน + reset state offset (เรียกตอนเริ่ม/resize/load). */
+    /** cacheMagRects() — จับคู่ปุ่มปัจจุบัน + เก็บพิกัด document (เรียกตอนเริ่ม/resize/load). */
     function cacheMagRects() {
       magBtns = document.querySelectorAll(".btn-primary");
       magRects = [];
       magState = [];
+      var sy = window.scrollY || 0;
+      var sx = window.scrollX || 0;
       for (var i = 0; i < magBtns.length; i++) {
-        magRects.push(null);
+        var r = magBtns[i].getBoundingClientRect();
+        magRects.push({
+          docCx: r.left + sx + r.width / 2,
+          docCy: r.top + sy + r.height / 2
+        });
         magState.push({ tx: 0, ty: 0, cx: 0, cy: 0 });
       }
     }
     function invalidateMagRects() {
-      magRects = magRects.map(function () {
-        return null;
-      });
+      cacheMagRects();
     }
     function magTick() {
       magRaf = null;
@@ -51,11 +55,13 @@ FX.register({
     }
     InteractionEngine.onMove(function (mx, my) {
       if (Motion.reduced()) return;
+      var sy = window.scrollY || 0;
+      var sx = window.scrollX || 0;
       for (var i = 0; i < magBtns.length; i++) {
-        if (!magRects[i]) magRects[i] = magBtns[i].getBoundingClientRect();
         var r = magRects[i];
-        var cx = r.left + r.width / 2,
-          cy = r.top + r.height / 2;
+        if (!r) continue;
+        var cx = r.docCx - sx,
+          cy = r.docCy - sy;
         var dist = Math.sqrt((mx - cx) * (mx - cx) + (my - cy) * (my - cy));
         var st = magState[i];
         if (!st) continue;
@@ -81,7 +87,7 @@ FX.register({
       });
     });
     cacheMagRects();
-    ScrollEngine.subscribe(invalidateMagRects);
     window.addEventListener("resize", invalidateMagRects, { passive: true });
+    window.addEventListener("load", invalidateMagRects, { passive: true });
   },
 });

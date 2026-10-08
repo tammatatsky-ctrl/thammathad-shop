@@ -31,10 +31,11 @@
 }
 [data-motion="stagger"] > * {
   opacity: 0;
-  transform: translateY(28px);
+  transform: translateY(26px);
+  /* เข้าแบบสั้น-ไว (--ease-apple-out) ให้ลูกลอยขึ้น "มีชีวิต" กว่าบล็อกใหญ่ (reveal ใช้ --ease-apple นุ่มกว่า) */
   transition:
-    opacity 0.9s var(--ease-apple),
-    transform 0.9s var(--ease-apple);
+    opacity 0.7s var(--ease-apple-out),
+    transform 0.7s var(--ease-apple-out);
   transition-delay: var(--d, 0s);
   will-change: transform, opacity;
 }
@@ -44,24 +45,29 @@
   will-change: auto;
 }
 /* hero เปิดฉากไล่ชั้นนุ่มๆ + badge เด้งสปริง (เล่นเสมอ — bypass reduce motion) */
+/* จังหวะ: ขึ้นชั้นสั้น-ไวด้วย --ease-apple-out (Apple entrance feel) ไล่ยิ่งห่างตามลำดับชั้น */
 .hero-card > * {
   opacity: 0;
-  transform: translateY(26px);
-  animation: heroIn 1s var(--ease-apple-out) forwards;
+  transform: translateY(24px);
+  animation: heroIn 0.85s var(--ease-apple-out) forwards;
 }
 .hero-card > *:nth-child(1) {
-  animation-delay: 0.08s;
+  animation-delay: 0.05s;
 }
 .hero-card > *:nth-child(2) {
-  animation-delay: 0.18s;
+  animation-delay: 0.15s;
 }
 .hero-card > *:nth-child(3) {
-  animation-delay: 0.3s;
+  animation-delay: 0.26s;
 }
 .hero-card > *:nth-child(4) {
-  animation-delay: 0.42s;
+  animation-delay: 0.38s;
 }
 @keyframes heroIn {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
   to {
     opacity: 1;
     transform: none;

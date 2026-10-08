@@ -9,27 +9,54 @@ FX.register({
   id: "card-pop",
   boot: function (ctx) {
     /* ---- Card center-pop: การ์ดใกล้กึ่งกลางจอโผล่ขึ้นนิดหน่อย (Apple grid feel) ---- */
-    var cardPopEls = [];
+    var cardPopItems = [];
     function collectCardParallax() {
-      cardPopEls = [];
+      cardPopItems = [];
+      var sy = window.scrollY || 0;
       document.querySelectorAll("[data-card-parallax]").forEach(function (el) {
-        cardPopEls.push(el);
+        var r = el.getBoundingClientRect();
+        cardPopItems.push({
+          el: el,
+          docTop: r.top + sy,
+          docBottom: r.bottom + sy,
+          height: r.height,
+          py: "",
+          pz: ""
+        });
       });
     }
     ScrollEngine.subscribe(function (s) {
       if (Motion.reduced()) return;
       var vh = window.innerHeight;
       var band = vh * 0.42;
-      for (var i = 0; i < cardPopEls.length; i++) {
-        var el = cardPopEls[i];
-        var r = el.getBoundingClientRect();
-        if (r.bottom < 0 || r.top > vh) continue;
-        var center = r.top + r.height / 2;
+      var sy = s.y;
+      for (var i = 0; i < cardPopItems.length; i++) {
+        var item = cardPopItems[i];
+        var top = item.docTop - sy;
+        var bottom = item.docBottom - sy;
+        if (bottom < 0 || top > vh) {
+          if (item.py !== "0px" && item.py !== "") {
+            item.py = "0px";
+            item.pz = "1";
+            item.el.style.setProperty("--p-y", "0px");
+            item.el.style.setProperty("--p-z", "1");
+          }
+          continue;
+        }
+        var center = top + item.height / 2;
         var dCenter = Math.abs(center - vh / 2);
         var f = dCenter > band ? 0 : 1 - dCenter / band;
         f = f * f * (3 - 2 * f);
-        el.style.setProperty("--p-y", (-f * 8).toFixed(1) + "px");
-        el.style.setProperty("--p-z", (1 + f * 0.012).toFixed(3));
+        var py = (-f * 8).toFixed(1) + "px";
+        var pz = (1 + f * 0.012).toFixed(3);
+        if (item.py !== py) {
+          item.py = py;
+          item.el.style.setProperty("--p-y", py);
+        }
+        if (item.pz !== pz) {
+          item.pz = pz;
+          item.el.style.setProperty("--p-z", pz);
+        }
       }
     });
     window.addEventListener("resize", collectCardParallax, { passive: true });

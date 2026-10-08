@@ -69,105 +69,136 @@
                 sel.disabled = true;
             }
 
-            loadData(opts.dataUrl)
-                .then(function (data) {
-                    /* province */
+            /* mount(data): ใส่ข้อมูล cascade เข้า dropdown ทั้ง 4 ตัว (จากเดิมเดิม) */
+            function mount(data) {
+                /* province */
+                fill(
+                    pSel,
+                    data.p.map(function (x) {
+                        return x.n;
+                    }),
+                    wantP,
+                    "— เลือกจังหวัด —",
+                );
+
+                function onProvince() {
+                    var pv = null;
+                    data.p.forEach(function (x) {
+                        if (x.n === pSel.value) pv = x;
+                    });
+                    if (!pv) {
+                        reset(dSel, "— เลือกจังหวัดก่อน —");
+                        reset(tSel, "— เลือกอำเภอก่อน —");
+                        zInp.value = "";
+                        return;
+                    }
                     fill(
-                        pSel,
-                        data.p.map(function (x) {
+                        dSel,
+                        pv.d.map(function (x) {
                             return x.n;
                         }),
-                        wantP,
-                        "— เลือกจังหวัด —",
+                        wantD,
+                        "— เลือกอำเภอ —",
                     );
-
-                    function onProvince() {
-                        var pv = null;
-                        data.p.forEach(function (x) {
-                            if (x.n === pSel.value) pv = x;
-                        });
-                        if (!pv) {
-                            reset(dSel, "— เลือกจังหวัดก่อน —");
-                            reset(tSel, "— เลือกอำเภอก่อน —");
-                            zInp.value = "";
-                            return;
-                        }
-                        fill(
-                            dSel,
-                            pv.d.map(function (x) {
-                                return x.n;
-                            }),
-                            wantD,
-                            "— เลือกอำเภอ —",
-                        );
-                        onDistrict();
-                    }
-                    function onDistrict() {
-                        var dv = null;
-                        var pv = null;
-                        data.p.forEach(function (x) {
-                            if (x.n === pSel.value) pv = x;
-                        });
-                        if (pv)
-                            pv.d.forEach(function (x) {
-                                if (x.n === dSel.value) dv = x;
-                            });
-                        if (!dv) {
-                            reset(tSel, "— เลือกอำเภอก่อน —");
-                            zInp.value = "";
-                            return;
-                        }
-                        fill(
-                            tSel,
-                            dv.t.map(function (x) {
-                                return x.n;
-                            }),
-                            wantT,
-                            "— เลือกตำบล —",
-                        );
-                        onSubdistrict();
-                    }
-                    function onSubdistrict() {
-                        var tz = "";
-                        var pv = null;
-                        data.p.forEach(function (x) {
-                            if (x.n === pSel.value) pv = x;
-                        });
-                        if (pv) {
-                            pv.d.forEach(function (d) {
-                                if (d.n !== dSel.value) return;
-                                d.t.forEach(function (t) {
-                                    if (t.n === tSel.value) tz = t.z;
-                                });
-                            });
-                        }
-                        zInp.value = tz;
-                    }
-
-                    pSel.addEventListener("change", function () {
-                        wantD = "";
-                        wantT = "";
-                        onProvince();
+                    onDistrict();
+                }
+                function onDistrict() {
+                    var dv = null;
+                    var pv = null;
+                    data.p.forEach(function (x) {
+                        if (x.n === pSel.value) pv = x;
                     });
-                    dSel.addEventListener("change", function () {
-                        wantT = "";
-                        onDistrict();
-                    });
-                    tSel.addEventListener("change", onSubdistrict);
-
-                    /* restore saved selection (edit mode) */
-                    if (wantP) {
-                        onProvince();
-                        if (wantD && dSel.value === wantD) {
-                            onDistrict();
-                            if (wantT && tSel.value === wantT) onSubdistrict();
-                        }
+                    if (pv)
+                        pv.d.forEach(function (x) {
+                            if (x.n === dSel.value) dv = x;
+                        });
+                    if (!dv) {
+                        reset(tSel, "— เลือกอำเภอก่อน —");
+                        zInp.value = "";
+                        return;
                     }
-                })
-                .catch(function () {
-                    pSel.innerHTML =
-                        '<option value="">โหลดข้อมูลที่อยู่ไม่สำเร็จ</option>';
+                    fill(
+                        tSel,
+                        dv.t.map(function (x) {
+                            return x.n;
+                        }),
+                        wantT,
+                        "— เลือกตำบล —",
+                    );
+                    onSubdistrict();
+                }
+                function onSubdistrict() {
+                    var tz = "";
+                    var pv = null;
+                    data.p.forEach(function (x) {
+                        if (x.n === pSel.value) pv = x;
+                    });
+                    if (pv) {
+                        pv.d.forEach(function (d) {
+                            if (d.n !== dSel.value) return;
+                            d.t.forEach(function (t) {
+                                if (t.n === tSel.value) tz = t.z;
+                            });
+                        });
+                    }
+                    zInp.value = tz;
+                }
+
+                pSel.addEventListener("change", function () {
+                    wantD = "";
+                    wantT = "";
+                    onProvince();
                 });
+                dSel.addEventListener("change", function () {
+                    wantT = "";
+                    onDistrict();
+                });
+                tSel.addEventListener("change", onSubdistrict);
+
+                /* restore saved selection (edit mode) */
+                if (wantP) {
+                    onProvince();
+                    if (wantD && dSel.value === wantD) {
+                        onDistrict();
+                        if (wantT && tSel.value === wantT) onSubdistrict();
+                    }
+                }
+            }
+
+            /* ====== B5: fetch-on-interaction ======
+               thai-address.json ~544KB — เดิม fetch ทันทีตอน init (ทำให้หน้าแรก/หน้า
+               forms CP ใหญ่ขึ้นโดยไม่จำเป็น). เปลี่ยนเป็นโหลดก็ต่อเมื่อ user แตะ
+               dropdown จังหวัดครั้งแรก (pointerdown/focus/click) แทน.
+               ใช้ flag done กัน load ซ้ำ + cache/pending เดิมใน loadData ก็ยังทำงาน
+               (SSR/CSR โหลดรอบแรกเท่านั้น, รอบถัดๆ จาก cache/pending). */
+            var done = false;
+            function start() {
+                if (done) return;
+                done = true;
+                unbind();
+                loadData(opts.dataUrl)
+                    .then(mount)
+                    .catch(function () {
+                        done = false; // พลาด → ปลดได้โหลดใหม่ตอน interaction ถัดไป
+                        pSel.innerHTML =
+                            '<option value="">โหลดข้อมูลที่อยู่ไม่สำเร็จ</option>';
+                    });
+            }
+            function bind() {
+                ["pointerdown", "focus", "click"].forEach(function (ev) {
+                    pSel.addEventListener(ev, start);
+                });
+            }
+            function unbind() {
+                ["pointerdown", "focus", "click"].forEach(function (ev) {
+                    pSel.removeEventListener(ev, start);
+                });
+            }
+            bind();
+
+            /* โหมดแก้ไข (มี wantP = ค่าจังหวัดที่บันทึกไว้) → ต้องมีข้อมูลเพื่อโชว์
+               ค่าเดิมให้ user เห็น ฉะนั้นโหลดทันที (เป็นกรณีย่อย แค่ตอนแก้ไขที่อยู่จริง ๆ) */
+            if (wantP) start();
         },
     };
 })();

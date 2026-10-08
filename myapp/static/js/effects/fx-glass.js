@@ -19,7 +19,6 @@ FX.register({
     try {
       (function () {
         "use strict";
-        var MAX_TILT = 2.5;
         var LIGHT_RADIUS = 240;
         var PROT_RADIUS = 140;
         var INERTIA_RATE = 15;
@@ -51,15 +50,12 @@ FX.register({
         );
         var lensImg = document.getElementById("lensMap");
         var curScale = 8;
-        /** applyLens(maxT) — ปรับความแรงเลนส์ (feDisplacementMap scale) ตามแสงจ้าสูงสุดของเฟรม.
-         *  @param {number} maxT ความแรง 0..1 ในเฟรมนี้
-         */
+        /** applyLens(maxT) — รักษาสเกลเลนส์ให้เสถียรเพื่อป้องกัน SVG Filter Invalidation กลางลูป */
         function applyLens(maxT) {
           if (!dispEl) return;
-          var s = Math.round(8 + maxT * 10);
-          if (s !== curScale) {
-            curScale = s;
-            dispEl.setAttribute("scale", String(s));
+          if (curScale !== 10) {
+            curScale = 10;
+            dispEl.setAttribute("scale", "10");
           }
         }
         /** buildLensMap() — วาด displacement map (RGB เก็บทิศทาง offset) ตามขนาด/มุมของ .hero-shell
@@ -123,8 +119,30 @@ FX.register({
             lensImg.setAttribute("width", String(W));
             lensImg.setAttribute("height", String(H));
           } catch (e) {}
+          lensReady = true; /* build สำเร็จ → กัน deferred/redundant build ซ้ำ (Fix C) */
         }
-        buildLensMap();
+        /* ---- Fix C: ย้าย buildLensMap() แรกไปพ้น main-thread blocking ตอน boot.
+           เดิมเรียก sync ตรงนี้ (line บนสุด) — วาด loop 1200x800 (~9.6 แสนพิกเซล + sqrt)
+           บล็อก main thread 15-50ms ตอนหน้าโหลด = cold-start jank ที่ benchmark เจอ (45ms 3s แรก).
+           แก้: defer ไปหลัง first paint + idle (requestIdleCallback, fallback setTimeout)
+           แล้วค่อย build — หน้าโหลดเนื้อหาได้ก่อน, แสงเลนส์ไม่เปลี่ยน (ยังสร้าง map เหมือนเดิม).
+           ขอ build ครั้งแรกให้เกิดแค่ครั้งเดียวบน critical path ใหม่ — resize/load/fonts ยัง rebuild ได้เหมือนเดิม. */
+        var lensReady = false;
+        var lensBuiltPending = false;
+        function buildLensMapDeferred() {
+          if (lensReady || lensBuiltPending) return; /* กัน build ซ้ำซ้อนตอนยังไม่ทัน */
+          lensBuiltPending = true;
+          (window.requestIdleCallback || function (cb) { return setTimeout(cb, 250); })(
+            function () {
+              lensBuiltPending = false;
+              if (!lensReady) {
+                try { buildLensMap(); } catch (e) {}
+                lensReady = true;
+              }
+            },
+          );
+        }
+        buildLensMapDeferred();
         var lensResizeT = null;
         window.addEventListener(
           "resize",
@@ -134,9 +152,17 @@ FX.register({
           },
           { passive: true },
         );
-        window.addEventListener("load", buildLensMap);
+        /* load / fonts.ready เป็น post-paint อยู่แล้ว — ถ้ายังไม่เคย build ให้ defer,
+           ถ้า build แล้วให้ rebuild (ปรับตามขนาด/ฟอนต์จริง) เหมือนเดิม. */
+        window.addEventListener("load", function () {
+          if (lensReady) buildLensMap();
+          else buildLensMapDeferred();
+        });
         if (document.fonts && document.fonts.ready && document.fonts.ready.then)
-          document.fonts.ready.then(buildLensMap);
+          document.fonts.ready.then(function () {
+            if (lensReady) buildLensMap();
+            else buildLensMapDeferred();
+          });
 
         var entries = Array.prototype.slice
           .call(document.querySelectorAll(".liquid-glass, .card, .apple-tile"))
@@ -179,9 +205,6 @@ FX.register({
           rectsDirty = true;
         }
         window.addEventListener("resize", invalidateRects, { passive: true });
-        ScrollEngine.subscribe(function () {
-          invalidateRects();
-        });
         window.addEventListener("load", invalidateRects);
         if (document.fonts && document.fonts.ready && document.fonts.ready.then)
           document.fonts.ready.then(invalidateRects);
@@ -190,26 +213,88 @@ FX.register({
         var heroShell = document.querySelector(".hero-shell");
         var pageGlow = document.getElementById("bgLight");
         var meshRect = null,
-          heroRect = null;
+          heroRect = null,
+          meshDoc = null,
+          heroDoc = null;
         var heroTextRects = [];
+        var heroTextDocRects = [];
         var heroTexts = heroShell
           ? Array.prototype.slice.call(heroShell.querySelectorAll(TEXT_SEL))
           : [];
 
         function measure() {
+          var sy = window.scrollY || 0;
+          var sx = window.scrollX || 0;
           entries.forEach(function (en) {
-            en.rect = en.el.getBoundingClientRect();
+            var r = en.el.getBoundingClientRect();
+            en.docTop = r.top + sy;
+            en.docLeft = r.left + sx;
+            en.rect = {
+              left: r.left,
+              top: r.top,
+              width: r.width,
+              height: r.height,
+            };
             if (!en.texts) en.texts = en.el.querySelectorAll(TEXT_SEL);
-            en.textRects.length = 0;
-            for (var i = 0; i < en.texts.length; i++)
-              en.textRects.push(en.texts[i].getBoundingClientRect());
+            en.textDocRects = [];
+            en.textRects = [];
+            for (var i = 0; i < en.texts.length; i++) {
+              var tr = en.texts[i].getBoundingClientRect();
+              en.textDocRects.push({
+                docTop: tr.top + sy,
+                docLeft: tr.left + sx,
+                width: tr.width,
+                height: tr.height,
+              });
+              en.textRects.push({
+                left: tr.left,
+                top: tr.top,
+                width: tr.width,
+                height: tr.height,
+              });
+            }
           });
-          meshRect = bgMesh ? bgMesh.getBoundingClientRect() : null;
-          heroRect = heroShell ? heroShell.getBoundingClientRect() : null;
-          heroTextRects.length = 0;
-          for (var j = 0; j < heroTexts.length; j++)
-            heroTextRects.push(heroTexts[j].getBoundingClientRect());
+          if (bgMesh) {
+            var mr = bgMesh.getBoundingClientRect();
+            meshDoc = { docTop: mr.top + sy, docLeft: mr.left + sx, width: mr.width, height: mr.height };
+            meshRect = { left: mr.left, top: mr.top, width: mr.width, height: mr.height };
+          }
+          if (heroShell) {
+            var hr = heroShell.getBoundingClientRect();
+            heroDoc = { docTop: hr.top + sy, docLeft: hr.left + sx, width: hr.width, height: hr.height };
+            heroRect = { left: hr.left, top: hr.top, width: hr.width, height: hr.height };
+            heroTextDocRects = [];
+            heroTextRects = [];
+            for (var j = 0; j < heroTexts.length; j++) {
+              var htr = heroTexts[j].getBoundingClientRect();
+              heroTextDocRects.push({ docTop: htr.top + sy, docLeft: htr.left + sx, width: htr.width, height: htr.height });
+              heroTextRects.push({ left: htr.left, top: htr.top, width: htr.width, height: htr.height });
+            }
+          }
         }
+
+        /* Zero-Reflow mathematical coordinate offset on scroll: ZERO getBoundingClientRect calls */
+        ScrollEngine.subscribe(function (s) {
+          var sy = s.y;
+          for (var i = 0; i < entries.length; i++) {
+            var en = entries[i];
+            if (en.rect && en.docTop !== undefined) {
+              en.rect.top = en.docTop - sy;
+              for (var k = 0; k < en.textRects.length; k++) {
+                en.textRects[k].top = en.textDocRects[k].docTop - sy;
+              }
+            }
+          }
+          if (heroRect && heroDoc) {
+            heroRect.top = heroDoc.docTop - sy;
+            for (var j = 0; j < heroTextRects.length; j++) {
+              heroTextRects[j].top = heroTextDocRects[j].docTop - sy;
+            }
+          }
+          if (meshRect && meshDoc) {
+            meshRect.top = meshDoc.docTop - sy;
+          }
+        });
 
         function setVar(en, name, value) {
           if (parseFloat(value) === 0) value = "0";
@@ -220,7 +305,6 @@ FX.register({
 
         function resetCard(en) {
           en.vars = {};
-          en.tilt = "";
           var s = en.el.style;
           s.setProperty("--mouse-x", "50%");
           s.setProperty("--mouse-y", "50%");
@@ -329,21 +413,8 @@ FX.register({
           var ringDeg =
             (((Math.atan2(lx, -ly) * 57.29578 + 180) % 360) + 360) % 360 || 360;
           setVar(en, "--ring-angle", ringDeg.toFixed(1) + "deg");
-          if (!Motion.reduced() && isHero) {
-            var tf =
-              "perspective(1000px) rotateX(" +
-              (-ly * MAX_TILT * t).toFixed(2) +
-              "deg) rotateY(" +
-              (lx * MAX_TILT * t).toFixed(2) +
-              "deg)";
-            if (en.tilt !== tf) {
-              en.tilt = tf;
-              en.el.style.transform = tf;
-            }
-          } else if (en.tilt) {
-            en.tilt = "";
-            en.el.style.transform = "";
-          }
+          /* Tilt 3D (rotateX/Y ตามเมาส์) ถูกถอดออกแล้ว — เหลือแสงเมาส์ spotlight/เงา
+             สุดเรียบหรู ทีละนิด (ไม่เอียงการ์ด) ; ไม่เขียน en.el.style.transform ที่นี่ */
         }
 
         function applyBgLights(mx, my) {
@@ -411,20 +482,25 @@ FX.register({
           lastY = 0;
         var px = 0,
           py = 0,
+          vx = 0,
+          vy = 0,
           started = false;
 
-        /** update(now) — เฟรมเดียวของการอินเตอร์โพเลตตำแหน่งเมาส์ (px,py → ตาม mouse ด้วย INERTIA_RATE)
-         *  แล้ว applyLight ทุกการ์ดที่ visible + applyBgLights + ปรับเลนส์.
-         *  วงรอบ: onMove เริ่ม rAF → ค้างจน mouse ขยับเกิน threshold จึงหยุด (ประหยัด CPU)
+        /** update(now) — เฟรมเดียวของการอินเตอร์โพเลตตำแหน่งเมาส์ด้วย Spring Dynamics
+         *  (Zero-lag tracking ตอบสนองทันทีตามความเร็วเมาส์ และหยุดนิ่งนุ่มนวลแบบ Critically Damped)
          */
         function update(now) {
           ticking = false;
           now = now || performance.now();
           var dt = lastT ? Math.min((now - lastT) / 1000, 0.05) : 0.016;
           lastT = now;
-          var ease = 1 - Math.exp(-dt * INERTIA_RATE);
-          px += (lastX - px) * ease;
-          py += (lastY - py) * ease;
+          // Spring physics: k=260, c=32 (zeta = 0.99, critically damped)
+          var ax = (lastX - px) * 260 - vx * 32;
+          var ay = (lastY - py) * 260 - vy * 32;
+          vx += ax * dt;
+          vy += ay * dt;
+          px += vx * dt;
+          py += vy * dt;
           if (rectsDirty) {
             measure();
             rectsDirty = false;
@@ -435,9 +511,14 @@ FX.register({
           }
           applyBgLights(px, py);
           applyLens(_frameMaxT);
-          if (Math.abs(lastX - px) > 0.3 || Math.abs(lastY - py) > 0.3) {
+          if (Math.abs(lastX - px) > 0.25 || Math.abs(lastY - py) > 0.25 || Math.abs(vx) > 0.5 || Math.abs(vy) > 0.5) {
             ticking = true;
             requestAnimationFrame(update);
+          } else {
+            px = lastX;
+            py = lastY;
+            vx = 0;
+            vy = 0;
           }
         }
 
@@ -447,6 +528,8 @@ FX.register({
           if (!started) {
             px = lastX;
             py = lastY;
+            vx = 0;
+            vy = 0;
             started = true;
           }
           if (!ticking) {
@@ -461,11 +544,9 @@ FX.register({
             entries.forEach(resetCard);
             px = lastX;
             py = lastY;
+            vx = 0;
+            vy = 0;
             started = false;
-            if (dispEl && curScale !== 8) {
-              curScale = 8;
-              dispEl.setAttribute("scale", "8");
-            }
           }
         });
       })();
