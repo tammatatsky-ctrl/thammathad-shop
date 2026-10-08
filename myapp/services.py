@@ -3,8 +3,13 @@ view ทำหน้าที่เรียกใช้ service เท่าน
 
 สถาปัตยกรรม (map ทั้ง module):
 - Cart        : ตะกร้าสินค้าใน session (cart / checkout / ปุ่มใส่ตะกร้า ใช้ object เดียวกัน)
-- ThaiCalendar: คำทักทาย + วันที่แบบพุทธศักราช สำหรับแดชบอร์ด
+- ThaiCalendar: คำทักทาย + วันที่แบบพุทธศักราช + วันหยุดราชการไทย (Google ICS)
+                 + next_business_day() สำหรับ ETA หน้าสั่งซื้อสำเร็จ
 - ExchangeRate: อัตราแลกเปลี่ยน THB→USD จาก external API (โชว์การ "เรียกใช้" API)
+- GeoIP       : ตำแหน่งโดยประมาณจาก IP (ipwho.is — keyless) เป็นคำใบ้ระดับประเทศ
+- Translate   : แปล EN↔TH (MyMemory — keyless) ช่วยฟอร์มสินค้าเมื่อไม่มี Gemini key
+- Catalog     : แคชหมวดหมู่สินค้า TTL 60 วิ + invalidation ผ่าน signal (models.py)
+- RateLimit   : จำกัดอัตราเรียก endpoint ต่อ IP ด้วย cache (slip OCR)
 - PromptPay   : QR พร้อมเพย์สำหรับหน้าสั่งซื้อสำเร็จ
 - SlipOK      : OCR ตรวจสลิปโอนเงิน (API key ว่าง = ฟีเจอร์ถูกซ่อน + view ซ่อน UI)
 - GeminiAI    : ข้อความช่วยเขียนคำอธิบายสินค้า (Google Gemini REST API)
@@ -18,17 +23,100 @@ view ทำหน้าที่เรียกใช้ service เท่าน
 รวมโค้ดที่เกี่ยวข้องเข้าด้วยกันและ test ได้อิสระจาก view.
 """
 import base64
+import hashlib
 import io
 import json
 import re
 import time
+import urllib.parse
 import urllib.request
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
 from django.utils import timezone
+from django.core.cache import cache
 
 from .models import Payment, Product
+
+
+class Catalog:
+    """ตัวช่วยหน้าร้าน-แคตตาล็อก: เครื่องมือที่เรียกซ้ำข้ามหน้า แล้วควรแคช
+    (เช่น หมวดหมู่สินค้า) — ลด SELECT DISTINCT ซ้ำต่อ request.
+    แคช locmem TTL 60 วิ — ข้อมูลเล็ก, ค่าเก่าชั่วครู่รับได้ หมวดใหม่จะปรากฏใน ~1 นาที."""
+
+    CATS_TTL = 60
+
+    @staticmethod
+    def _cats_key(only_listed):
+        """ชื่อ cache key ของ variant หมวดหมู่ — จุดเดียวที่รู้ชื่อ key (categories/invalidate ใช้ร่วมกัน)."""
+        return 'catalog:cats:listed' if only_listed else 'catalog:cats:all'
+
+    @staticmethod
+    def categories(only_listed=True):
+        """หมวดหมู่สินค้าสำหรับ filter (เรียง A-Z) — แคชตาม variant
+        (เฉพาะสินค้าที่แสดง / ทุกตัว) กัน query ซ้ำ.
+
+        Args:
+            only_listed: True = หมวดของสินค้า is_active เท่านั้น (หน้าร้าน),
+                         False = ทุกหมวดรวมของที่ซ่อน (ฟอร์มจัดการสินค้า)
+
+        Returns:
+            list[str] หมวดหมู่เรียง A-Z
+        """
+        key = Catalog._cats_key(only_listed)
+        val = cache.get(key)
+        if val is None:
+            qs = Product.objects.listed() if only_listed else Product.objects.all()
+            val = list(qs.category_choices())
+            cache.set(key, val, Catalog.CATS_TTL)
+        return val
+
+    @staticmethod
+    def invalidate():
+        """ล้างแคชหมวดหมู่ทั้งสอง variant — ให้หมวดใหม่/ที่หายไปสะท้อนทันทีโดยไม่ต้องรอ TTL.
+
+        เรียกอัตโนมัติจาก signal post_save/post_delete ของ Product (myapp/models.py)
+        จึงครอบทุกทางที่สินค้าเปลี่ยน: หน้าจัดการสินค้า, Django admin, shell.
+        """
+        cache.delete_many([Catalog._cats_key(True), Catalog._cats_key(False)])
+
+
+class RateLimit:
+    """จำกัดอัตราการเรียก endpoint ต่อผู้เรียก (IP) ด้วย Django cache — ไม่พึ่ง package ภายนอก.
+
+    ใช้กับ endpoint สาธารณะที่มีต้นทุนจริง เช่นอัปโหลดสลิป (เรียก SlipOK ภายนอกทุกครั้ง)
+    หรือขอ token (กัน brute force รหัสผ่านผ่าน API). เป็น fixed-window counter:
+    เปิดหน้าต่างด้วย cache.add ครั้งแรก แล้วนับด้วย cache.incr จนครบโควตา.
+
+    หมายเหตุ:
+    - ใช้ cache ตัวเดียวกับระบบ (locmem) → นับ "ต่อ process"; production หลาย worker
+      อาจนับแยกกัน (ยอมรับได้ในระดับ demo — ย้ายเป็น Redis ได้โดยไม่แก้โค้ดนี้)
+    - นับจาก REMOTE_ADDR ตรง ๆ ไม่ใช้ X-Forwarded-For (header ปลอมได้ — กัน bypass)
+    """
+
+    @staticmethod
+    def allow(scope, ident, limit=10, window=60):
+        """นับคำขอนี้เข้าโควตา — คืน True ถ้ายังผ่าน, False ถ้าเกิน (ควรตอบ 429).
+
+        Args:
+            scope: ชื่อกลุ่มการจำกัด (เช่น 'slip')
+            ident: ตัวระบุผู้เรียก (ปกติ REMOTE_ADDR)
+            limit: จำนวนครั้งสูงสุดต่อหน้าต่าง
+            window: ขนาดหน้าต่างเวลา (วินาที)
+
+        Returns:
+            bool: True = ผ่าน (นับแล้ว), False = เกินโควตา
+        """
+        key = f'ratelimit:{scope}:{ident}'
+        if cache.add(key, 1, window):
+            return True
+        try:
+            return cache.incr(key) <= limit
+        except ValueError:
+            # key หมดอายุระหว่างทาง (race) → เริ่มหน้าต่างใหม่
+            cache.add(key, 1, window)
+            return True
 
 
 class ThaiCalendar:
@@ -73,6 +161,124 @@ class ThaiCalendar:
             f"{cls.MONTHS[now.month - 1]} {now.year + 543}"
         )
 
+    @classmethod
+    def format(cls, dt=None):
+        """จัดรูปแบบวันที่แบบไทย พ.ศ. (เช่น "8 กันยายน 2569").
+
+        รับได้ทั้ง datetime (aware/naive) และ date ธรรมดา — `next_business_day()`
+        คืน date จึงต้องเรียกผ่านทางนี้ได้ (date ไม่มี utcoffset).
+        """
+        if not dt:
+            return ""
+        if isinstance(dt, datetime) and timezone.is_aware(dt):
+            dt = timezone.localtime(dt)
+        return f"{dt.day} {cls.MONTHS[dt.month - 1]} {dt.year + 543}"
+
+    # ----- วันหยุดนักขัตฤกษ์ไทย (Google Calendar ICS สาธารณะ — ฟรี ไม่ต้องใช้ key) -----
+
+    HOLIDAY_ICS_URL = ('https://calendar.google.com/calendar/ical/'
+                       'th.th%23holiday%40group.v.calendar.google.com/public/basic.ics')
+    HOLIDAYS_TTL = 24 * 60 * 60       # สำเร็จ → แคช 1 วัน
+    HOLIDAYS_FAIL_TTL = 10 * 60       # ล่ม → แคชสั้น ๆ 10 นาที (ค่อยลองใหม่ ไม่ทิ้งทั้งวัน)
+    # Google ICS ของไทยปน "วัน observance" ที่ไม่ใช่วันหยุดราชการ (ทดสอบจริง 2026:
+    # วาเลนไทน์, ตรุษจีน ×3, คริสต์มาสอีฟ, คริสต์มาส) → กรองออกเพื่อไม่ให้ ETA ข้ามวันทำการผิด
+    HOLIDAY_SKIP_KEYWORDS = ('ตรุษจีน', 'วาเลนไทน์', 'คริสต์มาส', 'ฮาโลวีน', 'อีสเตอร์', 'ขอบคุณพระเจ้า')
+
+    @staticmethod
+    def parse_ics(text):
+        """แกะไฟล์ ICS → {date: ชื่อวันหยุด} (ฟังก์ชันบริสุทธิ์ — เทสต์ได้โดยไม่ต่อเน็ต).
+
+        รองรับ: `DTSTART;VALUE=DATE:YYYYMMDD`, `SUMMARY:ชื่อ` (มีภาษาไทย),
+        line folding (บรรทัดต่อขึ้นต้นด้วยช่องว่าง) และ unescape `\\,` `\\;` `\\\\` ตามสเปก ICS.
+
+        Args:
+            text: เนื้อหา ICS ทั้งไฟล์
+
+        Returns:
+            dict[date, str]: วันหยุด → ชื่อ (ค่าว่างถ้าแกะไม่ได้เลย)
+        """
+        unfolded = re.sub(r'\r?\n[ \t]', '', text)  # คลาย line folding
+        out = {}
+        start_raw = summary = None
+        for line in unfolded.splitlines():
+            if line.startswith('DTSTART'):
+                m = re.search(r'(\d{8})', line)
+                start_raw = m.group(1) if m else None
+            elif line.startswith('SUMMARY'):
+                summary = line.split(':', 1)[1].strip() if ':' in line else ''
+            elif line.startswith('END:VEVENT'):
+                if start_raw and summary:
+                    try:
+                        d = date(int(start_raw[:4]), int(start_raw[4:6]), int(start_raw[6:8]))
+                    except ValueError:
+                        pass
+                    else:
+                        out[d] = (summary.replace('\\,', ',').replace('\\;', ';')
+                                  .replace('\\\\', '\\'))
+                start_raw = summary = None
+        return out
+
+    @classmethod
+    def holidays(cls, year=None):
+        """วันหยุดนักขัตฤกษ์ของปี (cache 24 ชม.) — คืน {} ถ้าดึงไม่ได้.
+
+        สัญญาแบบเดียวกับ ExchangeRate: ไม่ raise, หน้าเว็บไม่พังถ้า API ล่ม
+        (template จะไม่แสดงบรรทัด ETA เลย).
+
+        Args:
+            year: ปี ค.ศ. (default = ปีปัจจุบัน)
+
+        Returns:
+            dict[date, str]
+        """
+        year = year or timezone.localdate().year
+        key = f'thai-holidays:{year}'
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+        data = {}
+        try:
+            req = urllib.request.Request(cls.HOLIDAY_ICS_URL,
+                                         headers={'User-Agent': 'thammathad-shop/1.0'})
+            with urllib.request.urlopen(req, timeout=6) as resp:
+                parsed = cls.parse_ics(resp.read().decode('utf-8', 'replace'))
+            data = {
+                d: n for d, n in parsed.items()
+                if d.year == year
+                and not any(kw in n for kw in cls.HOLIDAY_SKIP_KEYWORDS)   # ตัด observance
+            }
+        except Exception:
+            data = {}
+        cache.set(key, data, cls.HOLIDAYS_TTL if data else cls.HOLIDAYS_FAIL_TTL)
+        return data
+
+    @classmethod
+    def is_holiday(cls, d):
+        """วันนี้เป็นวันหยุดนักขัตฤกษ์ไหม (เสาร์/อาทิตย์ไม่นับ — ดู next_business_day)."""
+        return d in cls.holidays(d.year)
+
+    @classmethod
+    def next_business_day(cls, start=None, include_start=False):
+        """วันทำการถัดไป — ข้ามเสาร์/อาทิตย์ + วันหยุดนักขัตฤกษ์ไทย.
+
+        ใช้ประเมินกำหนดจัดส่งบนหน้าสำเร็จการสั่งซื้อ.
+
+        Args:
+            start: วันเริ่มนับ (default = วันนี้)
+            include_start: True = นับวันเริ่มด้วยถ้าเป็นวันทำการ
+
+        Returns:
+            date: วันทำการถัดไป (เพดานกันลูป 60 วัน)
+        """
+        d = start or timezone.localdate()
+        if not include_start:
+            d += timedelta(days=1)
+        for _ in range(60):
+            if d.weekday() < 5 and not cls.is_holiday(d):
+                return d
+            d += timedelta(days=1)
+        return d
+
 
 class ExchangeRate:
     """อัตราแลกเปลี่ยน THB→USD จาก external API (open.er-api.com — ฟรี ไม่ต้องใช้ key)
@@ -116,6 +322,136 @@ class ExchangeRate:
         return cached
 
 
+class GeoIP:
+    """ตำแหน่งคร่าว ๆ ของผู้เข้าชมจาก IP (ipwho.is — ฟรี ไม่ต้องใช้ key/สมัคร).
+
+    ⚠️ ความแม่นยำที่ทดสอบจริง (ก.ย. 2026): ระดับ "ประเทศ" เชื่อถือได้ แต่ระดับจังหวัด
+    ของไทยไม่แม่น — ยิง 5 ISP ไทย (AIS/True/CAT/3BB) ได้ region=Bangkok หมด →
+    ใช้เป็น "คำใบ้" ระดับประเทศเท่านั้น **ห้าม prefill จังหวัด/ที่อยู่ผู้ใช้**.
+
+    สัญญาบริการ (แบบเดียวกับ ExchangeRate): เรียกฝั่ง server, cache 24 ชม. ต่อ IP,
+    timeout 4 วิ, ไม่ raise — IP ส่วนตัว/ล่ม → คืน None (template ซ่อนคำใบ้).
+    """
+
+    API_URL = 'https://ipwho.is/{ip}'
+    TTL_SECONDS = 24 * 60 * 60
+    _MISS = object()          # sentinel: "ถามแล้วแต่ไม่ได้" (กันยิงซ้ำถี่)
+    _cache = {}               # ip -> (monotonic_at, payload | _MISS)
+
+    @staticmethod
+    def is_private(ip):
+        """IP private/loopback/invalid ไหม — True = ไม่ต้องถาม API."""
+        if not ip or ip == '::1':
+            return True
+        if ip.startswith('10.') or ip.startswith('127.') or ip.startswith('192.168.'):
+            return True
+        if ip.startswith('169.254.') or ip.startswith('0.'):
+            return True
+        if ip.startswith('172.'):
+            try:
+                return 16 <= int(ip.split('.')[1]) <= 31
+            except (ValueError, IndexError):
+                return True
+        return False
+
+    @classmethod
+    def lookup(cls, ip):
+        """ข้อมูลตำแหน่งโดยประมาณของ IP (cache 24 ชม.).
+
+        Args:
+            ip: IPv4/IPv6 ของผู้เรียก
+
+        Returns:
+            dict | None: {'country_code', 'country', 'region', 'city'} หรือ None
+            (private / API ล่ม / ไม่สำเร็จ — ผู้เรียกต้องรองรับ None เสมอ)
+        """
+        if cls.is_private(ip):
+            return None
+        now = time.monotonic()
+        hit = cls._cache.get(ip)
+        if hit and now - hit[0] < cls.TTL_SECONDS:
+            return None if hit[1] is cls._MISS else hit[1]
+
+        payload = None
+        try:
+            req = urllib.request.Request(cls.API_URL.format(ip=ip),
+                                         headers={'User-Agent': 'thammathad-shop/1.0'})
+            with urllib.request.urlopen(req, timeout=4) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            if data.get('success'):
+                payload = {
+                    'country_code': (data.get('country_code') or '').upper(),
+                    'country': data.get('country') or '',
+                    'region': data.get('region') or '',
+                    'city': data.get('city') or '',
+                }
+        except Exception:
+            payload = None
+        cls._cache[ip] = (now, payload if payload else cls._MISS)
+        return payload
+
+    @classmethod
+    def visitor(cls, request):
+        """ตำแหน่งโดยประมาณของผู้เรียก request นี้ (REMOTE_ADDR — ไม่ใช้ XFF ที่ปลอมได้)."""
+        return cls.lookup(request.META.get('REMOTE_ADDR') or '')
+
+
+class Translate:
+    """แปลข้อความด้วย MyMemory (ฟรี ไม่ต้องใช้ key/สมัคร) — ตัวช่วยฟอร์มสินค้า EN→TH.
+
+    กรณีใช้จริง: สตาฟวางสเปก/คำอธิบายอังกฤษจากผู้ผลิต → กดปุ่มแปลได้คำอธิบายไทย
+    โดยไม่ต้องมี GEMINI_API_KEY (เป็นคู่หูของ GeminiAI ไม่ใช่ตัวแทน).
+
+    สัญญาบริการ: cache 24 ชม. ต่อ (ข้อความ, คู่ภาษา) · timeout 5 วิ · ไม่ raise
+    - จำกัด 500 ตัวอักษร/ครั้ง (โควตาผู้ใช้ไม่ระบุตัวตนของ MyMemory)
+    - ตรวจข้อความเตือน "MYMEMORY WARNING" (โควตาหมด) → คืน '' ให้ view ตอบ error สุภาพ
+    """
+
+    API_URL = 'https://api.mymemory.translated.net/get'
+    TTL_SECONDS = 24 * 60 * 60
+    MAX_CHARS = 500
+
+    @classmethod
+    def text(cls, text, source='en', target='th'):
+        """แปลข้อความ — คืน '' เมื่อใช้ไม่ได้ (ห้าม raise เด็ดขาด).
+
+        Args:
+            text: ข้อความต้นทาง (ตัดหัวท้าย; ยาวเกิน MAX_CHARS = ปฏิเสธ)
+            source: รหัสภาษาต้นทาง (default 'en')
+            target: รหัสภาษาปลายทาง (default 'th')
+
+        Returns:
+            str: ข้อความแปล หรือ '' ถ้าแปลไม่ได้/โควตาหมด/API ล่ม
+        """
+        text = (text or '').strip()
+        if not text or len(text) > cls.MAX_CHARS or source == target:
+            return ''
+        digest = hashlib.sha256(text.encode('utf-8')).hexdigest()[:32]   # cache key (ไม่ใช่ความปลอดภัย)
+        key = f'translate:{source}:{target}:{digest}'
+        cached = cache.get(key)
+        if cached is not None:
+            return cached
+
+        out = ''
+        try:
+            qs = urllib.parse.urlencode({'q': text, 'langpair': f'{source}|{target}'})
+            req = urllib.request.Request(f'{cls.API_URL}?{qs}',
+                                         headers={'User-Agent': 'thammathad-shop/1.0'})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                data = json.loads(resp.read().decode('utf-8'))
+            translated = ((data.get('responseData') or {}).get('translatedText') or '').strip()
+            try:
+                status = int(data.get('responseStatus') or 200)
+            except (TypeError, ValueError):
+                status = 200
+            if translated and status == 200 and 'MYMEMORY WARNING' not in translated.upper():
+                out = translated
+        except Exception:
+            out = ''
+        cache.set(key, out, cls.TTL_SECONDS)
+        return out
+
+
 class PromptPay:
     """QR พร้อมเพย์ — payload มาตรฐาน EMVCo จาก lib promptpay-qr + เรนเดอร์ PNG ด้วย qrcode
     คืน data URI (ไม่ต้องเก็บไฟล์) — เอาไปใส่ <img src> ได้ทันที"""
@@ -152,6 +488,40 @@ class PromptPay:
             if not payload:
                 return None
             img = qrcode.make(payload)
+            buf = io.BytesIO()
+            img.save(buf, format='PNG')
+            return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('ascii')
+        except Exception:
+            return None
+
+
+class QrCode:
+    """QR จากข้อความทั่วไป → data URI (PNG) ด้วยไลบรารี qrcode ฝั่งเซิร์ฟเวอร์.
+
+    ใช้แทนการโหลดไลบรารี QR จาก CDN ภายนอก — ทำงานได้แม้ออฟไลน์ และไม่พึ่ง third-party
+    (dashboard ใช้สร้าง QR "เปิดระบบบนมือถือ" จาก URL จริงที่ build_absolute_uri).
+    """
+
+    @staticmethod
+    def data_uri(text, box_size=4, border=2):
+        """คืน 'data:image/png;base64,...' สำหรับ <img src> หรือ None ถ้าสร้างไม่ได้.
+
+        Args:
+            text: ข้อความ/URL ที่จะเข้ารหัสเป็น QR
+            box_size: ขนาดโมดูล (พิกเซล) — 4 ให้ภาพ ~130px สำหรับ URL สั้น
+            border: ขอบ Quiet zone (โมดูล)
+
+        Returns:
+            str | None
+        """
+        if not text:
+            return None
+        try:
+            import qrcode
+            qr = qrcode.QRCode(box_size=box_size, border=border)
+            qr.add_data(text)
+            qr.make(fit=True)
+            img = qr.make_image(fill_color='black', back_color='white')
             buf = io.BytesIO()
             img.save(buf, format='PNG')
             return 'data:image/png;base64,' + base64.b64encode(buf.getvalue()).decode('ascii')
