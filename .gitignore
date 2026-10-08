@@ -7,6 +7,10 @@ __pycache__/
 *.log
 staticfiles/
 
+# Debug-only snapshots จากการไล่บั๊ก (recipe #9 — ห้องทดสอบ headless จำลองหน้าค้าง)
+# เป็นผลจากการวินิจฉัยชั่วคราว ไม่ใช่ asset ของเว็บ — ไม่ต้อง commit
+myapp/static/test/
+
 # Secrets — ห้าม commit เด็ดขาด (DJANGO_SECRET_KEY / API keys)
 .env
 .env.*
