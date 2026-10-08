@@ -10,6 +10,7 @@ view ทำหน้าที่เรียกใช้ service เท่าน
 - Translate   : แปล EN↔TH (MyMemory — keyless) ช่วยฟอร์มสินค้าเมื่อไม่มี Gemini key
 - Catalog     : แคชหมวดหมู่สินค้า TTL 60 วิ + invalidation ผ่าน signal (models.py)
 - RateLimit   : จำกัดอัตราเรียก endpoint ต่อ IP ด้วย cache (slip OCR)
+- LoginThrottle: กัน brute force หน้า login (3 ชั้น: IP → IP+ชื่อ → ต่อบัญชี)
 - PromptPay   : QR พร้อมเพย์สำหรับหน้าสั่งซื้อสำเร็จ
 - SlipOK      : OCR ตรวจสลิปโอนเงิน (API key ว่าง = ฟีเจอร์ถูกซ่อน + view ซ่อน UI)
 - GeminiAI    : ข้อความช่วยเขียนคำอธิบายสินค้า (Google Gemini REST API)
@@ -117,6 +118,84 @@ class RateLimit:
             # key หมดอายุระหว่างทาง (race) → เริ่มหน้าต่างใหม่
             cache.add(key, 1, window)
             return True
+
+
+class LoginThrottle:
+    """กัน brute force หน้า login (staff + ลูกค้า) — ต่อยอดจาก RateLimit.
+
+    เหตุผลที่แยกจาก RateLimit: หน้า login ต่างจาก endpoint ทั่วไปตรงที่
+    "ห้ามบอกว่ารหัสผิด" (user enumeration / oracle) และการโดนล็อกทั้ง IP
+    ระยะยาวทำให้ผู้ใช้จริงจากห้องเดียวกันโดนผลพลัพธ์ — จึงไล่ 3 ชั้น:
+
+      1. ต่อ IP          : โหลดหนักเกิน (DoS / distributed brute force)
+      2. ต่อ IP+username : เดาเป็นพิเศษรายบัญชี (credential stuffing)
+      3. แตะละบัญชีให้  : ตัวสุดท้ายกัน account takeover แบบเจาะชื่อเดียว
+
+    ทั้ง 3 ชั้นใช้ counter แบบเดียวกับ RateLimit (locmem fixed-window)
+    → ถ้าวันหนึ่งย้ายไป Redis ก็เปลี่ยนที่ service เดียว
+
+    บันไดการตอบ: ทุกชั้นคืน False → 429 + ข้อความเดียวกันหมด (ไม่บอกว่าชั้นไหนโดน)
+    """
+
+    # โควตา/หน้าต่างต่อชั้น (วินาที) — เผื่อผิดพลาดจริงไว้ แต่ไม่ให้ brute force ได้
+    IP_LIMIT, IP_WINDOW = 20, 300        # ต่อ IP: 20 ครั้ง / 5 นาที
+    PAIR_LIMIT, PAIR_WINDOW = 8, 300     # ต่อ IP+ชื่อ: 8 ครั้ง / 5 นาที
+    USER_LIMIT, USER_WINDOW = 5, 900     # ต่อบัญชี: 5 ครั้ง / 15 นาที
+
+    # ข้อความเดียวสำหรับทุกกรณีที่โดนจำกัด — ตั้งใจไม่บอกว่า "ชั้นไหนโดน"
+    # เพื่อไม่ให้ผู้โจมตีเดาเงื่อนไขว่าตัวเองถูกล็อกที่ระดับ IP หรือระดับบัญชี
+    MESSAGE = 'พยายามเข้าสู่ระบบบ่อยเกินไป — กรุณารอสักครู่แล้วลองใหม่'
+
+    @classmethod
+    def check(cls, ip, username):
+        """เช็คว่าการลองครั้งนี้ยังอยู่ในโควตาหรือไม่ (ก่อน authenticate).
+
+        เช็ค 3 ชั้น: IP → IP+ชื่อ → ตัวนับความล้มเหลวของบัญชีนั้น
+
+        Args:
+            ip: REMOTE_ADDR ของผู้เรียก
+            username: ชื่อผู้ใช้ที่กำลังลอง (normalize เป็นตัวพิมพ์เล็ก)
+
+        Returns:
+            bool: True = ยังลองได้, False = โดนจำกัด (ควรตอบ 429)
+        """
+        uname = (username or '').strip().lower() or '-'
+        # short-circuit: โดนชั้นไหนก็จบ ไม่เพิ่มตัวนับของชั้นถัดไป
+        if not RateLimit.allow('login-ip', ip, cls.IP_LIMIT, cls.IP_WINDOW):
+            return False
+        if not RateLimit.allow('login-pair', f'{ip}|{uname}', cls.PAIR_LIMIT, cls.PAIR_WINDOW):
+            return False
+        # ชั้นบัญชี: ดูอย่างเดียว (อ่าน ไม่นับ) — การนับอยู่ฝั่ง fail()
+        return cache.get(f'ratelimit:login-fail-user:{uname}', 0) < cls.USER_LIMIT
+
+    @classmethod
+    def fail(cls, username):
+        """บันคิดความล้มเหลวของบัญชี 1 ครั้ง.
+
+        หมายเหตุเรื่องความปลอดภัย: ชั้น "ต่อบัญชี" นับจาก *ความล้มเหลว* ไม่ใช่จาก
+        จำนวนครั้งที่กด เพราะ (ก) ถ้านับทุกครั้งที่กด ผู้ใช้ที่พิมพ์ถูกแต่กดซ้ำจะโดนล็อกเอง
+        (self-DoS) และ (ข) ผู้โจมตีที่เดาชื่อบัญชีไม่มีอยู่จริงจะไม่ถูกนับเลย —
+        ซึ่งถูกต้อง เพราะเป้าหมายของ account takeover คือบัญชีที่มีอยู่จริง
+        (ชั้น IP ยังคุมการเดาชื่อปลอมนั่นอยู่)
+
+        Args:
+            username: ชื่อผู้ใช้ที่ล้มเหลว
+        """
+        uname = (username or '').strip().lower() or '-'
+        RateLimit.allow('login-fail-user', uname, cls.USER_LIMIT, cls.USER_WINDOW)
+
+    @classmethod
+    def success(cls, username):
+        """ล้างตัวนับความล้มเหลวของบัญชีหลังเข้าสำเร็จ.
+
+        ไม่ล้างชั้น IP/IP+ชื่อโดยเจตนา: ถ้าล้าง ผู้โจมตีที่เพิ่งได้บัญชีมาหนึ่งบัญชี
+        จะเคลียร์ตัวนับทั้งหมดของตัวเองได้ทันที = ทำให้กลไกกัน brute force ทิ้ง
+
+        Args:
+            username: ชื่อผู้ใช้ที่เข้าสำเร็จ
+        """
+        uname = (username or '').strip().lower() or '-'
+        cache.delete(f'ratelimit:login-fail-user:{uname}')
 
 
 class ThaiCalendar:

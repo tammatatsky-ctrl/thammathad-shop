@@ -236,9 +236,32 @@ class ApiTokenAuthTest(TestCase):
 
 
 class ApiDocsTest(TestCase):
-    """OpenAPI schema + Swagger UI (drf-spectacular) — เปิดสาธารณะสำหรับ demo"""
+    """OpenAPI schema + Swagger UI (drf-spectacular) — จำกัดเฉพาะ staff
+
+    เคยเป็น AllowAny: คนนอกเข้าดูโครงสร้าง API ทั้งระบบได้โดยไม่ต้องล็อกอิน
+    (เปิดโครงสร้าง endpoint + พารามิเตอร์ + ชนิดข้อมูลให้คนอื่นนำไปเล่นกับเว็บได้)
+    ตอนนี้ใช้ IsAdminUser — เจ้าหน้าที่ยังดูได้ตามปกติ
+    """
+
+    def setUp(self):
+        self.staff = User.objects.create_user(
+            username='boss', password='pw123456', is_staff=True)
+
+    def test_schema_requires_staff(self):
+        """ยังไม่ล็อกอิน → ไม่เห็น schema"""
+        r = self.client.get('/api/schema/')
+        self.assertIn(r.status_code, (401, 403), 'schema ต้องปิดสาธารณะ')
+
+    def test_schema_denied_for_customer(self):
+        """ลูกค้าที่ล็อกอินแล้วก็ยังเข้าไม่ได้ (ไม่ใช่แค่ไม่ล็อกอิน)"""
+        User.objects.create_user(username='member', password='pw123456')
+        self.client.login(username='member', password='pw123456')
+        r = self.client.get('/api/schema/')
+        self.assertEqual(r.status_code, 403, 'ลูกค้าเข้า schema ไม่ได้')
 
     def test_schema_lists_public_endpoints(self):
+        """staff ดูได้ และ schema ยังครบ endpoint ที่ต้องมี"""
+        self.client.force_login(self.staff)
         r = self.client.get('/api/schema/')
         self.assertEqual(r.status_code, 200)
         body = r.content.decode('utf-8')
@@ -246,9 +269,14 @@ class ApiDocsTest(TestCase):
         self.assertIn('/api/orders/', body)
         self.assertIn('/api/token/', body)
 
-    def test_swagger_ui_ok(self):
+    def test_swagger_ui_ok_for_staff(self):
+        self.client.force_login(self.staff)
         r = self.client.get('/api/docs/')
         self.assertEqual(r.status_code, 200)
+
+    def test_swagger_ui_denied_for_anonymous(self):
+        r = self.client.get('/api/docs/')
+        self.assertIn(r.status_code, (401, 403), 'Swagger UI ต้องปิดสาธารณะ')
 
     def test_api_root_lists_schema_and_docs(self):
         r = self.client.get('/api/')

@@ -40,7 +40,9 @@ from .forms import (
     UserRoleChangeForm,
 )
 from .models import CustomerAddress, CustomerProfile, Employee, Order, OrderItem, Payment, Product
-from .services import Cart, Catalog, GeoIP, GeminiAI, OrderStatusService, PaymentService, PromptPay, QrCode, RateLimit, SlipOK, ThaiCalendar, Translate, Validators
+from .services import (Cart, Catalog, GeoIP, GeminiAI, LoginThrottle, OrderStatusService,
+                      PaymentService, PromptPay, QrCode, RateLimit, SlipOK, ThaiCalendar,
+                      Translate, Validators)
 
 
 # ==================== Permissions: Mixin แทน decorator ====================
@@ -167,9 +169,20 @@ class CustomerLoginView(View):
         username = request.POST.get('username', '').strip().lower()
         password = request.POST.get('password', '')
         remember_me = request.POST.get('remember_me')
+        client_ip = request.META.get('REMOTE_ADDR', '0.0.0.0')
+
+        # กัน brute force ก่อน authenticate — ข้อความเดียวกันทุกกรณีที่โดนจำกัด
+        if not LoginThrottle.check(client_ip, username):
+            return render(request, self.template_name, {
+                'form': form,
+                'error': LoginThrottle.MESSAGE,
+                'next': request.POST.get('next', ''),
+                'v_username': username,
+            }, status=429)
 
         user = authenticate(request, username=username, password=password)
         if not user:
+            LoginThrottle.fail(username)
             return render(request, self.template_name, {
                 'form': form,
                 'error': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
@@ -177,6 +190,7 @@ class CustomerLoginView(View):
                 'v_username': username,
             })
 
+        LoginThrottle.success(username)
         login(request, user)
         if remember_me:
             request.session.set_expiry(1209600)  # 14 วัน
@@ -464,11 +478,26 @@ class StaffLoginView(View):
 
     def post(self, request, *args, **kwargs):
         next_url = self._safe_next()
+        username = request.POST.get('username', '').strip()
+        client_ip = request.META.get('REMOTE_ADDR', '0.0.0.0')
+
+        # กัน brute force ก่อนตรวจรหัสผ่าน — หน้านี้คือประตูหลังของระบบทั้งหมด
+        # ข้อความเดียวกับ CustomerLoginView โดยเจตนา (ไม่บอกว่าโดนชั้นไหน)
+        if not LoginThrottle.check(client_ip, username):
+            return render(request, self.template_name, {
+                'form': StaffLoginForm(request),
+                'next': next_url,
+                'error': LoginThrottle.MESSAGE,
+            }, status=429)
+
         form = StaffLoginForm(request, data=request.POST)
         if form.is_valid():
+            LoginThrottle.success(form.get_user().get_username())
             login(request, form.get_user())
             messages.success(request, 'เข้าสู่ระบบผู้ดูแลเรียบร้อยแล้ว')
             return redirect(next_url or reverse('employee_list'))
+
+        LoginThrottle.fail(username)
         return render(request, self.template_name, {'form': form, 'next': next_url})
 
 

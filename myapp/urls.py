@@ -8,7 +8,7 @@
 from django.urls import include, path
 from django.contrib.auth import views as auth_views
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import IsAdminUser
 from rest_framework.routers import DefaultRouter
 
 from . import api, views
@@ -111,9 +111,11 @@ urlpatterns = [
     path('api/', include(router.urls)),
     path('api/token/', api.TokenObtainThrottledView.as_view(), name='api-token'),
 
-    # API docs (OpenAPI 3) — สาธารณะเพื่อความสะดวกในการส่งงาน/demo
-    # (production จริงควรจำกัดสิทธิ์ เช่น IsAdminUser หรือปิดใน DEBUG=False)
-    path('api/schema/', SpectacularAPIView.as_view(permission_classes=[AllowAny]), name='api-schema'),
-    path('api/docs/', SpectacularSwaggerView.as_view(url_name='api-schema',
-                                                     permission_classes=[AllowAny]), name='api-docs'),
+    # API docs (OpenAPI 3) — จำกัดเฉพาะ staff (เคยเป็น AllowAny ทุกคนเข้าดูได้
+    # = เปิดโครงสร้าง endpoint/พารามิเตอร์ทั้งระบบให้คนนอกทั่วไปแบบไม่ต้องล็อกอิน)
+    # เจ้าหน้าที่ (teacher) ยังดูได้ตามปกติสำหรับตรวจงาน/ส่งอาจารย์
+    path('api/schema/', SpectacularAPIView.as_view(
+        permission_classes=[IsAdminUser]), name='api-schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(
+        url_name='api-schema', permission_classes=[IsAdminUser]), name='api-docs'),
 ]

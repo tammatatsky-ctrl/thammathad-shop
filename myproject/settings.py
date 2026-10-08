@@ -12,7 +12,9 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 from pathlib import Path
 
+import base64
 import os
+import sys
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -23,16 +25,43 @@ except ImportError:
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Secrets: env variable มาก่อน (บน PythonAnywhere ตั้งใน Web tab → Environment variables)
-# fallback เป็นค่า dev เพื่อไม่ให้เดโ่ของโปรเจกต์พัง
-SECRET_KEY = os.environ.get(
-    'DJANGO_SECRET_KEY',
-    'django-insecure-7%)74gdjj*4po9#p-#4!biy!vjb$di3br^67@l!xt(&sgvyj!9',
-)
+# ==================== Secrets & DEBUG — fail-closed (ห้ามหลุดตอน deploy) ====================
+# บันไดทั้งระบบ: production ต้องมี env เสมอ ถ้าไม่มีจะ error ตอน boot แทนที่จะรันด้วยค่าไม่ปลอดภัย
+#
+#   production  → ตั้ง env: DJANGO_SECRET_KEY + DJANGO_DEBUG=0
+#   dev         → มี .env (ไฟล์นี้ถูก gitignore) ที่มี DJANGO_DEBUG=1 และ SECRET_KEY สำหรับ dev
+#
+# เหตุผลที่ default เป็น 'ปิด' (ไม่ใช่ 'เปิด' อย่างเดิม):
+#   1. DEBUG=True เผย settings ทั้งหมดรวม GEMINI_API_KEY บนหน้า error สีเหลือง
+#   2. hardening ทั้ง 7 ข้อ (SSL/cookie/HSTS/X-Frame/nosniff) อยู่ใต้ `if not DEBUG` → ไม่ทำงาน
+#   3. เดิม default='1' แปลว่า "ลืมตั้ง env = รั่ว" ซึ่งเป็น fail-open — ตอนนี้เป็น fail-closed แล้ว
+#
+# บันทึกบั๊ก: recipe เดิมบอกให้ตั้ง DJANGO_DEBUG=0 ตอน deploy แต่ default เป็น 1
+# = ถ้าลืม = รั่วโดยไม่รู้ตัว ไม่ใช่ error → ตอนนี้ boot ไม่ได้ ต้องตั้งให้ถูก
+_DEBUG_ENV = os.environ.get('DJANGO_DEBUG', '').strip().lower()
+DEBUG = _DEBUG_ENV in {'1', 'true', 'yes', 'on'}
 
-# SECURITY WARNING: ห้าม DEBUG=True บน production จริง — หน้า error สีเหลือง
-# จะโชว์ settings ทั้งหมด รวมถึง GEMINI_API_KEY! ก่อนใช้งานจริงตั้ง env DJANGO_DEBUG=0
-DEBUG = os.environ.get('DJANGO_DEBUG', '1') != '0'
+# SECRET_KEY: ไม่มีค่า dev ฝังในโค้ดอีกแล้ว (เคยเป็น hardcoded dev key ที่ commit ไปแล้ว =
+# ใครก็ forge cookie ได้ถ้า prod ลืมตั้ง env) — บังคับให้ตั้งจริง
+_SECRET_ENV = os.environ.get('DJANGO_SECRET_KEY', '').strip()
+
+# `manage.py test` บังคับ DEBUG=False เสมอ (Django test runner) — แต่เป็นการรันในเครื่อง
+# ที่ไม่มี env ผู้ใช้ จึงต้องไม่พังตอนเทสต์ จึงแยกกรณีนี้ออกมาชัดเจน
+_RUNNING_TESTS = 'test' in sys.argv
+
+if not _SECRET_ENV:
+    if DEBUG or _RUNNING_TESTS:
+        # dev / เทสต์ — สร้างค่าชั่วคราวให้รันได้ (เปลี่ยนทุกครั้งที่ restart
+        # = session เดิมหมดอายุ แต่ไม่มีค่าให้หลุดขึ้น git)
+        _SECRET_ENV = 'dev-only-' + base64.b32encode(os.urandom(30)).decode()
+    else:
+        raise RuntimeError(
+            'ต้องตั้ง env DJANGO_SECRET_KEY เมื่อ DJANGO_DEBUG=0 '
+            '(PythonAnywhere → Web tab → Environment variables). '
+            'สร้างค่าด้วย: python -c "from django.core.management.utils import '
+            'get_random_secret_key as k; print(k())"'
+        )
+SECRET_KEY = _SECRET_ENV
 
 ALLOWED_HOSTS = ['127.0.0.1', 'localhost', 'tammatat.pythonanywhere.com']
 
@@ -202,7 +231,11 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 # ==================== Production hardening (ทำงานเฉพาะตอน DEBUG=False) ====================
 if not DEBUG:
-    SECURE_SSL_REDIRECT = True            # บังคับ https ทุก request
+    # `manage.py test` ก็เข้าเงื่อนไขนี้ (test runner บังคับ DEBUG=False) แต่ Django test
+    # client ยิง http:// เสมอ → SECURE_SSL_REDIRECT จะตอบ 301 ทุก request ทำให้เทสต์
+    # ที่ต้องการ status จริง (200/403/429) พังหมด — ปิดเฉพาะตอนรันเทสต์
+    if not _RUNNING_TESTS:
+        SECURE_SSL_REDIRECT = True        # บังคับ https ทุก request
     SESSION_COOKIE_SECURE = True          # cookie session ส่งผ่าน https เท่านั้น
     CSRF_COOKIE_SECURE = True
     SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30   # 30 วัน — browser จำใช้ https เอง
