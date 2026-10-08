@@ -31,10 +31,10 @@ myapp/
                     CustomerProfile, CustomerAddress + custom QuerySets/Managers
   views.py          ~1400 lines, all CBV (50+ classes), StaffRequiredMixin for auth
   urls.py           70 lines, all .as_view() routes
-  services.py       13 service classes: Catalog, RateLimit, ThaiCalendar,
-                    ExchangeRate, GeoIP, Translate, PromptPay, SlipOK,
-                    GeminiAI, Validators, OrderStatusService, PaymentService, Cart
-                    OrderStatusService, PaymentService
+  services.py       14 service classes: Cart, Catalog, RateLimit, LoginThrottle,
+                    ThaiCalendar, ExchangeRate, GeoIP, Translate, PromptPay,
+                    QrCode, SlipOK, GeminiAI, Validators, OrderStatusService,
+                    PaymentService
   api.py            DRF ViewSets (products read-only, orders read-only, employees CRUD)
   serializers.py    DRF serializers
   forms.py          EmployeeForm, StaffLoginForm
@@ -105,12 +105,13 @@ python manage.py collectstatic       # Collect to staticfiles/
 - `/api/employees/` — CRUD (staff only)
 - `/api/token/` — obtain auth token (POST) + **throttle 10 ครั้ง/นาที/IP** (`TokenObtainThrottledView`)
 - `/api/categories/` — category list
-- `/api/schema/` + `/api/docs/` — OpenAPI 3 (drf-spectacular) + Swagger UI (เปิดสาธารณะสำหรับ demo; production ควรจำกัดสิทธิ์)
+- `/api/schema/` + `/api/docs/` — OpenAPI 3 (drf-spectacular) + Swagger UI · **IsAdminUser** (เคยเป็น AllowAny = เปิดโครงสร้าง API ทั้งระบบให้คนนอกดู)
 - `/payment/slip/` (AJAX ภายในที่เปิดสาธารณะ) — throttle 10 ครั้ง/นาที/IP ผ่าน `RateLimit` service (`services.py`)
 - Auth: Session (browser) or Token (`Authorization: Token xxx`)
 - `DEFAULT_PERMISSION_CLASSES = IsAuthenticated` (fail-safe ใน settings.py) — view ใหม่ที่ลืมระบุ permission จะถูกล็อกก่อน; view สาธารณะ (products/categories/api root) ระบุ `AllowAny` เองอยู่แล้ว
 - `/api/orders/` prefetch `items__product` — กัน N+1 จาก `product_name` (`source='product.name'`); วัดได้ 4 queries คงที่ต่อหน้า (COUNT + orders + items + products)
-- เทสต์ API: `myapp/tests/test_api.py` (23 เทสต์) + `test_ratelimit.py` (4) + `test_ajax_convention.py` (8) + `test_external_apis.py` (23 keyless APIs) — ระวัง gotcha ของ Django 6.0 test client (Bug Recipe #10)
+- เทสต์ API: `myapp/tests/test_api.py` + `test_ratelimit.py` + `test_ajax_convention.py` + `test_external_apis.py` — ระวัง gotcha ของ Django 6.0 test client (Bug Recipe #10)
+- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron)
 
 ### External Integrations (services.py)
 
@@ -297,6 +298,50 @@ Copy-Item "myapp\static\js\effects\*.js" "staticfiles\js\effects\" -Force
 
 ## Security Notes
 
+### Fail-closed (settings.py) — ลืมตั้ง env = พังเห็นชัด ไม่ใช่รั่วเงียบ ๆ
+
+| ค่า | dev (เครื่อง) | production (PythonAnywhere) |
+|---|---|---|
+| `DJANGO_DEBUG` | `1` ใน `.env` | **`0` ต้องตั้งใน Web tab** |
+| `DJANGO_SECRET_KEY` | ค่า dev ใน `.env` | **ค่าสุ่มใหม่ของ production** |
+
+- `DEBUG` **ไม่มี default เป็นเปิด** — เดิมเป็น `default='1'` (fail-open) ซึ่งแปลว่า "ลืมตั้ง env = หน้า error สีเหลืองโชว์ `GEMINI_API_KEY` + hardening 7 ข้อที่อยู่ใต้ `if not DEBUG` ไม่ทำงาน" และ**ระบบยังรันได้ปกติจึงไม่มีอาการให้สังเกต**
+- `SECRET_KEY` ไม่มี dev key ฝังในโค้ดแล้ว (เคย hardcode + commit ไปแล้ว = ใครก็อ่านได้จาก git และ forge cookie ได้ถ้า prod ลืมตั้ง env) → production ที่ไม่มี key จะ `RuntimeError` ตอน boot
+- สร้าง key: `python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"`
+- Side effect ที่ต้องรู้: `SECURE_SSL_REDIRECT` ถูกปิด**เฉพาะตอนรันเทสต์** (`_RUNNING_TESTS`) เพราะ test client ยิง `http://` ถ้าไม่ปิดจะได้ 301 ทุก request ทำให้เทสต์ที่ต้องการ 200/403/429 พังหมด
+
+### กัน brute force หน้า login — `LoginThrottle` (services.py)
+
+`/api/token/` มี throttle แต่ `/staff/login/` + `/account/login/` เคยไม่มีเลย → 3 ชั้น:
+
+| ชั้น | โควตา | กันอะไร |
+|---|---|---|
+| ต่อ IP | 20 / 5 นาที | DoS / distributed brute force |
+| IP + ชื่อ | 8 / 5 นาที | credential stuffing |
+| ต่อบัญชี | 5 / 15 นาที | account takeover แบบเจาะชื่อเดียว |
+
+- ชั้นบัญชีนับจาก **ความล้มเหลว** ไม่ใช่จำนวนครั้งที่กด (ผู้ใช้ที่พิมพ์ถูกแต่กดซ้ำต้องไม่ถูกล็อกเอง)
+- เข้าสำเร็จ → ล้างเฉพาะชั้นบัญชี · **ไม่ล้างชั้น IP** (ถ้าล้าง ผู้โจมตีเคลียร์ตัวนับตัวเองได้ทันที)
+- ทุกกรณีที่โดนจำกัดตอบข้อความเดียวกัน (`LoginThrottle.MESSAGE`) — ห้ามแยกข้อความ ไม่งั้นผู้โจมตีเรียนรู้ว่าโดนชั้นไหน
+
+### สำรองฐานข้อมูล — `manage.py backup_db`
+
+SQLite ไฟล์เดียว = ข้อมูลทั้งหมดอยู่ไฟล์เดียว ถ้าหายกู้ไม่ได้ → ต้องรันสำรอง
+
+```bash
+python manage.py backup_db --verify    # เก็บที่ backups/db-YYYYmmdd-HHMMSS.sqlite3 + ตรวจ integrity
+python manage.py backup_db --keep 7    # ลบไฟล์เก่าเกิน 7
+```
+
+- ใช้ **sqlite3 online backup** (`Connection.backup()`) ไม่ใช่ `shutil.copy` → ได้ consistent snapshot แม้มี transaction กำลังวิ่ง
+- ตรวจไฟล์ต้นฉบับก่อนเชื่อมต่อ กัน Django สร้างไฟล์ว่างให้เองแล้วสำรองของว่าง
+- cron บน PythonAnywhere (พิมพ์มาให้ในผลลัพธ์ของคำสั่ง):
+  `0 2 * * * .../bin/python ~/my_django_app/manage.py backup_db >> ~/my_django_app/backups/cron.log 2>&1`
+- `backups/` อยู่ใน `.gitignore` + อยู่นอก `staticfiles/` (ไม่โดน collectstatic ไปด้วย)
+
+### อื่น ๆ
+
+- `/api/docs/` + `/api/schema/` = **IsAdminUser** (เคย AllowAny = เปิดโครงสร้าง API ทั้งระบบให้คนนอกดู)
 - **Secrets via env vars**: `DJANGO_SECRET_KEY`, `GEMINI_API_KEY`, `SLIPOK_API_KEY` — loaded via `os.environ.get()` + python-dotenv `.env` file.
 - **Production hardening** in settings.py: `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_HSTS_SECONDS` — activates when `DEBUG=False`.
 - **Cart/logout POST-only**: GET requests to `/cart/add/`, `/cart/remove/`, `/cart/update/`, `/staff/logout/`, `/account/logout/` return 405 Method Not Allowed.

@@ -106,3 +106,48 @@ workon django-shop
 cd ~/my_django_app
 python manage.py makemigrations && python manage.py migrate
 ```
+
+---
+
+## ⚠️ Environment variables (ต้องตั้ง — ไม่งั้นเว็บจะไม่ขึ้น)
+
+`settings.py` เป็น **fail-closed**: production ที่ตั้ง env ไม่ครบจะ **error ตอน boot**
+โดยเจตนา (ดีกว่ารันแล้วรั่ว) ตั้งในแท็บ **Web → Environment variables**:
+
+| ตัวแปร | ค่า | หมายเหตุ |
+|---|---|---|
+| `DJANGO_DEBUG` | `0` | ถ้าเป็นอย่างอื่น = หน้า error สีเหลืองโชว์ settings ทั้งหมดรวม API keys |
+| `DJANGO_SECRET_KEY` | ค่าสุ่ม | สร้างด้วย `python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"` |
+| `GEMINI_API_KEY` | key ของ production | ว่างได้ = ฟีเจอร์ช่วยเขียนคำอธิบายสินค้าจะถูกซ่อน |
+| `SLIPOK_API_KEY` | key ของ production | ว่างได้ = ฟีเจอร์ OCR สลิปจะถูกซ่อน |
+
+> ⚠️ ไม่มี `.env` บน PythonAnywhere (ไฟล์นั้นถูก gitignore และไม่ควรอยู่บน server)
+> ค่าทั้งหมดต้องมาจาก Environment variables ในแท็บ Web เท่านั้น
+
+---
+
+## สำรองฐานข้อมูล (ทำทันทีหลัง setup เสร็จ)
+
+ระบบใช้ SQLite ไฟล์เดียว = ข้อมูลออเดอร์/ยอดเงิน/ลูกค้าทั้งหมดอยู่ไฟล์เดียว
+ถ้าไฟล์เสีย = กู้ไม่ได้ ตั้ง cron สำรองทุกคืน:
+
+```bash
+workon django-shop
+cd ~/my_django_app
+python manage.py backup_db --verify     # ทดสอบว่ารันได้ก่อน
+```
+
+แล้วตั้ง cron ในแท็บ **Tasks** (หรือ cron ของ PythonAnywhere):
+
+```
+0 2 * * *   /home/tammatat/.virtualenvs/django-shop/bin/python /home/tammatat/my_django_app/manage.py backup_db >> /home/tammatat/my_django_app/backups/cron.log 2>&1
+```
+
+**กู้คืน** เมื่อเกิดปัญหา:
+
+```bash
+cd ~/my_django_app
+cp backups/db-YYYYmmdd-HHMMSS.sqlite3 db.sqlite3    # ไฟล์เดิมทับทิ้งได้เลย
+```
+
+> ไฟล์สำรองเก็บที่ `~/my_django_app/backups/` เก็บล่าสุด 7 ไฟล์ (ลบเก่าอัตโนมัติ)
