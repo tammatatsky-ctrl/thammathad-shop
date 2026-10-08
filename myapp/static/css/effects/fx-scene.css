@@ -1,0 +1,23 @@
+/* ===== FX MOD CSS: scene (Depth Hero — tilt ตามเมาส์ + ถอยตาม scroll) ===== */
+/* มีไว้กับ .hero-card-wrap ของหน้าแรก (index) เท่านั้น — transform วางที่ wrapper นี้
+   ไม่ชน .liquid-glass ที่ fx-glass.js เจ้าของ (มันเขียน .style.transform เอง).
+   Vars ตั้งจาก fx-scene.js (เจ้องาน): --scene-rx/-ry (องศา tilt), --scene-scroll (0..1),
+   ส่วนแสงเมาส์บน .hero-glass-layer ผูก vars ของ fx-glass (ไม่ทำงานซ้ำ).
+   Tilt = interaction (user) → ไม่ถูก gate ⚡; scroll depth = ผลของ user เช่นกัน. */
+.hero-card-wrap {
+  position: relative;
+  z-index: 2;
+  perspective: 1200px;
+  will-change: transform;
+  transform: perspective(1200px) rotateX(var(--scene-rx, 0deg))
+    rotateY(var(--scene-ry, 0deg))
+    translate3d(
+      0,
+      calc(var(--scene-scroll, 0) * -26px),
+      0
+    )
+    scale(calc(1 - var(--scene-scroll, 0) * 0.018));
+}
+@media (max-width: 768px) {
+  .hero-card-wrap { perspective: 900px; }
+}

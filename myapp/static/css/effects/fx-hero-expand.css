@@ -1,0 +1,393 @@
+/* ===================================================================== */
+/*  THAMMATHAD SHOP — FX MOD: hero-expand                                */
+/*  Scroll Expansion Hero (Apple Liquid Glass Edition)                  */
+/*  Inspired by 21st.dev / Arunachalam component, transpiled to native   */
+/*  GPU-accelerated CSS + Vanilla JS.                                   */
+/* ===================================================================== */
+
+/* ---- Outer Track: กำหนดระยะทาง Scroll เพื่อขับเคลื่อน Progress ---- */
+.scroll-expand-track {
+  position: relative;
+  width: 100%;
+  height: 220vh;
+  margin: 0;
+  padding: 0;
+}
+
+/* ---- Sticky Stage: ตรึงหน้าจอขณะทำการ Scroll ขยายการ์ด ---- */
+.scroll-expand-stage,
+.hero-shell.scroll-expand-stage {
+  position: sticky;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  isolation: isolate;
+  z-index: 2;
+  --expand-progress: 0;
+}
+
+/* ---- Ambient Background & Grid Fade ---- */
+.scroll-expand-stage .liquid-mesh,
+.scroll-expand-stage .spatial-grid-plane {
+  opacity: calc(1 - var(--expand-progress, 0) * 0.45);
+  transition: opacity 0.2s ease-out;
+}
+
+/* ---- Split Headline Typography ---- */
+.expand-title-wrap {
+  position: absolute;
+  top: clamp(14%, 18vh, 22%);
+  left: 0;
+  width: 100%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(1.2rem, 3vw, 2.5rem);
+  z-index: 12;
+  pointer-events: none;
+  user-select: none;
+  padding: 0 1rem;
+}
+
+.expand-title-part {
+  font-size: clamp(2.4rem, 5.5vw, 4.8rem);
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.03em;
+  color: var(--ink, #1d1d1f);
+  text-shadow: 0 2px 18px rgba(255, 255, 255, 0.85);
+  will-change: transform, opacity;
+  white-space: nowrap;
+}
+
+html[data-theme="dark"] .expand-title-part {
+  color: #f5f5f7;
+  text-shadow: 0 4px 24px rgba(0, 0, 0, 0.9), 0 0 32px rgba(0, 113, 227, 0.3);
+}
+
+/* คำแรกเลื่อนออกซ้ายตาม Progress */
+.expand-title-left {
+  transform: translate3d(calc(var(--expand-progress, 0) * -35vw), 0, 0);
+  opacity: calc(1 - var(--expand-progress, 0) * 1.7);
+}
+
+/* คำหลังเลื่อนออกขวาตาม Progress */
+.expand-title-right {
+  transform: translate3d(calc(var(--expand-progress, 0) * 35vw), 0, 0);
+  opacity: calc(1 - var(--expand-progress, 0) * 1.7);
+}
+
+/* ---- Expanding Media Card (Apple Liquid Glass Masterpiece) ---- */
+.expand-media-card {
+  position: relative;
+  z-index: 10;
+  border-radius: clamp(20px, calc(44px - var(--expand-progress, 0) * 20px), 44px);
+  width: clamp(320px, calc(340px + var(--expand-progress, 0) * 800px), 94vw);
+  height: clamp(420px, calc(440px + var(--expand-progress, 0) * 220px), 82vh);
+  margin-top: clamp(2rem, 4.5vh, 3.5rem);
+  max-width: 95vw;
+  max-height: 84vh;
+  box-sizing: border-box;
+  overflow: hidden;
+  isolation: isolate;
+  contain: layout paint style;
+  transform: translateZ(0);
+  will-change: width, height, border-radius, box-shadow;
+  /* Liquid Glass Specular & Drop Shadow */
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.85),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.2),
+    0 24px 64px -12px rgba(0, 0, 0, calc(0.25 + var(--expand-progress, 0) * 0.2)),
+    0 0 0 1px rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  transition: box-shadow 0.3s ease;
+}
+
+html[data-theme="dark"] .expand-media-card {
+  box-shadow:
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.35),
+    inset 0 -1.5px 2px rgba(0, 0, 0, 0.45),
+    0 32px 80px -16px rgba(0, 0, 0, 0.75),
+    0 0 0 1px rgba(255, 255, 255, 0.15);
+  background: rgba(20, 20, 25, 0.4);
+}
+
+/* Chromatic Liquid Glass Rim Border */
+.expand-media-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.8) 0%,
+    rgba(147, 197, 253, 0.45) 30%,
+    rgba(99, 102, 241, 0.35) 65%,
+    rgba(255, 255, 255, 0.7) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* Media Visual: ภาพหรือวิดีโอมาสเตอร์พีซ */
+.expand-media-visual {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.expand-media-visual img,
+.expand-media-visual video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  transform: scale(calc(1.08 - var(--expand-progress, 0) * 0.08));
+  transition: transform 0.1s linear;
+  will-change: transform;
+}
+
+/* Gradient Vignette เพื่อให้อ่านตัวหนังสือได้อย่างคมชัด */
+.expand-media-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.4) 0%,
+    rgba(0, 0, 0, 0.15) 40%,
+    rgba(0, 0, 0, 0.72) 100%
+  );
+  pointer-events: none;
+}
+
+/* Lens Specular Reflection Layer */
+.expand-media-lens {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 3;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  background: radial-gradient(
+    800px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
+    rgba(255, 255, 255, calc(var(--spec-o, 0.3) * 0.35)) 0%,
+    rgba(147, 197, 253, calc(var(--bloom-o, 0.2) * 0.18)) 35%,
+    transparent 70%
+  );
+}
+
+/* Content Container Inside Card */
+.expand-card-content {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(1.25rem, 3.5vw, 2.75rem);
+  color: #ffffff;
+  pointer-events: auto;
+}
+
+/* Card Top Bar */
+.expand-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.expand-edition-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 980px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  background: rgba(255, 255, 255, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: #ffffff;
+  text-transform: uppercase;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.expand-price-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 980px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  background: rgba(0, 113, 227, 0.85);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(0, 113, 227, 0.4);
+  backdrop-filter: blur(8px);
+}
+
+/* Card Bottom Info */
+.expand-card-bottom {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.expand-card-title {
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-weight: 700;
+  line-height: 1.2;
+  margin: 0;
+  color: #ffffff;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+.expand-card-desc {
+  font-size: clamp(0.95rem, 1.4vw, 1.1rem);
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 0;
+  max-width: 640px;
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  opacity: calc(var(--expand-progress, 0) * 1.5);
+  transition: opacity 0.2s ease;
+}
+
+/* Action Buttons inside Card */
+.expand-card-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.expand-card-actions .btn-liquid-glass {
+  opacity: calc(var(--expand-progress, 0) * 1.6);
+  transition: opacity 0.2s ease;
+}
+
+/* ---- Scroll Down Prompt Affordance ---- */
+.expand-scroll-prompt {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  z-index: 15;
+  color: var(--ink-soft, #6e6e73);
+  font-size: 0.85rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  opacity: calc(1 - var(--expand-progress, 0) * 3);
+  transition: opacity 0.2s ease-out;
+  user-select: none;
+}
+
+html[data-theme="dark"] .expand-scroll-prompt {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.expand-scroll-prompt i {
+  font-size: 1.25rem;
+  animation: promptBounce 2s ease-in-out infinite;
+}
+
+@keyframes promptBounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(6px); }
+}
+
+/* ---- Mobile Responsiveness ---- */
+@media (max-width: 768px) {
+  .scroll-expand-track {
+    height: 180vh;
+  }
+  .expand-title-wrap {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .expand-title-left {
+    transform: translate3d(calc(var(--expand-progress, 0) * -32vw), 0, 0);
+  }
+  .expand-title-right {
+    transform: translate3d(calc(var(--expand-progress, 0) * 32vw), 0, 0);
+  }
+  .expand-media-card {
+    width: clamp(280px, calc(290px + var(--expand-progress, 0) * 600px), 94vw);
+    height: clamp(380px, calc(390px + var(--expand-progress, 0) * 180px), 80vh);
+  }
+  .expand-card-desc {
+    display: none;
+  }
+}
+
+/* ---- Motion Toggle Gate (⚡ html[data-motion="off"]) ---- */
+/* HARD RULE: เมื่อผู้ใช้ปิด Motion ปลดล็อคความสูงและแสดงการ์ดขยายเต็มที่ ไม่ hijack scroll */
+html[data-motion="off"] .scroll-expand-track {
+  height: auto !important;
+  padding-bottom: 2rem;
+}
+
+html[data-motion="off"] .scroll-expand-stage {
+  position: relative !important;
+  height: auto !important;
+  min-height: 80vh !important;
+  padding: 4rem 1rem !important;
+}
+
+html[data-motion="off"] .expand-title-wrap {
+  position: static !important;
+  transform: none !important;
+  margin-bottom: 2rem !important;
+  flex-direction: column !important;
+  gap: 0.5rem !important;
+}
+
+html[data-motion="off"] .expand-title-left,
+html[data-motion="off"] .expand-title-right {
+  transform: none !important;
+  opacity: 1 !important;
+}
+
+html[data-motion="off"] .expand-media-card {
+  width: min(1040px, 94vw) !important;
+  height: min(560px, 72vh) !important;
+  border-radius: 28px !important;
+}
+
+html[data-motion="off"] .expand-scroll-prompt {
+  display: none !important;
+}

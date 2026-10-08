@@ -1,0 +1,37 @@
+/* ===== FX MOD: drag (ลาก/สปริง/สแนป) — CSS สำหรับ drag-relevant surfaces ===== */
+/**
+ * สว่างให้กับ surface ที่ข้อมูล/layout ถูกดึงด้วย POINTER (ดู fx-drag.js):
+ *  - คลาส .drag-surface : พื้นที่ที่จับได้ (cursor + touch highlight) — mouse ได้เกือบทุกที่
+ *  - คลาส .drag-v-track/.drag-h-track : ลากแนวตั้ง/แนวนอน (cursor line)
+ *  - transform ลากทั้งหมดเขียนลง style.inline โดย fx-drag.js — ไฟล์นี้ให้ "กฎการแสดง"
+ *    กับ transition ตอน spring กลับ (ปล่อยมือ → ค่อย ๆ กลับเรียบ) เพื่อไม่ให้ตาเห็นกระโดด.
+ *
+ * หมายเหตุเรื่อง motion gate: การลากเป็น "interaction ที่ผู้ใช้เริ่มเอง" — จะไม่ถูกปิดด้วย
+ * ⚡ (off = หยุดเฉพาะ animation อัตโนมัติ) แต่ spring/สะดุด (ที่เกิดหลังปล่อยมือ) จะเป็น
+ * นุ่ม ๆ กับข้อมูลนำเข้า — ดู fx-drag.js สำหรับรายละเอียด gate ฝั่ง script.
+ */
+.drag-surface { cursor: grab; touch-action: pan-y; }
+.drag-surface.drag-active, .drag-surface:active { cursor: grabbing; }
+.drag-h-track {
+  cursor: ew-resize;
+  touch-action: pan-y; /* ปล่อยการ scroll แนวตั้งผ่านได้ แต่แกนนอนเราจัดการเอง */
+}
+.drag-v-track {
+  cursor: ns-resize;
+  touch-action: pan-x; /* ปล่อยการ scroll แนวนอนผ่านได้ แกนตั้งเราจัดการเอง */
+}
+/* ระหว่างกำลังลาก: ลด pointer-events ให้ลูก (กัน hover/click ของเด็กไปรบกวน) + นุ่มลื่น */
+.drag-active { user-select: none; -webkit-user-select: none; }
+.drag-active * { pointer-events: none; }
+/* spring กลับ: ทุก element ที่ mod เขียน transform ไปก่อนหน้านี้จะสลับ class นี้ */
+.drag-springing { transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
+/* ปลาย scroll ของ carousel rail: เงาจางบอก "ยังมีด้านนี้ให้เลื่อน" */
+.rail-edge {
+  position: absolute; top: 0; bottom: 0; width: 64px; pointer-events: none;
+  opacity: 0; transition: opacity 0.4s var(--ease-apple); z-index: 2;
+}
+.rail-edge--l { left: 0; background: linear-gradient(90deg, rgba(0,0,0,0.16), transparent); }
+.rail-edge--r { right: 0; background: linear-gradient(270deg, rgba(0,0,0,0.16), transparent); }
+html[data-theme="dark"] .rail-edge--l { background: linear-gradient(90deg, rgba(0,0,0,0.4), transparent); }
+html[data-theme="dark"] .rail-edge--r { background: linear-gradient(270deg, rgba(0,0,0,0.4), transparent); }
+.rail-edge.is-visible { opacity: 1; }

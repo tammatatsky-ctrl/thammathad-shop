@@ -1,0 +1,122 @@
+/* ===== FX MOD CSS: halo (แสงเมาส์หลังการ์ด — backlight) ===== */
+/* ไฟเมาส์ย้ายจากบนผิวการ์ด (specular เดิม) มาเป็น "แสงทะลุหลังการ์ด" โดยวาดบน wrapper
+   (.halo-host = .col ของการ์ด หรือ .hero-shell ของ hero) —
+   เหตุผล: ตัวการ์ดมี contain:paint/will-change/transform สร้าง stacking context ลูกในตัวการ์ด
+   วาดล้นออกนอกขอบไม่ได้ ต้องวาดบน wrapper แล้ว filter: blur ยืดออกจาก box เอง.
+   z:-1 = ใต้เนื้อหาการ์ด (z:0) และใต้แก้ว hero (z:2) เสมอ — แสงออกถูกหลังทุกกรณี.
+   vars --hx/--hy/--hs/--hb mirror มาจากตัวการ์ด (--mouse-x/--mouse-y/--spec-o/--bloom-o)
+   โดย FX mod 'halo' (js/effects/fx-halo.js) — แสงนี้ไม่ gate กับปุ่ม ⚡ (เหมือน specular เดิม) */
+.halo-host {
+  position: relative;
+}
+.halo-host::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 28px;
+  background:
+    radial-gradient(
+      440px circle at var(--hx, 50%) var(--hy, 50%),
+      var(--halo-core) 0%,
+      rgba(0, 0, 0, 0) 92%
+    ),
+    radial-gradient(
+      760px circle at var(--hx, 50%) var(--hy, 50%),
+      var(--halo-bloom) 0%,
+      rgba(0, 0, 0, 0) 96%
+    );
+  /* filter: blur มีราคา raster ตาม (element size x sigma²) — ลด sigma 38→14px
+     (ใหญ่เป็นภาระเต็ม hero ทุกเฟรมขณะ hover ที่ทำให้ "แสงลากแลค" จริง)
+     เหลือให้ gradient แบบ long-falloff รับงานฟุ้งแทน — ดูใกล้เคียงเดิมแต่เบากว่าเยอะ. */
+  filter: blur(14px);
+  opacity: var(--ho, 0); /* JS เขียน 0..1 (แสงไม่ gate กับปุ่ม ⚡ — เหมือน specular เดิม) */
+  transition: opacity 0.5s var(--ease-apple); /* ค่อย ๆ จาง/ค่อย ๆ ขึ้น — ลื่นตาม hand */
+  will-change: transform;
+}
+html:not([data-theme="dark"]) .halo-host::before {
+  --halo-core: rgba(0, 113, 227, calc(var(--hs, 0) * 0.26));
+  --halo-bloom: rgba(100, 210, 255, calc(var(--hb, 0) * 0.14));
+}
+html[data-theme="dark"] .halo-host::before {
+  --halo-core: rgba(10, 132, 255, calc(var(--hs, 0) * 0.38));
+  --halo-bloom: rgba(100, 210, 255, calc(var(--hb, 0) * 0.24));
+}
+html:not([data-theme]) .halo-host::before {
+  --halo-core: rgba(0, 113, 227, calc(var(--hs, 0) * 0.26));
+  --halo-bloom: rgba(100, 210, 255, calc(var(--hb, 0) * 0.14));
+}
+
+/* ---- neutralize ไฟ metamouse แบบ "บนผิวการ์ด" เดิม: เอา radial แบบ --spec-o/--bloom-o
+       ออกจาก background ตัวการ์ด (the light ย้ายไปหลังแล้ว) — รับเฉพาะ background, ปล่อย border/box-shadow เดิม ---- */
+html .apple-tile {
+  background: var(--gray-bg);
+}
+html[data-theme="dark"] .apple-tile,
+html[data-theme="dark"] .card {
+  background: var(--gray-bg);
+}
+html:not([data-theme="dark"]) .card {
+  /* light ฝั่ง .card ยังรั่ว radial เมาส์จาก theme.css (ไม่มีตัวเทียบฝั่ง light
+     ก่อนหน้า) = repaint ตลอดแม้ settled — flat เหมือน dark. */
+  background: var(--gray-bg) !important;
+}
+html:not([data-theme]) .apple-tile,
+html:not([data-theme]) .card {
+  background: var(--gray-bg) !important;
+}
+/* hero: ปิดแสงสเปคบนผิวแก้ว (อยู่หลังแทน) — .liquid-glass::before ใช้เล็งฉายบนผิวเดิม */
+.liquid-glass::before {
+  display: none !important;
+}
+
+/* ---- ยกกำลังไฟพื้นหลัง (#bgLight ถูกสร้างโดย fx-glass): เดิมจางจน bg ฟรีดู "ตาย"
+       ตอน halo การ์ดแจ่มขึ้นแล้ว — พื้นหลังต้องตอบสนองตามเมาส์เท่ากัน
+       (เป็นแสง → ไม่ gate กับ ⚡ เหมือน halo; ค่า --bg-spec/--bg-bloom มาจาก fx-glass.js
+       ผ่าน applyBgLights เขียนลง inline style ของ #bgLight อยู่แล้ว ไม่แตะ core) ---- */
+html[data-theme="dark"] #bgLight {
+  background:
+    radial-gradient(
+      520px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.2)) 0%,
+      rgba(255, 255, 255, calc(var(--bg-spec, 0) * 0.06)) 40%,
+      transparent 72%
+    ),
+    radial-gradient(
+      1100px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(140, 190, 255, calc(var(--bg-bloom, 0) * 0.1)) 0%,
+      transparent 72%
+    );
+  mix-blend-mode: normal;
+}
+html:not([data-theme="dark"]) #bgLight {
+  background:
+    radial-gradient(
+      520px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(0, 113, 227, calc(var(--bg-spec, 0) * 0.15)) 0%,
+      rgba(0, 113, 227, calc(var(--bg-spec, 0) * 0.05)) 40%,
+      transparent 72%
+    ),
+    radial-gradient(
+      1100px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(64, 148, 255, calc(var(--bg-bloom, 0) * 0.08)) 0%,
+      transparent 72%
+    );
+  mix-blend-mode: normal;
+}
+html:not([data-theme]) #bgLight {
+  background:
+    radial-gradient(
+      520px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(0, 113, 227, calc(var(--bg-spec, 0) * 0.15)) 0%,
+      rgba(0, 113, 227, calc(var(--bg-spec, 0) * 0.05)) 40%,
+      transparent 72%
+    ),
+    radial-gradient(
+      1100px circle at var(--bg-mx, 50%) var(--bg-my, 40%),
+      rgba(64, 148, 255, calc(var(--bg-bloom, 0) * 0.08)) 0%,
+      transparent 72%
+    );
+  mix-blend-mode: normal;
+}

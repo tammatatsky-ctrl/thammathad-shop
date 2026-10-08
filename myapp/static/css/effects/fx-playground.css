@@ -1,0 +1,93 @@
+/* ===== FX MOD: playground (Glass Lab — ลากแสงผ่านผิวแก้ว + การ์ดรับแสง) ===== */
+/**
+ * โครงสร้าง Glass Lab (สร้างใน index.html):
+ *   .lab-shell          : กล่องใหญ่ overflow hidden — host ของออโรร่า/เลนส์ที่ขยับตามนิ้ว
+ *   .lab-stage          : surface ที่จับลากแสง (pointer events — ดู fx-playground.js)
+ *   .lab-aurora         : ลาเยอร์สีที่ขยับตาม --lx/--ly (ตำแหน่งแสง %)
+ *   .lab-glass          : การ์ดแก้วรับแสง — เงา/ไฮไลต์ค่อยๆ ขยับตามแสง
+ *   .lab-card           : เนื้อหาในการ์ด (เพื่อให้ cursor/jest ทำงาน)
+ *
+ * หลัก Liquid Glass: แสงจาก --lx/--ly (เปอร์เซ็นต์ของ stage) ผ่าน CSS var ลงการ์ดทุกใบ
+ * พร้อมกัน → รู้สึกว่า "แหล่งแสงเดียว" ส่องผิวทั้งหมด (เหมือน gương เดียว). และระยะที่แสง
+ * ไปถึงการ์ดแต่ละใบ (--dist0/--dist1/--) จะเปลี่ยนความแรง highlight ตามระยะจริง.
+ */
+.lab-shell {
+  position: relative; overflow: hidden; border-radius: 36px;
+  border: 1px solid var(--gray-border-soft);
+  background:
+    radial-gradient(120% 90% at 30% 0%, rgba(10,132,255,0.10), transparent 60%),
+    var(--surface);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  min-height: 460px;
+  display: grid; place-items: stretch;
+}
+.lab-stage {
+  position: relative; z-index: 2;
+  display: grid; place-items: center;
+  padding: clamp(2rem, 5vw, 3.5rem);
+}
+.lab-aurora {
+  position: absolute; inset: -30%;
+  pointer-events: none;
+  background:
+    radial-gradient(28% 28% at 32% 38%, rgba(10,132,255,0.35), transparent 70%),
+    radial-gradient(24% 24% at 68% 60%, rgba(64,203,255,0.30), transparent 70%),
+    radial-gradient(22% 22% at 50% 20%, rgba(124,58,237,0.28), transparent 70%);
+  filter: blur(28px);
+  opacity: 0.85;
+  transform: translate3d(calc((var(--lx,50) - 50) * 0.6 * 1px * 4), calc((var(--ly,50) - 50) * 0.6 * 1px * 4), 0);
+  transition: transform 0.5s var(--ease-apple);
+}
+/* จุดแสงที่ลากติดนิ้ว — วงกลมเล็กเรืองแสง */
+.lab-light {
+  position: absolute; z-index: 3; width: 140px; height: 140px;
+  border-radius: 50%; pointer-events: none;
+  left: calc(var(--lx,50) * 1%); top: calc(var(--ly,50) * 1%);
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle, rgba(255,255,255,0.55), rgba(10,132,255,0.25) 45%, transparent 70%);
+  mix-blend-mode: screen;
+  box-shadow: 0 0 40px 12px rgba(10,132,255,0.25);
+}
+.lab-cards {
+  position: relative; z-index: 4;
+  display: grid; gap: 1.25rem;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%; max-width: 900px;
+}
+.lab-glass {
+  position: relative;
+  border-radius: 24px; padding: 1.6rem 1.4rem;
+  border: 1px solid var(--gray-border-soft);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 var(--glass-highlight), var(--glass-shadow);
+  backdrop-filter: var(--glass-filter); -webkit-backdrop-filter: var(--glass-filter);
+  overflow: hidden; transition: transform 0.4s var(--ease-apple), box-shadow 0.4s var(--ease-apple);
+}
+/* ไฮไลต์สะท้อนแสงจากตำแหน่ง --lx/--ly บนผิวการ์ด — ผ่าน blend screen ให้อยู่บน */
+.lab-glass::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background:
+    radial-gradient(90px 90px at var(--lx,50%) var(--ly,50%), rgba(255,255,255,0.22), transparent 65%);
+  mix-blend-mode: screen; opacity: 0.75;
+  transition: background 0.3s var(--ease-apple);
+}
+/* ขอบเรืองแสงทิศเดียวกับแสง (rim) */
+.lab-glass::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  border: 1px solid transparent;
+  border-top-color: rgba(255,255,255,0.7);
+  border-left-color: rgba(255,255,255,0.4);
+  opacity: 0.5;
+}
+.lab-glass:hover { transform: translateY(-4px); box-shadow: inset 0 1px 0 var(--glass-highlight), 0 18px 40px rgba(0,0,0,0.15); }
+.lab-glass > * { position: relative; z-index: 2; }
+.lab-ic {
+  font-size: 1.7rem; color: var(--apple-blue); margin-bottom: 0.8rem;
+  display: inline-block;
+}
+.lab-card h5 { font-size: 1.02rem; }
+html[data-theme="dark"] .lab-glass::before { opacity: 0.4; }
+@media (max-width: 768px) {
+  .lab-cards { grid-template-columns: 1fr; }
+  .lab-shell { min-height: auto; }
+}
