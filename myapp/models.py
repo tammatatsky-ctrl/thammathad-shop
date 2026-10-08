@@ -13,6 +13,8 @@ from decimal import Decimal
 from django.conf import settings as dj_settings
 from django.db import models
 from django.db.models import Count, F, Q, Sum
+from django.db.models.signals import post_delete, post_save
+from django.dispatch import receiver
 from django.utils import timezone
 
 
@@ -326,14 +328,15 @@ class OrderQuerySet(models.QuerySet):
         )
 
     def stats(self):
-        """ตัวเลขสรุปออเดอร์: จำนวนใบ/ค้างชำระ/รายได้ (ไม่นับ pending).
+        """ตัวเลขสรุปออเดอร์: จำนวนใบ/ค้างชำระ/ชำระแล้ว/รายได้ (ไม่นับ pending).
 
         Returns:
-            dict {total, pending, revenue}
+            dict {total, pending, paid, revenue}
         """
         return {
             'total': self.count(),
             'pending': self.filter(status='pending').count(),
+            'paid': self.filter(status='paid').count(),
             'revenue': self.revenue(),
         }
 
@@ -355,6 +358,7 @@ class Product(models.Model):
     price = models.DecimalField(max_digits=10, decimal_places=2, verbose_name="ราคา (บาท)")
     stock = models.IntegerField(default=0, verbose_name="จำนวนคงเหลือ")
     image = models.CharField(max_length=200, blank=True, default='images/prod1.jpg', verbose_name="ที่อยู่รูปภาพ (static)")
+    model_3d = models.CharField(max_length=200, blank=True, default='', verbose_name="ที่อยู่โมเดล 3D (static)")
     is_active = models.BooleanField(default=True, verbose_name="แสดงสินค้า")
     created_at = models.DateTimeField(auto_now_add=True, verbose_name="วันที่เพิ่ม")
 
@@ -384,6 +388,7 @@ class Product(models.Model):
         self.price = data.get('price', '')
         self.stock = data.get('stock', '')
         self.image = data['image'] if 'image' in data else image_fallback
+        self.model_3d = data.get('model_3d', '').strip()
         self.is_active = data.get('is_active') == 'on'
         return self
 
@@ -524,6 +529,14 @@ class CustomerProfile(models.Model):
     )
     phone = models.CharField(max_length=20, blank=True, verbose_name='เบอร์โทรศัพท์')
     address = models.TextField(blank=True, verbose_name='ที่อยู่จัดส่ง')
+    avatar = models.ImageField(
+        upload_to='customers/avatars/', blank=True, null=True,
+        verbose_name='รูปโปรไฟล์ (รองรับ GIF/PNG/JPG)',
+    )
+    cover = models.ImageField(
+        upload_to='customers/covers/', blank=True, null=True,
+        verbose_name='ภาพพื้นหลัง/หน้าปก (รองรับ GIF/PNG/JPG)',
+    )
 
     class Meta:
         verbose_name = 'โปรไฟล์ลูกค้า'
@@ -564,3 +577,17 @@ class CustomerAddress(models.Model):
         """ที่อยู่บรรทัดเดียว — ใช้ snapshot ลง Order.address"""
         return (f'{self.detail} {self.subdistrict} {self.district} '
                 f'{self.province} {self.zipcode}')
+
+
+# ==================== Signals: ล้างแคชแคตตาล็อกเมื่อสินค้าเปลี่ยน ====================
+
+@receiver([post_save, post_delete], sender=Product)
+def _invalidate_catalog_cache(sender, **kwargs):
+    """ล้างแคชหมวดหมู่ของ Catalog ทุกครั้งที่สินค้าถูกสร้าง/แก้ไข/ลบ.
+
+    ทำเป็น signal เพื่อครอบทุกทางที่ข้อมูลเปลี่ยน (หน้าจัดการสินค้า, Django admin,
+    shell) โดยไม่ต้องพึ่งการเรียกใน view — import ในฟังก์ชันกัน circular import
+    (services.py import models อยู่แล้ว).
+    """
+    from .services import Catalog
+    Catalog.invalidate()
