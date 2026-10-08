@@ -11,11 +11,13 @@
 เฉพาะผ่าน PaymentService (เทสต์ใน test_services) เท่านั้น.
 """
 from decimal import Decimal
+from unittest import mock
 
 from django.test import TestCase
 from django.urls import reverse
 
 from myapp.models import Order, Product
+from myapp.services import ThaiCalendar
 
 
 class CartFlowTest(TestCase):
@@ -168,6 +170,10 @@ class OrderSuccessGuardTest(TestCase):
     """หน้า success — guest ต้องยืนยันตัวตนด้วยเบอร์โทรที่ตรงกับออเดอร์"""
 
     def setUp(self):
+        # หน้าสำเร็จคำนวณ ETA ด้วย ThaiCalendar (ดึง ICS วันหยุดไทย) — patch ให้เทสต์ไม่ยิงเน็ต
+        self._holiday_patch = mock.patch.object(ThaiCalendar, 'holidays', return_value={})
+        self._holiday_patch.start()
+        self.addCleanup(self._holiday_patch.stop)
         self.order = Order.objects.create(
             customer_name='สมชาย ใจดี', phone='0812345678', address='กทม',
             total=Decimal('10.00'), payment_method='promptpay',

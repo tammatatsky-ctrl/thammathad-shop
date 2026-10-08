@@ -132,3 +132,161 @@ class AddressBookTest(TestCase):
         )
         r = self.client.get(reverse('address_edit', args=[their_addr.id]))
         self.assertEqual(r.status_code, 404)
+
+
+class ProfileEditTest(TestCase):
+    """แก้ไขข้อมูลส่วนตัวของลูกค้า (ProfileEditView)"""
+
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username='somchai@test.com',
+            email='somchai@test.com',
+            password='Password123!',
+            first_name='สมชาย',
+            last_name='สายลม',
+        )
+        from myapp.models import CustomerProfile
+        self.profile = CustomerProfile.objects.create(
+            user=self.user,
+            phone='0812345678',
+            address='123 สุขุมวิท กรุงเทพฯ',
+        )
+
+    def test_anonymous_redirected_to_login(self):
+        """ผู้ใช้ที่ยังไม่ล็อกอิน เข้าหน้า profile edit -> redirect ไป account_login"""
+        r = self.client.get(reverse('profile_edit'))
+        self.assertRedirects(r, f"{reverse('account_login')}?next={reverse('profile_edit')}")
+
+    def test_get_prefilled_form(self):
+        """ล็อกอินแล้วเข้าหน้า profile edit -> ได้ฟอร์มที่กรอกข้อมูลเดิมไว้ครบถ้วน"""
+        self.client.force_login(self.user)
+        r = self.client.get(reverse('profile_edit'))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'สมชาย')
+        self.assertContains(r, 'สายลม')
+        self.assertContains(r, 'somchai@test.com')
+        self.assertContains(r, '0812345678')
+
+    def test_successful_profile_update(self):
+        """แก้ไขชื่อ นามสกุล อีเมล เบอร์โทร ที่อยู่ สำเร็จ"""
+        self.client.force_login(self.user)
+        data = {
+            'first_name': 'สมหมาย',
+            'last_name': 'ใจดี',
+            'email': 'sommai_new@test.com',
+            'phone': '0898765432',
+            'address': '999 สาทร กรุงเทพฯ',
+        }
+        r = self.client.post(reverse('profile_edit'), data)
+        self.assertRedirects(r, reverse('account'))
+
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, 'สมหมาย')
+        self.assertEqual(self.user.last_name, 'ใจดี')
+        self.assertEqual(self.user.email, 'sommai_new@test.com')
+        self.assertEqual(self.user.username, 'sommai_new@test.com')
+
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.phone, '0898765432')
+        self.assertEqual(self.profile.address, '999 สาทร กรุงเทพฯ')
+
+    def test_invalid_phone_rejected(self):
+        """กรอกเบอร์โทรผิดรูปแบบ -> ปฏิเสธพร้อมแจ้งเตือน"""
+        self.client.force_login(self.user)
+        data = {
+            'first_name': 'สมชาย',
+            'last_name': 'สายลม',
+            'email': 'somchai@test.com',
+            'phone': '1234',
+            'address': '',
+        }
+        r = self.client.post(reverse('profile_edit'), data)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'เบอร์โทรศัพท์ไม่ถูกต้อง')
+
+    def test_duplicate_email_rejected(self):
+        """กรอกอีเมลที่ตรงกับผู้ใช้อื่นในระบบ -> ปฏิเสธ"""
+        User.objects.create_user(username='other@test.com', email='other@test.com', password='x')
+        self.client.force_login(self.user)
+        data = {
+            'first_name': 'สมชาย',
+            'last_name': 'สายลม',
+            'email': 'other@test.com',
+            'phone': '0812345678',
+            'address': '',
+        }
+        r = self.client.post(reverse('profile_edit'), data)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'อีเมลนี้ถูกใช้งานโดยบัญชีอื่นแล้ว')
+
+    def test_upload_avatar_and_cover_gif(self):
+        """อัปโหลดรูปโปรไฟล์และหน้าปกเป็นไฟล์ GIF ได้สำเร็จและแสดงบนหน้า account"""
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        img1 = Image.new('RGB', (50, 50), color='red')
+        img2 = Image.new('RGB', (50, 50), color='blue')
+        gif_io = BytesIO()
+        img1.save(gif_io, format='GIF', save_all=True, append_images=[img2], duration=200, loop=0)
+        gif_data = gif_io.getvalue()
+
+        avatar_file = SimpleUploadedFile('avatar.gif', gif_data, content_type='image/gif')
+        cover_file = SimpleUploadedFile('cover.gif', gif_data, content_type='image/gif')
+
+        self.client.force_login(self.user)
+        data = {
+            'first_name': 'สมชาย',
+            'last_name': 'สายลม',
+            'email': 'somchai@test.com',
+            'phone': '0812345678',
+            'address': 'กรุงเทพฯ',
+            'avatar': avatar_file,
+            'cover': cover_file,
+        }
+        r = self.client.post(reverse('profile_edit'), data)
+        self.assertRedirects(r, reverse('account'))
+
+        self.profile.refresh_from_db()
+        self.assertTrue(bool(self.profile.avatar))
+        self.assertTrue(bool(self.profile.cover))
+        self.assertTrue(self.profile.avatar.name.endswith('.gif'))
+        self.assertTrue(self.profile.cover.name.endswith('.gif'))
+
+        # ตรวจสอบว่าหน้า account แสดงรูป avatar และ cover
+        r_acc = self.client.get(reverse('account'))
+        self.assertEqual(r_acc.status_code, 200)
+        self.assertContains(r_acc, self.profile.avatar.url)
+        self.assertContains(r_acc, self.profile.cover.url)
+
+    def test_clear_avatar_and_cover(self):
+        """ติ๊กเลือก avatar_clear และ cover_clear แล้วบันทึก -> ไฟล์ถูกลบและฟิลด์เป็น None"""
+        from io import BytesIO
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from PIL import Image
+
+        img = Image.new('RGB', (10, 10), color='white')
+        bio = BytesIO()
+        img.save(bio, format='JPEG')
+        bio_data = bio.getvalue()
+
+        self.profile.avatar.save('test_av.jpg', SimpleUploadedFile('test_av.jpg', bio_data))
+        self.profile.cover.save('test_cov.jpg', SimpleUploadedFile('test_cov.jpg', bio_data))
+        self.profile.save()
+
+        self.client.force_login(self.user)
+        data = {
+            'first_name': 'สมชาย',
+            'last_name': 'สายลม',
+            'email': 'somchai@test.com',
+            'phone': '0812345678',
+            'address': 'กรุงเทพฯ',
+            'avatar_clear': 'on',
+            'cover_clear': 'on',
+        }
+        r = self.client.post(reverse('profile_edit'), data)
+        self.assertRedirects(r, reverse('account'))
+
+        self.profile.refresh_from_db()
+        self.assertFalse(bool(self.profile.avatar))
+        self.assertFalse(bool(self.profile.cover))

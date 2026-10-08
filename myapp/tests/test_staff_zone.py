@@ -290,6 +290,64 @@ class StaffPagesRenderTest(TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertContains(r, 'เลขออเดอร์')
 
+    def test_order_export_csv(self):
+        """export ออเดอร์ → CSV utf-8 BOM + header เลขออเดอร์ + ข้อมูลออเดอร์"""
+        r = self.client.get(reverse('order_export'))
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r['Content-Type'], 'text/csv; charset=utf-8')
+        self.assertEqual(r.content[:3], b'\xef\xbb\xbf')   # BOM กัน Excel อ่านไทยเพี้ยน
+        self.assertContains(r, 'เลขออเดอร์')
+        self.assertContains(r, 'ลูกค้า หนึ่ง')
+
+    def test_order_invoice_access(self):
+        """ใบเสร็จ A4: staff ดูได้, เจ้าของดูได้, guest มี phone ดูได้, คนอื่นเข้าไม่ได้"""
+        invoice_url = reverse('order_invoice', args=[self.order.id])
+
+        # 1. Staff เข้าดูได้
+        r = self.client.get(invoice_url)
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'ใบเสร็จรับเงิน')
+        self.assertContains(r, self.order.customer_name)
+
+        # 2. Guest ที่มีเบอร์โทรถูกต้อง เข้าดูได้
+        self.client.logout()
+        r = self.client.get(f"{invoice_url}?phone={self.order.phone}")
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'ใบเสร็จรับเงิน')
+
+        # 3. Guest ที่ไม่มีเบอร์โทรหรือไม่ถูกต้อง → redirect ไป login
+        r = self.client.get(invoice_url)
+        self.assertRedirects(r, f"{reverse('account_login')}?next={invoice_url}")
+
+        # 4. ลูกค้าอื่นที่ล็อกอินแล้วแต่ไม่ใช่เจ้าของ → 404
+        other_user = User.objects.create_user(username='other', password='pw123456')
+        self.client.force_login(other_user)
+        r = self.client.get(invoice_url)
+        self.assertEqual(r.status_code, 404)
+
+        # 5. ลูกค้าที่เป็นเจ้าของออเดอร์ → ดูได้
+        self.order.user = other_user
+        self.order.save()
+        r = self.client.get(invoice_url)
+        self.assertEqual(r.status_code, 200)
+
+    def test_dashboard_low_stock_alert_and_quick_adjust(self):
+        """แดชบอร์ดมี Alert Banner เมื่อมีสินค้าใกล้หมด + ปุ่มเติมสต็อก +5"""
+        r = self.client.get(reverse('dashboard'))
+        self.assertEqual(r.status_code, 200)
+        self.assertContains(r, 'แจ้งเตือนสต็อกสินค้าวิกฤต')
+        self.assertContains(r, 'สต็อกต้องเฝ้าระวัง')
+
+        # ทดสอบเติมสต็อก +5 จากแดชบอร์ด
+        old_stock = self.product.stock
+        r_post = self.client.post(
+            reverse('stock_adjust', args=[self.product.id]),
+            {'delta': '5', 'next': reverse('dashboard')}
+        )
+        self.assertRedirects(r_post, reverse('dashboard'))
+        self.product.refresh_from_db()
+        self.assertEqual(self.product.stock, old_stock + 5)
+
     @override_settings(GEMINI_API_KEY='')
     def test_ai_disabled_returns_503(self):
         """ไม่มี GEMINI_API_KEY → /describe-ai/ ตอบ 503 พร้อมข้อความไทย"""
