@@ -1,15 +1,14 @@
-<!DOCTYPE html>
+{% load static %}<!DOCTYPE html>
 <html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ใบเสร็จรับเงิน / ใบสั่งซื้อ #{{ order.id }} — Thammathad Shop</title>
-    <!-- Google Fonts: Inter & Noto Sans Thai -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Thai:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <!-- Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    {# เอกสารใบเสร็จ — self-host ทั้งหมด ไม่พึ่ง CDN ภายนอกเลย (พิมพ์ PDF ออฟไลน์ได้ถูกต้อง)
+       - prompt.css: ฟอนต์ Prompt 4 weights (latin + thai subset) ตัวเดียวกับทั้งเว็บ
+       - bootstrap-icons.min.css: ไอคอนชุดเดียวกับ basetemplate (w2) #}
+    <link rel="stylesheet" href="{% static 'vendor/css/prompt.css' %}">
+    <link rel="stylesheet" href="{% static 'vendor/css/bootstrap-icons.min.css' %}">
     <style>
         :root {
             --ink: #1d1d1f;
@@ -26,7 +25,10 @@
             padding: 0;
             background: var(--bg-page);
             color: var(--ink);
-            font-family: -apple-system, BlinkMacSystemFont, "Noto Sans Thai", "Inter", sans-serif;
+            /* ฟอนต์เดียวกับ theme.css (line 135) — ใบเสร็จต้องเห็นหน้าตาเดียวกับเว็บ */
+            font-family:
+                -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text",
+                "Helvetica Neue", "Prompt", "Noto Sans Thai", "Segoe UI", sans-serif;
             -webkit-font-smoothing: antialiased;
             font-size: 14px;
             line-height: 1.5;
@@ -193,6 +195,11 @@
         .text-center { text-align: center !important; }
         .text-end { text-align: right !important; }
 
+        /* utility ที่หน้านี้ใช้แต่ไม่ได้โหลด bootstrap.min.css
+           (โหลดแค่ icons เพื่อไม่ให้หนักเอกสารพิมพ์) — ประกาศเองที่นี่ */
+        .fw-semibold { font-weight: 600; }
+        .me-1 { margin-left: 0.25rem !important; }
+
         /* ส่วนรวมเงิน & ตรายาง */
         .summary-wrap {
             display: flex;
@@ -310,7 +317,7 @@
     <!-- แถบเครื่องมือบนจอ (ไม่พิมพ์) -->
     <div class="invoice-toolbar no-print">
         <div class="invoice-toolbar-group">
-            <a href="javascript:history.back()" class="btn-action btn-back">
+            <a href="#" id="invoiceBackBtn" class="btn-action btn-back">
                 <i class="bi bi-arrow-left"></i> ย้อนกลับ
             </a>
             <span class="invoice-doc-title">เอกสารใบเสร็จ #{{ order.id }}</span>
@@ -470,9 +477,23 @@
     </div>
 
     <script>
-        /* ปุ่มพิมพ์ (ไม่ใช้ onclick inline) — ทำงานเฉพาะหน้าเอกสารนี้ */
+        /* ปุ่มพิมพ์ + ย้อนกลับ (ผูก event ในสคริปต์ ไม่ inline handler / ไม่ใช้ pseudo-scheme URL)
+           — ทำงานเฉพาะหน้าเอกสารนี้ */
         var printBtn = document.getElementById('invoicePrintBtn');
         if (printBtn) printBtn.addEventListener('click', function () { window.print(); });
+
+        var backBtn = document.getElementById('invoiceBackBtn');
+        if (backBtn) {
+            backBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                /* เปิดตรงจากลิงก์/พิมพ์แล้วไม่มีประวัติย้อนหลัง — ส่งกลับหน้าที่ผู้ใช้นั้นเข้าถึงได้
+                   (staff → รายละเอียดออเดอร์, ลูกค้า/guest → ติดตามออเดอร์สาธารณะ) */
+                if (window.history.length > 1) { window.history.back(); }
+                else {
+                    window.location.href = '{% if is_staff %}{% url "order_detail" order.id %}{% else %}{% url "order_tracking" %}{% endif %}';
+                }
+            });
+        }
     </script>
 </body>
 </html>

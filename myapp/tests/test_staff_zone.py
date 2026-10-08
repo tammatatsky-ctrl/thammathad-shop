@@ -331,6 +331,27 @@ class StaffPagesRenderTest(TestCase):
         r = self.client.get(invoice_url)
         self.assertEqual(r.status_code, 200)
 
+    def test_order_invoice_is_offline_ready(self):
+        """ใบเสร็จต้องพิมพ์ออฟไลน์ได้ → ห้ามพึ่ง CDN ภายนอก (ฟอนต์/ไอคอนต้อง self-host)
+
+        เคยเป็นบั๊ก: โหลด Google Fonts (Inter + Noto Sans Thai) + bootstrap-icons จาก
+        jsdelivr → พิมพ์เป็น PDF ตอนออฟไลน์แล้วฟอนต์กับไอคอนหาย/กลายเป็น fallback
+        ตอนนี้ใช้ {% static %} ของ vendor/ ชุดเดียวกับ basetemplate แล้ว
+        """
+        url = reverse('order_invoice', args=[self.order.id])
+        html = self.client.get(url).content.decode('utf-8')
+
+        for host in ('cdn.jsdelivr.net', 'fonts.googleapis.com', 'fonts.gstatic.com',
+                     'cdnjs.cloudflare.com', 'unpkg.com'):
+            self.assertNotIn(host, html, f'ห้ามพึ่ง CDN ในใบเสร็จ: {host}')
+
+        # ต้องโหลด asset ของตัวเองผ่าน static tag แทน
+        self.assertIn('/static/vendor/css/prompt.css', html)
+        self.assertIn('/static/vendor/css/bootstrap-icons.min.css', html)
+
+        # ไม่มี inline javascript: URL (ตาม convention ของโปรเจกต์)
+        self.assertNotIn('javascript:', html)
+
     def test_dashboard_low_stock_alert_and_quick_adjust(self):
         """แดชบอร์ดมี Alert Banner เมื่อมีสินค้าใกล้หมด + ปุ่มเติมสต็อก +5"""
         r = self.client.get(reverse('dashboard'))
