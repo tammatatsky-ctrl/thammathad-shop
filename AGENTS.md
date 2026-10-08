@@ -265,16 +265,22 @@ See `DEPLOY.md` for full PythonAnywhere steps.
 ### Zip Build (Windows)
 
 ```powershell
-# From project root:
-Copy-Item "staticfiles\workshop4.html" "staticfiles\workshop4.html" -Force -ErrorAction SilentlyContinue
-tar.exe -a -c -f pa_update.zip --exclude=__pycache__ --exclude=.venv --exclude=db.sqlite3 --exclude=pa_update.zip --exclude=media myapp staticfiles\workshop4.html
+# From project root — ZIP อัปเดตต้องมี myproject ด้วย (settings.py/urls.py เปลี่ยนบ่อย)
+# และ staticfiles/ ต้องอยู่ในไฟล์ เพราะ production serve จากโฟลเดอร์นั้น
+# --exclude=test กัน debug snapshot (recipe #9) ไม่ให้หลุดขึ้น production
+tar.exe -a -c -f pa_update.zip --exclude=__pycache__ --exclude=.venv --exclude=db.sqlite3 --exclude=pa_update.zip --exclude=media --exclude=test myapp myproject staticfiles requirements.txt DEPLOY.md
 ```
+
+> ⚠️ เคยพลาด: recipe เดิมใส่แค่ `myapp staticfiles\workshop4.html` → ไฟล์ `workshop4.html`
+> ไม่มีอยู่จริง และ **ตก `myproject/` ทั้งโฟลเดอร์** = settings.py/urls.py บน server
+> ไม่ถูกอัปเดต (เป็นบั๊กเงียบ — เว็บยังรันได้แต่เป็น config เก่า)
+> ตรวจหลังสร้าง ZIP: `tar.exe -tf pa_update.zip | Select-String 'myproject/settings.py'` ต้องเจอ
 
 ### Deploy Flow
 
 1. Upload `pa_update.zip` via PythonAnywhere Files tab
 2. Bash: `cd ~/my_django_app && unzip -o ~/pa_update.zip && rm ~/pa_update.zip`
-3. If migrations changed: `python manage.py migrate`
+3. If migrations changed: `workon django-shop && python manage.py migrate`
 4. If new static files: `python manage.py collectstatic --noinput`
 5. Web tab → Reload
 
