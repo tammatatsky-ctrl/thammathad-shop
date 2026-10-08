@@ -6,7 +6,9 @@
 - REST API จาก DRF DefaultRouter (/api/products/, /api/orders/, /api/employees/)
 """
 from django.urls import include, path
-from rest_framework.authtoken.views import obtain_auth_token
+from django.contrib.auth import views as auth_views
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from rest_framework.permissions import AllowAny
 from rest_framework.routers import DefaultRouter
 
 from . import api, views
@@ -27,6 +29,7 @@ urlpatterns = [
     path('product/<int:product_id>/', views.ProductDetailView.as_view(), name='product_detail'),
     path('product/add/', views.ProductCreateView.as_view(), name='product_add'),
     path('product/describe-ai/', views.ProductDescribeAIView.as_view(), name='product_describe_ai'),
+    path('product/translate/', views.ProductTranslateView.as_view(), name='product_translate'),
     path('product/edit/<int:product_id>/', views.ProductUpdateView.as_view(), name='product_edit'),
     path('product/delete/<int:product_id>/', views.ProductDeleteView.as_view(), name='product_delete'),
     path('cart/', views.CartView.as_view(), name='cart'),
@@ -45,10 +48,40 @@ urlpatterns = [
     path('account/login/', views.CustomerLoginView.as_view(), name='account_login'),
     path('account/logout/', views.CustomerLogoutView.as_view(), name='account_logout'),
     path('account/', views.AccountView.as_view(), name='account'),
+    path('account/profile/edit/', views.ProfileEditView.as_view(), name='profile_edit'),
+    path('account/password/', views.CustomerPasswordChangeView.as_view(), name='account_password_change'),
     path('account/addresses/add/', views.AddressCreateView.as_view(), name='address_add'),
     path('account/addresses/<int:addr_id>/edit/', views.AddressUpdateView.as_view(), name='address_edit'),
     path('account/addresses/<int:addr_id>/delete/', views.AddressDeleteView.as_view(), name='address_delete'),
     path('account/addresses/<int:addr_id>/default/', views.AddressSetDefaultView.as_view(), name='address_default'),
+
+    # ==================== ลืม/เปลี่ยนรหัสผ่าน (django built-in + template ไทย) ====================
+    path('account/password-reset/',
+         views.CustomerPasswordResetView.as_view(),
+         name='password_reset'),
+    path('account/password-reset/done/',
+         auth_views.PasswordResetDoneView.as_view(
+             template_name='registration/password_reset_done.html'),
+         name='password_reset_done'),
+    path('account/reset/<uidb64>/<token>/',
+         auth_views.PasswordResetConfirmView.as_view(
+             template_name='registration/password_reset_confirm.html',
+             success_url='/account/reset/complete/'),
+         name='password_reset_confirm'),
+    path('account/reset/complete/',
+         auth_views.PasswordResetCompleteView.as_view(
+             template_name='registration/password_reset_complete.html'),
+         name='password_reset_complete'),
+    path('account/password-change/',
+         auth_views.PasswordChangeView.as_view(
+             template_name='registration/password_change_form.html',
+             success_url='/account/password-change/done/'),
+         name='password_change'),
+    path('account/password-change/done/',
+         auth_views.PasswordChangeDoneView.as_view(
+             template_name='registration/password_change_done.html'),
+         name='password_change_done'),
+
     path('contact/', views.ContactView.as_view(), name='contact'),
     path('staff/login/', views.StaffLoginView.as_view(), name='staff_login'),
     path('staff/logout/', views.StaffLogoutView.as_view(), name='staff_logout'),
@@ -58,12 +91,15 @@ urlpatterns = [
     path('employees/<int:pk>/update/', views.EmployeeUpdateView.as_view(), name='employee_update'),
     path('employees/<int:pk>/delete/', views.EmployeeDeleteView.as_view(), name='employee_delete'),
 
-    # ==================== Admin: Order / Customer / Reports / Payments ====================
     path('orders/', views.OrderManageView.as_view(), name='order_manage'),
+    path('orders/export/', views.OrderExportCsvView.as_view(), name='order_export'),
     path('orders/<int:order_id>/', views.OrderDetailView.as_view(), name='order_detail'),
     path('orders/<int:order_id>/status/', views.OrderStatusView.as_view(), name='order_status'),
+    path('orders/<int:order_id>/invoice/', views.OrderInvoiceView.as_view(), name='order_invoice'),
     path('customers/', views.CustomerListView.as_view(), name='customer_list'),
     path('customers/<int:user_id>/', views.CustomerDetailView.as_view(), name='customer_detail'),
+    path('staff/users/', views.StaffUserManageView.as_view(), name='staff_users'),
+    path('staff/users/<int:user_id>/role/', views.StaffUserRoleUpdateView.as_view(), name='staff_user_role_update'),
     path('reports/', views.SalesReportView.as_view(), name='reports'),
     path('payments/', views.PaymentListView.as_view(), name='payment_list'),
     path('payments/export/', views.PaymentExportCsvView.as_view(), name='payment_export'),
@@ -73,5 +109,11 @@ urlpatterns = [
     path('api/', api.api_root, name='api-root'),
     path('api/categories/', api.CategoryListAPIView.as_view(), name='api-categories'),
     path('api/', include(router.urls)),
-    path('api/token/', obtain_auth_token, name='api-token'),
+    path('api/token/', api.TokenObtainThrottledView.as_view(), name='api-token'),
+
+    # API docs (OpenAPI 3) — สาธารณะเพื่อความสะดวกในการส่งงาน/demo
+    # (production จริงควรจำกัดสิทธิ์ เช่น IsAdminUser หรือปิดใน DEBUG=False)
+    path('api/schema/', SpectacularAPIView.as_view(permission_classes=[AllowAny]), name='api-schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='api-schema',
+                                                     permission_classes=[AllowAny]), name='api-docs'),
 ]

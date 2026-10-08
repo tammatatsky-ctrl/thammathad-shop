@@ -3,6 +3,8 @@
 - Polymorphism  : subclass override filter_queryset / get_product / ข้อความ โดย base คุมโฟลว์
 - Encapsulation : ตรรกะโดเมนอยู่ที่ models (QuerySet/Manager) และ services (Cart)
 - Abstraction   : StaffRequiredMixin ซ่อนรายละเอียดการตรวจสิทธิ์จากทุก view
+
+- Ajax          : is_ajax(request) — จุดเดียวที่ตัดสินคำขอ AJAX/partial (JSON vs redirect)
 """
 import csv
 import os
@@ -12,10 +14,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.mixins import AccessMixin
-from django.db import transaction
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
+from django.contrib.auth.views import PasswordChangeView, PasswordResetView
+from django.core.exceptions import PermissionDenied
+from django.db import models, transaction
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
-from django.urls import reverse
+from django.urls import reverse, reverse_lazy
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views.generic import (
@@ -27,9 +31,16 @@ from django.views.generic import (
     View,
 )
 
-from .forms import EmployeeForm, StaffLoginForm
+from .forms import (
+    CustomerLoginForm,
+    CustomerRegistrationForm,
+    EmployeeForm,
+    ProfileEditForm,
+    StaffLoginForm,
+    UserRoleChangeForm,
+)
 from .models import CustomerAddress, CustomerProfile, Employee, Order, OrderItem, Payment, Product
-from .services import Cart, GeminiAI, OrderStatusService, PaymentService, PromptPay, SlipOK, ThaiCalendar, Validators
+from .services import Cart, Catalog, GeoIP, GeminiAI, OrderStatusService, PaymentService, PromptPay, QrCode, RateLimit, SlipOK, ThaiCalendar, Translate, Validators
 
 
 # ==================== Permissions: Mixin แทน decorator ====================
@@ -46,49 +57,92 @@ class StaffRequiredMixin(AccessMixin):
         return reverse('staff_login')
 
 
+class ManagerRequiredMixin(AccessMixin):
+    """ผสมกับ View ที่สงวนเฉพาะ Manager หรือ Superuser — หากไม่มีสิทธิ์จะเกิด 403 Forbidden"""
+
+    def dispatch(self, request, *args, **kwargs):
+        if not request.user.is_authenticated:
+            return self.handle_no_permission()
+        if not (request.user.is_superuser or request.user.groups.filter(name='Manager').exists()):
+            raise PermissionDenied('หน้านี้สงวนสิทธิ์เฉพาะผู้จัดการร้าน (Manager) หรือผู้ดูแลระบบเท่านั้น')
+        return super().dispatch(request, *args, **kwargs)
+
+    def get_login_url(self):
+        return reverse('staff_login')
+
+
+class CsvSafeMixin:
+    """กัน CSV formula injection ให้ทุก view ที่ส่งออก CSV — รวม _safe_cell ไว้ที่เดียว.
+
+    cell ที่ขึ้นต้นด้วย = + - @ หรือ tab จะถูกเติม ' นำหน้า เพื่อให้ Excel/Sheets
+    มองเป็นข้อความ ไม่ประมวลผลเป็นสูตร (ข้อมูลลูกค้า/พนักงานมาจากผู้ใช้).
+    """
+
+    _FORMULA_CHARS = ('=', '+', '-', '@', '\t')
+
+    @classmethod
+    def _safe_cell(cls, value):
+        """คืนค่า cell ที่ปลอดภัยสำหรับ CSV — None → '' และกัน formula injection."""
+        text = '' if value is None else str(value)
+        if text.startswith(cls._FORMULA_CHARS):
+            return "'" + text
+        return text
+
+
 # ==================== Auth ====================
 
 class CustomerRegisterView(View):
-    """สมัครบัญชีลูกค้า — ใช้ Django User (username = อีเมล)"""
+    """สมัครบัญชีลูกค้า — ใช้ Django Form Validation ครบทุกฟิลด์ + กำหนดกลุ่ม Member อัตโนมัติ"""
     template_name = 'account_register.html'
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
             return redirect(reverse('account'))
-        return render(request, self.template_name, {'next': request.GET.get('next', '')})
-
-    def post(self, request, *args, **kwargs):
-        from django.contrib.auth.models import User
-        name = request.POST.get('name', '').strip()
-        email = request.POST.get('email', '').strip().lower()
-        phone = Validators.normalize_phone(request.POST.get('phone', ''))
-        address = request.POST.get('address', '').strip()
-        pw1 = request.POST.get('password1', '')
-        pw2 = request.POST.get('password2', '')
-        back = lambda err: render(request, self.template_name, {   # noqa: E731
-            'error': err, 'next': request.POST.get('next', ''),
-            'v_name': name, 'v_email': email, 'v_phone': phone, 'v_address': address,
+        form = CustomerRegistrationForm()
+        return render(request, self.template_name, {
+            'form': form,
+            'next': request.GET.get('next', ''),
         })
 
-        if not name or not email or not phone or not address:
-            return back('กรุณากรอกข้อมูลให้ครบทุกช่อง')
-        if not Validators.valid_phone(phone):
-            return back('เบอร์โทรศัพท์ไม่ถูกต้อง (0XXXXXXXXX)')
-        if '@' not in email or len(email) < 6:
-            return back('อีเมลไม่ถูกต้อง')
-        if len(pw1) < 6:
-            return back('รหัสผ่านต้องยาวอย่างน้อย 6 ตัวอักษร')
-        if pw1 != pw2:
-            return back('รหัสผ่านสองช่องไม่ตรงกัน')
-        if User.objects.filter(username__iexact=email).exists():
-            return back('อีเมลนี้ถูกใช้สมัครแล้ว')
+    def post(self, request, *args, **kwargs):
+        from django.contrib.auth.models import Group, User
+        form = CustomerRegistrationForm(request.POST)
+        if not form.is_valid():
+            first_err = ''
+            for field, errs in form.errors.items():
+                if errs:
+                    first_err = errs[0]
+                    break
+            return render(request, self.template_name, {
+                'form': form,
+                'error': first_err,
+                'next': request.POST.get('next', ''),
+                'v_name': request.POST.get('name', ''),
+                'v_email': request.POST.get('email', ''),
+                'v_phone': request.POST.get('phone', ''),
+                'v_address': request.POST.get('address', ''),
+            })
 
-        user = User.objects.create_user(username=email, email=email, password=pw1,
-                                        first_name=name.split(' ')[0][:30],
-                                        last_name=' '.join(name.split(' ')[1:])[:150])
+        data = form.cleaned_data
+        name = data['name']
+        email = data['email']
+        phone = data['phone']
+        address = data['address']
+        pw1 = data['password1']
+
+        user = User.objects.create_user(
+            username=email,
+            email=email,
+            password=pw1,
+            first_name=name.split(' ')[0][:30],
+            last_name=' '.join(name.split(' ')[1:])[:150],
+        )
+        member_grp = Group.objects.filter(name='Member').first()
+        if member_grp:
+            user.groups.add(member_grp)
         CustomerProfile.objects.create(user=user, phone=phone, address=address)
         login(request, user)
-        messages.success(request, f'สมัครบัญชีสำเร็จ ยินดีต้อนรับ {name}!')
+        messages.success(request, f'สมัครบัญชีสำเร็จ ยินดีต้อนรับคุณ {name}!')
         nxt = request.POST.get('next', '')
         if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
             return redirect(nxt)
@@ -96,28 +150,56 @@ class CustomerRegisterView(View):
 
 
 class CustomerLoginView(View):
-    """เข้าสู่ระบบลูกค้า (staff ก็ log in ได้ — dashboard เข้าผ่าน /staff/login/ ตามเดิม)"""
+    """เข้าสู่ระบบลูกค้า พร้อม Remember Me และความปลอดภัย redirect"""
     template_name = 'account_login.html'
 
     def get(self, request, *args, **kwargs):
         if request.user.is_authenticated:
             return redirect(reverse('account'))
-        return render(request, self.template_name, {'next': request.GET.get('next', '')})
+        form = CustomerLoginForm()
+        return render(request, self.template_name, {
+            'form': form,
+            'next': request.GET.get('next', ''),
+        })
 
     def post(self, request, *args, **kwargs):
+        form = CustomerLoginForm(request.POST)
         username = request.POST.get('username', '').strip().lower()
         password = request.POST.get('password', '')
+        remember_me = request.POST.get('remember_me')
+
         user = authenticate(request, username=username, password=password)
         if not user:
-            return render(request, self.template_name,
-                          {'error': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
-                           'next': request.POST.get('next', ''),
-                           'v_username': username})
+            return render(request, self.template_name, {
+                'form': form,
+                'error': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+                'next': request.POST.get('next', ''),
+                'v_username': username,
+            })
+
         login(request, user)
+        if remember_me:
+            request.session.set_expiry(1209600)  # 14 วัน
+        else:
+            request.session.set_expiry(0)  # ปิด browser แล้วหมดอายุ
+
+        messages.success(request, f'ยินดีต้อนรับคุณ {user.first_name or user.username}!')
         nxt = request.POST.get('next', '')
         if nxt and url_has_allowed_host_and_scheme(nxt, allowed_hosts={request.get_host()}):
             return redirect(nxt)
         return redirect(reverse('account') if not user.is_staff else reverse('dashboard'))
+
+
+class CustomerPasswordResetView(PasswordResetView):
+    """ลืมรหัสผ่าน — Django 6.x อ่าน template อีเมลจาก class attribute ของ view เอง
+    (form_valid ส่ง self.email_template_name ให้ form.save) → override เป็น class attr
+    เพื่อบังคับใช้ template ภาษาไทยของเรา (ไม่พึ่งตัว default ของ contrib.auth)."""
+
+    template_name = 'registration/password_reset_form.html'
+    email_template_name = 'registration/password_reset_email.html'
+    subject_template_name = 'registration/password_reset_subject.txt'
+    from_email = settings.DEFAULT_FROM_EMAIL
+    success_url = reverse_lazy('password_reset_done')
 
 
 class CustomerRequiredMixin(AccessMixin):
@@ -132,8 +214,18 @@ class CustomerRequiredMixin(AccessMixin):
         return reverse('account_login')
 
 
+class CustomerPasswordChangeView(CustomerRequiredMixin, PasswordChangeView):
+    """เปลี่ยนรหัสผ่านสำหรับสมาชิกลูกค้า — ใช้ Django PasswordChangeView + ฟอร์มภาษาไทย"""
+    template_name = 'account_password_change.html'
+    success_url = reverse_lazy('account')
+
+    def form_valid(self, form):
+        messages.success(self.request, 'เปลี่ยนรหัสผ่านสำเร็จเรียบร้อยแล้ว')
+        return super().form_valid(form)
+
+
 class AccountView(CustomerRequiredMixin, TemplateView):
-    """โปรไฟล์ + ออเดอร์ของฉัน (ไม่ต้องจำ order id / เบอร์)"""
+    """โปรไฟล์ + ออเดอร์ของฉัน (ไม่ต้องจำ order id / เบอร์) พร้อมสถิติความปลอดภัยและกิจกรรม"""
     template_name = 'account.html'
 
     def get_context_data(self, **kwargs):
@@ -142,14 +234,90 @@ class AccountView(CustomerRequiredMixin, TemplateView):
         orders = (self.request.user.orders
                   .prefetch_related('items__product')
                   .order_by('-created_at'))
+        total_spent = sum(o.total for o in orders)
+        pending_count = orders.filter(status='pending').count()
+        joined_thai = ThaiCalendar.format(self.request.user.date_joined) if hasattr(self.request.user, 'date_joined') and self.request.user.date_joined else ''
         ctx.update({
             'profile': profile,
             'display_name': (self.request.user.get_full_name()
                              or self.request.user.username),
             'orders': orders,
             'addresses': self.request.user.addresses.all(),
+            'orders_count': orders.count(),
+            'orders_total': total_spent,
+            'orders_pending': pending_count,
+            'joined_thai': joined_thai,
+            'last_login': self.request.user.last_login,
         })
         return ctx
+
+
+class ProfileEditView(CustomerRequiredMixin, View):
+    """แก้ไขข้อมูลส่วนตัวของลูกค้า — ชื่อ, นามสกุล, อีเมล, เบอร์โทร, ที่อยู่หลัก, รูปโปรไฟล์ และภาพหน้าปก"""
+    template_name = 'account_profile_edit.html'
+
+    def get(self, request, *args, **kwargs):
+        profile = getattr(request.user, 'customer_profile', None)
+        initial = {
+            'first_name': request.user.first_name,
+            'last_name': request.user.last_name,
+            'email': request.user.email or request.user.username,
+            'phone': profile.phone if profile else '',
+            'address': profile.address if profile else '',
+            'avatar': profile.avatar if profile else None,
+            'cover': profile.cover if profile else None,
+        }
+        form = ProfileEditForm(initial=initial, user=request.user)
+        return render(request, self.template_name, {
+            'form': form,
+            'profile': profile,
+        })
+
+    def post(self, request, *args, **kwargs):
+        form = ProfileEditForm(request.POST, request.FILES, user=request.user)
+        if not form.is_valid():
+            profile = getattr(request.user, 'customer_profile', None)
+            return render(request, self.template_name, {
+                'form': form,
+                'profile': profile,
+            })
+
+        user = request.user
+        cd = form.cleaned_data
+        user.first_name = cd['first_name']
+        user.last_name = cd['last_name']
+        user.email = cd['email']
+        user.username = cd['email']
+        user.save()
+
+        profile, _ = CustomerProfile.objects.get_or_create(user=user)
+        profile.phone = cd['phone']
+        profile.address = cd['address']
+
+        # จัดการรูปโปรไฟล์ (อัปโหลดใหม่ / ลบทิ้ง)
+        if request.POST.get('avatar_clear') or cd.get('avatar') is False:
+            if profile.avatar:
+                profile.avatar.delete(save=False)
+                profile.avatar = None
+        elif cd.get('avatar'):
+            if profile.avatar:
+                profile.avatar.delete(save=False)
+            profile.avatar = cd['avatar']
+
+        # จัดการภาพหน้าปก (อัปโหลดใหม่ / ลบทิ้ง)
+        if request.POST.get('cover_clear') or cd.get('cover') is False:
+            if profile.cover:
+                profile.cover.delete(save=False)
+                profile.cover = None
+        elif cd.get('cover'):
+            if profile.cover:
+                profile.cover.delete(save=False)
+            profile.cover = cd['cover']
+
+        profile.save()
+
+        messages.success(request, 'บันทึกข้อมูลส่วนตัวเรียบร้อยแล้ว')
+        return redirect(reverse('account'))
 
 
 class CustomerLogoutView(View):
@@ -197,6 +365,8 @@ class AddressCreateView(CustomerRequiredMixin, AddressBookMixin, View):
         return render(request, self.template_name, {
             'address': None,
             'geo': {'province': '', 'district': '', 'subdistrict': '', 'zipcode': ''},
+            # คำใบ้ระดับประเทศจาก IP (ไม่ prefill จังหวัด — GeoIP แม่นแค่ระดับประเทศ)
+            'geo_hint': GeoIP.visitor(request),
         })
 
     def post(self, request, *args, **kwargs):
@@ -314,12 +484,20 @@ class StaffLogoutView(View):
 # ==================== หน้าร้าน (Public) ====================
 
 class IndexView(TemplateView):
-    """หน้าแรกของร้าน — โชว์สินค้าแนะนำ 3 ชิ้น (hero/badge/entrance ฝั่ง client)."""
+    """หน้าแรกของร้าน — hero Liquid Glass การ์ดแก้วหลัก (แสงเมาส์ขั้นสุด) + ฟีเจอร์ +
+    สินค้าแนะนำ grid 3 คอล. โครงสร้างกลับเป็น v1 (การ์ดหลักเล่นแสงผ่าน fx-glass engine
+    เดิม — ไม่แตะ core) ยกระดับด้วย .hero-ultimate (เลเยอร์แสงนอก — ผูก CSS vars เดิม).
+
+    categories: หมวดหมู่ของสินค้าที่ยังแสดงอยู่ — ถ้าว่าง template ซ่อนแถวหมวดเอง.
+    featured: สินค้าแนะนำเพดาน 6 ชิ้น (grid 3 คอล 2 แถว) — ถ้ามีน้อยกว่าจะแสดงเท่าที่มี.
+    """
     template_name = 'index.html'
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
-        ctx['featured'] = Product.objects.listed()[:3]
+        listed = Product.objects.listed()
+        ctx['featured'] = listed[:6]
+        ctx['categories'] = Catalog.categories(only_listed=True)
         return ctx
 
 
@@ -332,7 +510,7 @@ class ProductPublicListView(ListView):
 
     def get_template_names(self):
         """AJAX live search → คืนเฉพาะ partial grid (ไม่รีทั้งหน้า)"""
-        if self.request.GET.get('partial') == '1':
+        if is_ajax(self.request):
             return [self.partial_template_name]
         return [self.template_name]
 
@@ -351,7 +529,7 @@ class ProductPublicListView(ListView):
             'query': self.request.GET.get('q', '').strip(),
             'active_cat': self.request.GET.get('cat', '').strip(),
             'sort': self.request.GET.get('sort', 'newest'),
-            'categories': Product.objects.listed().category_choices(),
+            'categories': Catalog.categories(only_listed=True),
         })
         return ctx
 
@@ -384,8 +562,18 @@ class CartView(CartMixin, View):
 
     def get(self, request, *args, **kwargs):
         cart = self.get_cart()
-        ctx = {'items': cart.lines(), 'total': cart.total, 'cart_count': cart.count}
-        if request.GET.get('partial') == '1':
+        threshold = Decimal('1500.00')
+        free_shipping_needed = max(Decimal('0'), threshold - cart.total)
+        free_shipping_percent = min(100, int((cart.total / threshold) * 100)) if threshold > 0 else 100
+        ctx = {
+            'items': cart.lines(),
+            'total': cart.total,
+            'cart_count': cart.count,
+            'free_shipping_threshold': threshold,
+            'free_shipping_needed': free_shipping_needed,
+            'free_shipping_percent': free_shipping_percent,
+        }
+        if is_ajax(request):
             html = render(request, 'cart_area.html', ctx).content.decode('utf-8')
             return JsonResponse({'html': html, 'count': cart.count})
         return render(request, 'cart.html', ctx)
@@ -400,11 +588,11 @@ class CartAddView(CartMixin, View):
         product = get_object_or_404(Product.objects.listed(), id=kwargs['product_id'])
         cart = self.get_cart()
         if not cart.add(product, request.POST.get('quantity', 1)):
-            if _is_ajax(request):
+            if is_ajax(request):
                 return JsonResponse({'ok': False, 'error': f"จำนวนเกินสต็อก (เหลือ {product.stock} ชิ้น)"}, status=409)
             messages.error(request, f"จำนวนเกินสต็อก (เหลือ {product.stock} ชิ้น)")
             return redirect(reverse('product_detail', args=[product.id]))
-        if _is_ajax(request):
+        if is_ajax(request):
             return JsonResponse({'ok': True, 'count': cart.count, 'message': f"เพิ่ม {product.name} ลงตะกร้าแล้ว!"})
         messages.success(request, f"เพิ่ม {product.name} ลงตะกร้าแล้ว!")
         return redirect(reverse('cart'))
@@ -416,7 +604,7 @@ class CartRemoveView(CartMixin, View):
     def post(self, request, *args, **kwargs):
         self.get_cart().remove(kwargs['product_id'])
         cart = self.get_cart()
-        if _is_ajax(request):
+        if is_ajax(request):
             return JsonResponse({'ok': True, 'count': cart.count})
         messages.success(request, 'ลบสินค้าออกจากตะกร้าแล้ว!')
         return redirect(reverse('cart'))
@@ -427,14 +615,29 @@ class CartUpdateView(CartMixin, View):
 
     def post(self, request, *args, **kwargs):
         self.get_cart().update(kwargs['product_id'], request.POST.get('quantity', 1))
-        if _is_ajax(request):
+        if is_ajax(request):
             return JsonResponse({'ok': True, 'count': self.get_cart().count})
         return redirect(reverse('cart'))
 
 
-def _is_ajax(request):
-    """fetch จาก JS (ไม่ใช่ form submit ปกติ) — ใช้ header X-Requested-With"""
-    return request.headers.get('X-Requested-With') == 'fetch'
+def is_ajax(request):
+    """ตรวจคำขอ AJAX/partial — จุดเดียวของทั้งโปรเจกต์ (ตาม AGENTS.md).
+
+    ช่องทางที่รองรับ (เรียงตามที่ใช้จริง):
+    1. Header `X-Requested-With: fetch` (มาตรฐานของโปรเจกต์) หรือ `XMLHttpRequest` (ไลบรารี/legacy)
+    2. `X-Drawer: true` · query `?drawer=1` · ฟิลด์ฟอร์ม `ajax=1` — เปิด order drawer เป็น fragment
+    3. Query `?partial=1` — fragment สาธารณะที่ต้องแชร์ URL ได้ (product grid, cart panel)
+
+    ทุก view ที่ต้องเลือก "คืน JSON/partial หรือ redirect เต็มหน้า" ต้องเรียกฟังก์ชันนี้เท่านั้น
+    (เดิมมี 4 กลไกกระจัดกระจายตาม view ต่าง ๆ — รวมมาไว้ที่เดียว).
+    """
+    if request.headers.get('X-Requested-With') in ('fetch', 'XMLHttpRequest'):
+        return True
+    if request.headers.get('X-Drawer') == 'true':
+        return True
+    if request.POST.get('ajax') == '1':
+        return True
+    return request.GET.get('partial') == '1' or request.GET.get('drawer') == '1'
 
 
 class InsufficientStock(Exception):
@@ -613,6 +816,10 @@ class OrderSuccessView(TemplateView):
         ctx['order'] = order
         ctx['promptpay_display'] = settings.PROMPTPAY_ID
         ctx['slip_enabled'] = SlipOK.enabled()
+        # ประเมินกำหนดจัดส่งด้วยปฏิทินไทย (ข้ามเสาร์/อาทิตย์ + วันหยุดนักขัตฤกษ์ — Google ICS, keyless)
+        eta = ThaiCalendar.next_business_day()
+        ctx['delivery_eta'] = eta
+        ctx['delivery_eta_display'] = ThaiCalendar.format(eta)
         ctx['pp_payload'] = PromptPay.qr_payload(order.total) or ''
         try:
             ctx['qr'] = PromptPay.qr_data_uri(order.total)
@@ -635,7 +842,28 @@ class ProductDescribeAIView(StaffRequiredMixin, View):
         except Exception as exc:
             detail = f' — {exc}' if settings.DEBUG else ''
             return JsonResponse({'error': f'AI ขัดข้องหรือตอบไม่สำเร็จ{detail}'}, status=502)
-        return JsonResponse({'description': text})
+            return JsonResponse({'description': text})
+
+
+class ProductTranslateView(StaffRequiredMixin, View):
+    """POST /product/translate/ — แปลคำอธิบายสินค้า (EN→TH / TH→EN) ด้วย MyMemory (staff only).
+
+    ทำงานได้โดยไม่ต้องมี API key ใด ๆ — คู่กับปุ่ม "AI ช่วยเขียน" (Gemini ที่ต้องมี key):
+    ใช้เมื่อสตาฟวางสเปก/คำอธิบายภาษาอังกฤษจากผู้ผลิตแล้วอยากได้คำอธิบายไทย.
+    """
+
+    def post(self, request, *args, **kwargs):
+        text = (request.POST.get('text') or request.POST.get('description') or '').strip()
+        if not text:
+            return JsonResponse({'error': 'พิมพ์ข้อความที่ต้องการแปลก่อน'}, status=400)
+        target = 'en' if request.POST.get('target') == 'en' else 'th'
+        source = 'en' if target == 'th' else 'th'
+        translated = Translate.text(text, source=source, target=target)
+        if not translated:
+            return JsonResponse({
+                'error': 'แปลไม่สำเร็จ — ข้อความยาวเกิน 500 ตัวอักษร หรือโควตาการแปลฟรีหมดชั่วคราว'
+            }, status=502)
+        return JsonResponse({'text': translated})
 
 
 class OrderTrackingView(View):
@@ -646,7 +874,12 @@ class OrderTrackingView(View):
         มี ?order=&phone= → ค้นให้เลย | ไม่ล็อกอิน → ฟอร์มค้นหาสำหรับ guest"""
         if request.user.is_authenticated:
             base = {
-                'my_orders': request.user.orders.order_by('-created_at')[:12],
+                # (Perf A2) prefetch items__product — template วน o.items.all.0.product.name
+                # เดิม N+1 → ตอนนี้ 2 query (orders + items/products)
+                'my_orders': (request.user.orders
+                              .select_related('user')
+                              .prefetch_related('items__product')
+                              .order_by('-created_at')[:12]),
                 'is_account_mode': True,
             }
             oid = request.GET.get('order')
@@ -666,7 +899,10 @@ class OrderTrackingView(View):
         ctx = self._find(request.POST.get('order_id', ''), request.POST.get('phone', ''), request)
         if request.user.is_authenticated:
             ctx.update({
-                'my_orders': request.user.orders.order_by('-created_at')[:12],
+                'my_orders': (request.user.orders
+                              .select_related('user')
+                              .prefetch_related('items__product')
+                              .order_by('-created_at')[:12]),
                 'is_account_mode': True,
             })
         return render(request, self.template_name, ctx)
@@ -757,12 +993,20 @@ class QuickPayView(View):
 
 class SlipVerifyView(View):
     """POST /payment/slip/ — อัปโหลดสลิป → SlipOK OCR → สร้าง Payment อัตโนมัติ
-    คืน JSON สำหรับ fetch (X-Requested-With)"""
+    คืน JSON สำหรับ fetch (X-Requested-With)
+
+    จำกัดอัตรา 10 ครั้ง/นาที ต่อ IP (RateLimit service) — endpoint สาธารณะที่เรียก
+    OCR ภายนอกทุกครั้ง จึงมีต้นทุนจริงและต้องกันการยิงรัว.
+    """
 
     MAX_MB = 5
     ALLOWED_EXT = {'.jpg', '.jpeg', '.png', '.webp'}
 
     def post(self, request, *args, **kwargs):
+        # throttle ก่อนทุกอย่าง — กัน abuse แม้ฟีเจอร์ OCR ปิดอยู่
+        client_ip = request.META.get('REMOTE_ADDR', '0.0.0.0')
+        if not RateLimit.allow('slip', client_ip, limit=10, window=60):
+            return JsonResponse({'ok': False, 'error': 'ตรวจสลิปบ่อยเกินไป กรุณารอสักครู่แล้วลองใหม่'}, status=429)
         if not SlipOK.enabled():
             return JsonResponse({'ok': False, 'error': 'ระบบอ่านสลิปยังไม่เปิดใช้งาน'}, status=503)
         order, err = _authed_order(request, request.POST.get('order_id'), request.POST.get('phone'))
@@ -841,7 +1085,7 @@ class LiveSearchListView(StaffRequiredMixin, ListView):
 
     def render_to_response(self, context):
         # Live search: คืนเฉพาะส่วนตาราง + ตัวนับ + แบ่งหน้า สำหรับ fetch
-        if self.partial_template_name and self.request.headers.get('X-Requested-With') == 'fetch':
+        if self.partial_template_name and is_ajax(self.request):
             return render(self.request, self.partial_template_name, context)
         return super().render_to_response(context)
 
@@ -881,6 +1125,7 @@ class DashboardView(StaffRequiredMixin, TemplateView):
             'recent_emps': Employee.objects.recent(limit=5),
             'recent_orders': Order.objects.recent(limit=5),
             'order_total': order_stats['total'], 'order_pending': order_stats['pending'],
+            'order_paid': order_stats.get('paid', 0),
             'revenue': order_stats['revenue'],
             'departments': departments,
             'dept_max': max([d['n'] for d in departments], default=1) or 1,
@@ -888,21 +1133,39 @@ class DashboardView(StaffRequiredMixin, TemplateView):
             'thai_date': ThaiCalendar.full_date(),
             'pending_reports': self._pending_reports(),
         })
+        # QR มือถือสำหรับสแกนเปิดระบบพนักงาน — สร้างฝั่งเซิร์ฟเวอร์จาก URL จริง
+        # (ไม่โหลดไลบรารี QR จาก CDN; ผู้ใช้ที่ไม่มี JS ก็ยังเห็น QR)
+        mobile_url = self.request.build_absolute_uri('/employees/')
+        context['mobile_qr_target'] = mobile_url
+        context['mobile_qr_display'] = mobile_url.replace('https://', '').replace('http://', '')
+        context['mobile_qr_uri'] = QrCode.data_uri(mobile_url)
         return context
 
     @staticmethod
     def _pending_reports():
-        """คิวตรวจการแจ้งชำระ: รายการล่าสุดของออเดอร์ที่ยัง pending"""
+        """คิวตรวจการแจ้งชำระ: รายการล่าสุดของออเดอร์ที่ยัง pending.
+        (Perf A1) เคยวน p.order.reported_total() + p.order.remaining (= เรียก reported_total
+        ซ้ำ) ต่อแถว = ~2 aggregate query/แถว → ~20 query/หน้า. แก้: annotate ยอดสะสมต่อ
+        order ครั้งเดียวแล้วคำนวณ remaining ใน Python = รวม 2 query เสมอ."""
         rows = []
         payments = (Payment.objects
                     .filter(order__status='pending')
                     .select_related('order')
                     .order_by('-created_at')[:10])
+        if not payments:
+            return rows
+        from django.db.models import Sum
+        reported_map = dict(
+            Order.objects.filter(id__in=[p.order_id for p in payments])
+            .annotate(reported=Sum('payments__amount'))
+            .values_list('id', 'reported')
+        )
         for p in payments:
+            reported = reported_map.get(p.order_id) or Decimal('0')
             rows.append({
                 'payment': p,
-                'reported': p.order.reported_total(),
-                'remaining': p.order.remaining,
+                'reported': reported,
+                'remaining': max(p.order.total - reported, Decimal('0')),
             })
         return rows
 
@@ -927,20 +1190,11 @@ class PaymentVerifyView(StaffRequiredMixin, View):
         return redirect(reverse('dashboard') + '#reports')
 
 
-class EmployeeExportCsvView(StaffRequiredMixin, View):
+class EmployeeExportCsvView(CsvSafeMixin, StaffRequiredMixin, View):
     """ส่งออกข้อมูลพนักงานทั้งหมดเป็น CSV (เปิดใน Excel ได้ทันที รองรับภาษาไทย)"""
 
     HEADERS = ['รหัสพนักงาน', 'ชื่อ-นามสกุล', 'เพศ', 'แผนก', 'เบอร์โทรศัพท์', 'อีเมล',
                'สถานะ', 'เงินเดือน', 'วันที่เริ่มงาน', 'ที่อยู่']
-    _FORMULA_CHARS = ('=', '+', '-', '@', '\t')
-
-    @classmethod
-    def _safe_cell(cls, value):
-        """กัน CSV formula injection: cell ที่ขึ้นต้น =+-@/tab → คำนำ ' (Excel ไม่ประมวลผล)"""
-        text = '' if value is None else str(value)
-        if text.startswith(cls._FORMULA_CHARS):
-            return "'" + text
-        return text
 
     def get(self, request, *args, **kwargs):
         response = HttpResponse(content_type='text/csv; charset=utf-8')
@@ -1045,9 +1299,12 @@ class EmployeeUpdateView(EmployeeFormBaseView, UpdateView):
 
 
 class EmployeeDeleteView(StaffRequiredMixin, View):
-    """ลบพนักงาน (POST เท่านั้น — ปุ่มในหน้าเว็บส่ง form) พร้อมลบไฟล์รูปเดิม"""
+    """ลบพนักงาน (POST เท่านั้น — ปุ่มในหน้าเว็บส่ง form) พร้อมลบไฟล์รูปเดิม — บังคับสิทธิ์ delete_employee"""
 
     def post(self, request, *args, **kwargs):
+        if not request.user.has_perm('myapp.delete_employee'):
+            messages.error(request, 'คุณไม่มีสิทธิ์ลบข้อมูลพนักงาน (เฉพาะระดับผู้จัดการหรือผู้ดูแลระบบ)')
+            return redirect(reverse('employee_list'))
         employee = get_object_or_404(Employee, pk=kwargs['pk'])
         name = employee.name
         if employee.avatar:
@@ -1095,7 +1352,7 @@ class ProductFormBaseView(StaffRequiredMixin, View):
     def get(self, request, *args, **kwargs):
         product = self.get_product()
         context = {'product': product} if product else {}
-        context['all_categories'] = Product.objects.category_choices()
+        context['all_categories'] = Catalog.categories(only_listed=False)
         context['ai_enabled'] = GeminiAI.enabled()
         return render(request, self.template_name, context)
 
@@ -1127,7 +1384,7 @@ class ProductFormBaseView(StaffRequiredMixin, View):
         return redirect(reverse('product_manage'))
 
     def _render_error(self, request, product=None):
-        context = {'all_categories': Product.objects.category_choices(),
+        context = {'all_categories': Catalog.categories(only_listed=False),
                    'ai_enabled': GeminiAI.enabled()}
         if product is not None and product.pk:
             context['product'] = product
@@ -1197,7 +1454,7 @@ class OrderManageView(StaffRequiredMixin, ListView):
         return qs
 
     def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'fetch':
+        if is_ajax(self.request):
             return [self.partial_template_name]
         return [self.template_name]
 
@@ -1216,6 +1473,12 @@ class OrderManageView(StaffRequiredMixin, ListView):
 class OrderDetailView(StaffRequiredMixin, TemplateView):
     """ดูรายละเอียดออเดอร์ + เปลี่ยนสถานะ + ประวัติการชำระ"""
     template_name = 'order_detail.html'
+    drawer_template_name = 'order_drawer_content.html'
+
+    def get_template_names(self):
+        if is_ajax(self.request):
+            return [self.drawer_template_name]
+        return [self.template_name]
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
@@ -1239,15 +1502,112 @@ class OrderStatusView(StaffRequiredMixin, View):
     def post(self, request, *args, **kwargs):
         order = get_object_or_404(Order, id=int(kwargs['order_id']))
         new_status = request.POST.get('status', '').strip()
+        ajax = is_ajax(request)
         if new_status not in dict(Order.STATUS_CHOICES):
+            if ajax:
+                return JsonResponse({'ok': False, 'msg': 'สถานะไม่ถูกต้อง'}, status=400)
             messages.error(request, 'สถานะไม่ถูกต้อง')
             return redirect(reverse('order_manage'))
         ok, msg = OrderStatusService.move(order, new_status)
         if ok:
+            if ajax:
+                return JsonResponse({
+                    'ok': True,
+                    'msg': msg,
+                    'status': order.status,
+                    'status_display': order.get_status_display()
+                })
             messages.success(request, f'ออเดอร์ #{order.id}: {msg}')
         else:
+            if ajax:
+                return JsonResponse({'ok': False, 'msg': msg}, status=400)
             messages.error(request, f'ออเดอร์ #{order.id}: {msg}')
         return redirect(reverse('order_detail', args=[order.id]))
+
+
+class OrderExportCsvView(CsvSafeMixin, StaffRequiredMixin, View):
+    """ส่งออกข้อมูลคำสั่งซื้อทั้งหมดเป็น CSV (เปิดใน Excel ได้ทันที รองรับภาษาไทย)"""
+
+    HEADERS = [
+        'เลขออเดอร์', 'ชื่อผู้สั่งซื้อ', 'เบอร์โทร', 'ที่อยู่จัดส่ง',
+        'วิธีชำระเงิน', 'ยอดรวม (บาท)', 'ยอดชำระแล้ว (บาท)', 'ยอดคงเหลือ (บาท)',
+        'สถานะ', 'วันที่สั่งซื้อ',
+    ]
+
+    def get(self, request, *args, **kwargs):
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = timezone.localdate().isoformat()
+        response['Content-Disposition'] = f'attachment; filename=orders_{filename}.csv'
+        response.write('\ufeff')  # BOM สำหรับ Excel ภาษาไทย
+        writer = csv.writer(response)
+        writer.writerow(self.HEADERS)
+
+        from django.db.models import Sum
+        reported_map = dict(
+            Order.objects.annotate(reported=Sum('payments__amount'))
+            .values_list('id', 'reported')
+        )
+        orders = (Order.objects
+                  .select_related('user')
+                  .order_by('-created_at'))
+        for o in orders:
+            rep = reported_map.get(o.id) or Decimal('0')
+            rem = max(o.total - rep, Decimal('0'))
+            writer.writerow([
+                o.id,
+                self._safe_cell(o.customer_name),
+                self._safe_cell(o.phone),
+                self._safe_cell(o.address),
+                o.get_payment_method_display(),
+                float(o.total),
+                float(rep),
+                float(rem),
+                o.get_status_display(),
+                o.created_at.strftime('%d/%m/%Y %H:%M'),
+            ])
+        return response
+
+
+class OrderInvoiceView(View):
+    """หน้าพิมพ์ใบเสร็จ/ใบกำกับภาษีอย่างย่อ (A4 Print-Ready):
+    เข้าถึงได้โดย:
+    1. เจ้าหน้าที่ (Staff)
+    2. ลูกค้าที่เป็นเจ้าของออเดอร์ (request.user == order.user)
+    3. ลูกค้าที่ระบุเบอร์โทรถูกต้องผ่าน GET param ?phone= (กรณี guest)
+    """
+    template_name = 'order_invoice.html'
+
+    def get(self, request, order_id, *args, **kwargs):
+        order = get_object_or_404(
+            Order.objects.select_related('user').prefetch_related('items__product'),
+            id=order_id
+        )
+        # ตรวจสิทธิ์การเข้าถึง
+        is_staff = request.user.is_authenticated and request.user.is_staff
+        is_owner = request.user.is_authenticated and order.user_id == request.user.id
+        phone_param = request.GET.get('phone', '').strip().replace('-', '').replace(' ', '')
+        clean_order_phone = (order.phone or '').replace('-', '').replace(' ', '')
+        phone_match = bool(phone_param and clean_order_phone and phone_param == clean_order_phone)
+
+        if not (is_staff or is_owner or phone_match):
+            if not request.user.is_authenticated:
+                return redirect(f"{reverse('account_login')}?next={request.path}")
+            raise Http404("ไม่พบคำสั่งซื้อ หรือคุณไม่มีสิทธิ์เข้าถึงเอกสารนี้")
+
+        reported = order.reported_total()
+        remaining = max(order.total - reported, Decimal('0'))
+        is_paid = order.status in ('paid', 'shipped', 'delivered')
+
+        context = {
+            'order': order,
+            'items': order.items.all(),
+            'reported': reported,
+            'remaining': remaining,
+            'is_paid': is_paid,
+            'is_staff': is_staff,
+            'today': timezone.localdate(),
+        }
+        return render(request, self.template_name, context)
 
 
 # ==================== Admin: Customer Management ====================
@@ -1276,7 +1636,7 @@ class CustomerListView(StaffRequiredMixin, ListView):
         return qs
 
     def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'fetch':
+        if is_ajax(self.request):
             return ['customer_list_rows.html']
         return [self.template_name]
 
@@ -1413,7 +1773,7 @@ class PaymentListView(StaffRequiredMixin, ListView):
         return qs
 
     def get_template_names(self):
-        if self.request.headers.get('X-Requested-With') == 'fetch':
+        if is_ajax(self.request):
             return ['payment_list_rows.html']
         return [self.template_name]
 
@@ -1425,8 +1785,8 @@ class PaymentListView(StaffRequiredMixin, ListView):
         return ctx
 
 
-class PaymentExportCsvView(StaffRequiredMixin, View):
-    """ส่งออกประวัติการชำระเงินเป็น CSV"""
+class PaymentExportCsvView(CsvSafeMixin, StaffRequiredMixin, View):
+    """ส่งออกประวัติการชำระเงินเป็น CSV — ข้อความจากลูกค้า/OCR ผ่าน _safe_cell กัน formula injection"""
 
     HEADERS = ['เลขออเดอร์', 'ชื่อผู้แจ้ง', 'เบอร์โทร', 'จำนวนเงิน', 'วันที่โอน', 'หมายเหตุ', 'วันที่บันทึก']
 
@@ -1439,8 +1799,8 @@ class PaymentExportCsvView(StaffRequiredMixin, View):
         writer.writerow(self.HEADERS)
         for p in Payment.objects.select_related('order').order_by('-created_at'):
             writer.writerow([
-                p.order_id, p.name, p.phone, p.amount,
-                p.transfer_date or '', p.note, p.created_at.strftime('%d/%m/%Y %H:%M'),
+                p.order_id, self._safe_cell(p.name), self._safe_cell(p.phone), p.amount,
+                p.transfer_date or '', self._safe_cell(p.note), p.created_at.strftime('%d/%m/%Y %H:%M'),
             ])
         return response
 
@@ -1459,7 +1819,90 @@ class ProductStockAdjustView(StaffRequiredMixin, View):
         new_stock = max(0, product.stock + delta)
         product.stock = new_stock
         product.save(update_fields=['stock'])
-        if request.headers.get('X-Requested-With') == 'fetch':
+        if is_ajax(request):
             return JsonResponse({'ok': True, 'stock': product.stock, 'name': product.name})
         messages.success(request, f'ปรับ stock {product.name} เป็น {product.stock} ชิ้นแล้ว')
-        return redirect(reverse('product_manage'))
+        next_url = request.POST.get('next') or request.META.get('HTTP_REFERER') or ''
+        if not url_has_allowed_host_and_scheme(next_url, allowed_hosts={request.get_host()}):
+            next_url = reverse('product_manage')
+        return redirect(next_url)
+
+
+# ==================== RBAC: User & Role Management ====================
+
+class StaffUserManageView(ManagerRequiredMixin, ListView):
+    """หน้าจัดการผู้ใช้และสิทธิ์บทบาท — สำหรับผู้จัดการร้าน/แอดมิน (RBAC Management)"""
+    template_name = 'staff_users.html'
+    context_object_name = 'user_list'
+    paginate_by = 15
+
+    def get_queryset(self):
+        from django.contrib.auth.models import User
+        qs = User.objects.all().select_related('customer_profile').prefetch_related('groups').order_by('-date_joined')
+        q = self.request.GET.get('q', '').strip()
+        if q:
+            from django.db.models import Q
+            qs = qs.filter(
+                Q(username__icontains=q) |
+                Q(first_name__icontains=q) |
+                Q(last_name__icontains=q) |
+                Q(email__icontains=q)
+            )
+        role_filter = self.request.GET.get('role', '').strip()
+        if role_filter in ['Manager', 'Staff', 'Member']:
+            qs = qs.filter(groups__name=role_filter)
+        return qs
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['query'] = self.request.GET.get('q', '').strip()
+        ctx['role_filter'] = self.request.GET.get('role', '').strip()
+        ctx['role_form'] = UserRoleChangeForm()
+        return ctx
+
+
+class StaffUserRoleUpdateView(ManagerRequiredMixin, View):
+    """เปลี่ยนบทบาทผู้ใช้ (Manager / Staff / Member) แบบ 1 คลิก"""
+
+    def post(self, request, user_id, *args, **kwargs):
+        from django.contrib.auth.models import Group, User
+
+        target_user = get_object_or_404(User, pk=user_id)
+        if target_user == request.user and not request.user.is_superuser:
+            messages.warning(request, 'คุณไม่สามารถเปลี่ยนบทบาทของตนเองได้')
+            return redirect(reverse('staff_users'))
+        if target_user.is_superuser and not request.user.is_superuser:
+            messages.error(request, 'ไม่สามารถเปลี่ยนบทบาทของผู้ดูแลระบบ (superuser) ได้ — สงวนสิทธิ์เฉพาะ superuser ด้วยกัน')
+            return redirect(reverse('staff_users'))
+
+        new_role = request.POST.get('role', '').strip()
+        if new_role not in ['Manager', 'Staff', 'Member']:
+            messages.error(request, 'บทบาทที่ระบุไม่ถูกต้อง')
+            return redirect(reverse('staff_users'))
+
+        # ล้างกลุ่มเดิมใน 3 บทบาทหลัก
+        for gname in ['Manager', 'Staff', 'Member']:
+            g = Group.objects.filter(name=gname).first()
+            if g:
+                target_user.groups.remove(g)
+
+        # กำหนดกลุ่มใหม่ + สิทธิ์ is_staff
+        target_group, _ = Group.objects.get_or_create(name=new_role)
+        target_user.groups.add(target_group)
+        if new_role in ['Manager', 'Staff']:
+            target_user.is_staff = True
+        else:
+            target_user.is_staff = False
+        target_user.save()
+
+        messages.success(request, f'เปลี่ยนบทบาทของ {target_user.username} เป็น "{new_role}" เรียบร้อยแล้ว')
+        return redirect(reverse('staff_users'))
+
+
+def permission_denied_view(request, exception=None):
+    """หน้า 403 Forbidden แบบ Apple Liquid Glass สวยงาม อธิบายภาษาไทยชัดเจน"""
+    return render(request, '403.html', {
+        'exception': exception,
+        'user': request.user,
+    }, status=403)
+
