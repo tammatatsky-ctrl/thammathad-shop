@@ -48,6 +48,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'drf_spectacular',          # OpenAPI 3 schema + Swagger UI (/api/schema/, /api/docs/)
     'myapp',
 ]
 
@@ -57,8 +58,35 @@ REST_FRAMEWORK = {
         'rest_framework.authentication.SessionAuthentication',   # เบราว์เซอร์/browsable API
         'rest_framework.authentication.TokenAuthentication',     # แอปภายนอก (Authorization: Token xxx)
     ],
+    # Fail-safe: view ใหม่ที่ไม่ระบุ permission จะต้องล็อกอินก่อน (view สาธารณะ
+    # ของโปรเจกต์ระบุ AllowAny เองครบแล้ว — เช่น products/categories/api root)
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 10,
+    # อัตราจำกัดแบบ scope — ใช้เฉพาะ view ที่ระบุ throttle_classes เอง (ไม่เปิด global
+    # เพื่อไม่ให้กระทบ endpoint ปกติ). 'token' = /api/token/ กัน brute force รหัสผ่าน
+    'DEFAULT_THROTTLE_RATES': {
+        'token': '10/min',
+    },
+    # Schema กลางของ API — ใช้โดย /api/schema/ + /api/docs/ (drf-spectacular)
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+}
+
+# ==================== OpenAPI / API Docs (drf-spectacular) ====================
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Thammathad Shop API',
+    'DESCRIPTION': (
+        'REST API ของระบบร้านค้า Thammathad Shop — โปรเจกต์ส่งงาน (demo ไม่มีการซื้อขายจริง)\n\n'
+        '- `/api/products/`, `/api/categories/` — สาธารณะ (อ่านอย่างเดียว)\n'
+        '- `/api/orders/` — อ่านอย่างเดียว เฉพาะ staff\n'
+        '- `/api/employees/` — CRUD เฉพาะ staff\n'
+        '- ขอ token ที่ `/api/token/` (จำกัด 10 ครั้ง/นาที) แล้วส่ง `Authorization: Token <token>`'
+    ),
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,      # ไม่ให้ schema endpoint ฟ้องตัวเอง
+    'COMPONENT_SPLIT_REQUEST': True,    # แยก request/response component (รองรับอัปโหลดไฟล์)
 }
 
 # ==================== External Integrations ====================
@@ -84,7 +112,7 @@ ROOT_URLCONF = 'myproject.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [BASE_DIR / 'myapp' / 'templates'],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -109,6 +137,26 @@ DATABASES = {
         'NAME': BASE_DIR / 'db.sqlite3',
     }
 }
+
+
+# ==================== Cache (Performance) ====================
+# locmem = หน่วยความจำของแต่ละ process (เหมาะ dev/PA 1 process ไม่มีวงเวียน)
+# ใช้แคชค่าที่ถูกเรียกซ้ำข้ามหน้า เช่น หมวดหมู่สินค้า (category_choices).
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'thammathad',
+    },
+}
+
+
+# ==================== Email (ลืมรหัสผ่าน) ====================
+# Demo assignment — ไม่มี SMTP/ส่งเมลจริง: ใช้ console backend เพื่อให้เห็น flow
+# ลืมรหัสผ่านทำงาน (link รีเซ็ตโผล่ที่ terminal/console ของ runserver).
+# ถ้าจะ deploy จริงก็แค่เปลี่ยน backend + ใส่ SMTP credentials (env) ที่นี่.
+EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+DEFAULT_FROM_EMAIL = 'thammathad@example.com'
+EMAIL_SUBJECT_PREFIX = '[Thammathad] '
 
 
 # Password validation

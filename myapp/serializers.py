@@ -23,14 +23,18 @@ class ProductSerializer(serializers.ModelSerializer):
     """Serializer สินค้า (read-only API): image_path → image_url เต็มให้ client."""
 
     image_url = serializers.SerializerMethodField()
+    model_3d_url = serializers.SerializerMethodField()
 
     class Meta:
         model = Product
         fields = ['id', 'name', 'category', 'description', 'price',
-                  'stock', 'image_url', 'is_active', 'created_at']
+                  'stock', 'image_url', 'model_3d_url', 'is_active', 'created_at']
 
-    def get_image_url(self, obj):
+    def get_image_url(self, obj) -> str | None:
         return _absolute(self.context.get('request'), obj.image)
+
+    def get_model_3d_url(self, obj) -> str | None:
+        return _absolute(self.context.get('request'), obj.model_3d)
 
 
 class EmployeeSerializer(serializers.ModelSerializer):
@@ -44,7 +48,7 @@ class EmployeeSerializer(serializers.ModelSerializer):
                   'avatar_url', 'created_at']
         read_only_fields = ['emp_code']
 
-    def get_avatar_url(self, obj):
+    def get_avatar_url(self, obj) -> str | None:
         """avatar เป็น ImageField (media/) — ต้องใช้ .url ไม่ใช่ static()"""
         if not obj.avatar:
             return None
