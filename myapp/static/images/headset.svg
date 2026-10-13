@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="หูฟังเกมมิ่ง">
+  <!-- headset.svg — หูฟังเกมมิ่ง · สไตล์เดียวกับ mouse.svg -->
+  <defs>
+    <linearGradient id="hsBand" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdfdfe"/><stop offset="1" stop-color="#c6cad4"/>
+    </linearGradient>
+    <linearGradient id="hsCup" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3a3f4b"/><stop offset="1" stop-color="#16191f"/>
+    </linearGradient>
+    <radialGradient id="hsRing" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#5ea9f5" stop-opacity="0.95"/>
+      <stop offset="1" stop-color="#0071e7" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="hsDrop" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#1d1d1f" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="400" cy="652" rx="228" ry="28" fill="#1d1d1f" opacity="0.13"/>
+
+  <g filter="url(#hsDrop)">
+    <!-- แบนด์คอ: เบาะด้านใน -->
+    <path d="M212 430V344c0-104 84-180 188-180s188 76 188 180v86"
+          fill="none" stroke="#e3e6ec" stroke-width="40" stroke-linecap="round"/>
+    <path d="M212 430V344c0-104 84-180 188-180s188 76 188 180v86"
+          fill="none" stroke="url(#hsBand)" stroke-width="30" stroke-linecap="round"/>
+    <path d="M256 424V348c0-80 65-138 144-138s144 58 144 138v76"
+          fill="none" stroke="#b0b6c2" stroke-width="9" stroke-linecap="round" opacity="0.7"/>
+
+    <!-- หูฟังซ้าย -->
+    <g transform="translate(212 448)">
+      <ellipse cx="0" cy="72" rx="74" ry="86" fill="url(#hsCup)"/>
+      <ellipse cx="0" cy="72" rx="74" ry="86" fill="url(#hsRing)" opacity="0.35"/>
+      <ellipse cx="-6" cy="72" rx="52" ry="62" fill="#23262e"/>
+      <circle cx="-6" cy="72" r="22" fill="#0071e7" opacity="0.85"/>
+      <circle cx="-6" cy="72" r="34" fill="#0071e7" opacity="0.18"/>
+    </g>
+
+    <!-- หูฟังขวา -->
+    <g transform="translate(588 448)">
+      <ellipse cx="0" cy="72" rx="74" ry="86" fill="url(#hsCup)"/>
+      <ellipse cx="0" cy="72" rx="74" ry="86" fill="url(#hsRing)" opacity="0.35"/>
+      <ellipse cx="-6" cy="72" rx="52" ry="62" fill="#23262e"/>
+      <circle cx="-6" cy="72" r="22" fill="#0071e7" opacity="0.85"/>
+      <circle cx="-6" cy="72" r="34" fill="#0071e7" opacity="0.18"/>
+    </g>
+
+    <!-- ไมค์ตอนเสียงพูด -->
+    <path d="M560 540c22 26 8 62-26 68" fill="none" stroke="#3a3f4b" stroke-width="14" stroke-linecap="round"/>
+    <circle cx="530" cy="610" r="17" fill="#23262e"/>
+    <circle cx="530" cy="610" r="26" fill="#0071e7" opacity="0.2"/>
+  </g>
+</svg>

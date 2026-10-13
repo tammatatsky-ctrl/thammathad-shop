@@ -72,7 +72,7 @@
                             {% if featured.0 %}{{ featured.0.name }}{% else %}Mechanical Keyboard Pro Series{% endif %}
                         </h2>
                         <p class="expand-card-desc">
-                            คีย์บอร์ด Custom สวิตช์ Lubed แท้, โครงสร้าง Gasket Mount พร้อม PBT Keycaps หนา 1.5mm และอุปกรณ์สตูดิโอความแม่นยำสูง รับประกันศูนย์ไทย 2 ปี
+                            {% if featured.0 %}{{ featured.0.description }} รับประกันศูนย์ไทย 2 ปี{% else %}อุปกรณ์คอมพิวเตอร์คัดสรร ส่งถึงทั่วประเทศ รับประกันศูนย์ไทย 2 ปี{% endif %}
                         </p>
                     </div>
 

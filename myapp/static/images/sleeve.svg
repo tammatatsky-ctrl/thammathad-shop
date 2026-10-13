@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="กระเป๋าสะพายสำหรับแล็ปท็อป">
+  <!-- sleeve.svg — กระเป๋าสะพายแล็ปท็อป 15.6" · สไตล์เดียวกับ mouse.svg -->
+  <defs>
+    <linearGradient id="slBag" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4d5360"/><stop offset="0.55" stop-color="#2f343d"/><stop offset="1" stop-color="#1b1e25"/>
+    </linearGradient>
+    <linearGradient id="slFlap" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5a606c"/><stop offset="1" stop-color="#333944"/>
+    </linearGradient>
+    <linearGradient id="slSheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.22"/>
+      <stop offset="0.6" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="slDrop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#1d1d1f" flood-opacity="0.24"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="400" cy="666" rx="212" ry="26" fill="#1d1d1f" opacity="0.14"/>
+
+  <g filter="url(#slDrop)">
+    <!-- สายสะพายด้านหลัง -->
+    <path d="M296 250c-26-58 0-96 46-96M504 250c26-58 0-96-46-96" fill="none"
+          stroke="#3a3f4b" stroke-width="26" stroke-linecap="round"/>
+    <!-- ตัวกระเป๋า -->
+    <path d="M400 228c122 0 202 54 202 146v220c0 42-32 72-72 72H270c-40 0-72-30-72-72V374c0-92 80-146 202-146z"
+          fill="url(#slBag)"/>
+    <path d="M400 228c122 0 202 54 202 146v220c0 42-32 72-72 72H270c-40 0-72-30-72-72V374c0-92 80-146 202-146z"
+          fill="url(#slSheen)"/>
+    <!-- ฝาปิดบน -->
+    <path d="M400 228c122 0 202 54 202 146v46H198v-46c0-92 80-146 202-146z" fill="url(#slFlap)"/>
+    <!-- ซิปเปอร์เจาะหุ้นตามขอบฝา -->
+    <path d="M198 420h404" stroke="#7d838f" stroke-width="4" stroke-dasharray="14 9" opacity="0.85"/>
+    <rect x="378" y="404" width="44" height="30" rx="9" fill="#aeb4c0"/>
+    <rect x="392" y="410" width="16" height="18" rx="6" fill="#333944"/>
+    <!-- ช่องกระเป๋าหน้า + โลโก้จุดสีเดียว -->
+    <rect x="292" y="474" width="216" height="118" rx="22" fill="#23262e"/>
+    <rect x="292" y="474" width="216" height="118" rx="22" fill="none" stroke="#454a56" stroke-width="3"/>
+    <circle cx="400" cy="534" r="26" fill="#0071e7" opacity="0.16"/>
+    <circle cx="400" cy="534" r="12" fill="#0071e7"/>
+  </g>
+</svg>

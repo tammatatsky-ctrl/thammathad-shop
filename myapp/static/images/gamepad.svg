@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="คีย์แพดเกมมิง">
+  <!-- gamepad.svg — คีย์แพดเกมมิง · สไตล์เดียวกับ mouse.svg -->
+  <defs>
+    <linearGradient id="gpBody" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdfdfe"/><stop offset="1" stop-color="#c6cad4"/>
+    </linearGradient>
+    <linearGradient id="gpGrip" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#454a56"/><stop offset="1" stop-color="#1c1f27"/>
+    </linearGradient>
+    <linearGradient id="gpSheen" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.7"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="gpDrop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#1d1d1f" flood-opacity="0.2"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="400" cy="620" rx="252" ry="30" fill="#1d1d1f" opacity="0.13"/>
+
+  <g filter="url(#gpDrop)">
+    <!-- ตัวเกมแพด: ทรงแบน + ปล่องมือสองข้าง -->
+    <path d="M400 268c74 0 122 16 158 52 30 30 44 74 44 138 0 74-22 118-62 118-32 0-52-22-74-56-20-32-38-48-66-48s-46 16-66 48c-22 34-42 56-74 56-40 0-62-44-62-118 0-64 14-108 44-138 36-36 84-52 158-52z"
+          fill="url(#gpBody)"/>
+    <path d="M400 268c74 0 122 16 158 52 30 30 44 74 44 138 0 74-22 118-62 118-32 0-52-22-74-56-20-32-38-48-66-48s-46 16-66 48c-22 34-42 56-74 56-40 0-62-44-62-118 0-64 14-108 44-138 36-36 84-52 158-52z"
+          fill="url(#gpSheen)"/>
+    <!-- พาเลมือสีเข้ม -->
+    <path d="M400 432c28 0 46 16 66 48 22 34 42 56 74 56 14 0 25-7 33-19-6 30-19 47-33 47-32 0-52-22-74-56-20-32-38-48-66-48s-46 16-66 48c-22 34-42 56-74 56-14 0-27-17-33-47 8 12 19 19 33 19 32 0 52-22 74-56 20-32 38-48 66-48z"
+          fill="url(#gpGrip)" opacity="0.9"/>
+
+    <!-- ปุ่มดี-แซด (ซ้าย) -->
+    <circle cx="286" cy="392" r="44" fill="#2b303a"/>
+    <circle cx="286" cy="392" r="34" fill="#3d434f"/>
+    <circle cx="286" cy="392" r="14" fill="#0071e7" opacity="0.9"/>
+    <!-- ปุ่ม ABXY (ขวา) -->
+    <g fill="#2b303a">
+      <circle cx="520" cy="348" r="25"/><circle cx="568" cy="388" r="25"/>
+      <circle cx="520" cy="428" r="25"/><circle cx="472" cy="388" r="25"/>
+    </g>
+    <g fill="#e8eaef">
+      <circle cx="520" cy="348" r="13"/><circle cx="568" cy="388" r="13"/>
+      <circle cx="520" cy="428" r="13"/><circle cx="472" cy="388" r="13"/>
+    </g>
+
+    <!-- สติ๊กซ้าย + ปุ่มเมนู -->
+    <circle cx="322" cy="474" r="34" fill="#2b303a"/>
+    <circle cx="322" cy="474" r="25" fill="#4a505c"/>
+    <circle cx="322" cy="474" r="9" fill="#0071e7"/>
+    <rect x="466" y="462" width="48" height="15" rx="7.5" fill="#2b303a"/>
+
+    <!-- ไฟสถานะ -->
+    <circle cx="400" cy="318" r="7" fill="#0071e7"/>
+    <circle cx="400" cy="318" r="14" fill="#0071e7" opacity="0.2"/>
+  </g>
+</svg>

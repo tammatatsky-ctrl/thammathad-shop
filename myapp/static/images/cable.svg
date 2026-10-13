@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="สาย USB-C ถัก 100W">
+  <!-- cable.svg — สาย USB-C ถักลักษณะ 100W · สไตล์เดียวกับ mouse.svg -->
+  <defs>
+    <linearGradient id="cbCord" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4a505c"/><stop offset="0.5" stop-color="#2b303a"/><stop offset="1" stop-color="#16191f"/>
+    </linearGradient>
+    <linearGradient id="cbPlug" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fdfdfe"/><stop offset="1" stop-color="#b7bcc7"/>
+    </linearGradient>
+    <pattern id="cbBraid" width="12" height="12" patternUnits="userSpaceOnUse" patternTransform="rotate(35)">
+      <rect width="6" height="12" fill="#2b303a"/>
+      <rect x="6" width="6" height="12" fill="#5f6572" opacity="0.55"/>
+    </pattern>
+    <filter id="cbDrop" x="-25%" y="-25%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#1d1d1f" flood-opacity="0.18"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="400" cy="606" rx="246" ry="26" fill="#1d1d1f" opacity="0.12"/>
+
+  <g filter="url(#cbDrop)">
+    <!-- ตัวสายพันเป็นวงซ้อน (เขียนเป็นเส้นหนาแบบถัก) -->
+    <path d="M214 470c0-96 84-158 186-158s186 62 186 158-84 158-186 158" fill="none"
+          stroke="url(#cbCord)" stroke-width="40" stroke-linecap="round"/>
+    <path d="M214 470c0-96 84-158 186-158s186 62 186 158-84 158-186 158" fill="none"
+          stroke="url(#cbBraid)" stroke-width="40" stroke-linecap="round" opacity="0.35"/>
+
+    <!-- ปลั๊ก USB-C ซ้าย -->
+    <g transform="rotate(-16 214 470)">
+      <rect x="168" y="452" width="112" height="52" rx="24" fill="url(#cbPlug)"/>
+      <rect x="266" y="462" width="46" height="32" rx="15" fill="#3a3f4b"/>
+      <rect x="304" y="468" width="26" height="20" rx="9" fill="#20242c"/>
+    </g>
+
+    <!-- ปลั๊ก USB-C ขวา -->
+    <g transform="rotate(-16 586 470)">
+      <rect x="520" y="452" width="112" height="52" rx="24" fill="url(#cbPlug)"/>
+      <rect x="514" y="462" width="46" height="32" rx="15" fill="#3a3f4b"/>
+      <rect x="470" y="468" width="26" height="20" rx="9" fill="#20242c"/>
+    </g>
+
+    <!-- หัวหุ้มถักที่โค้ง (รายละเอียดที่บอกว่าเป็นสายถักจริง) -->
+    <path d="M296 356c18-24 42-30 62-18" fill="none" stroke="#0071e7" stroke-width="7" stroke-linecap="round" opacity="0.85"/>
+    <circle cx="400" cy="596" r="9" fill="#0071e7" opacity="0.75"/>
+  </g>
+</svg>

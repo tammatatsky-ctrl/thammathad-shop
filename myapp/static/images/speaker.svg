@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="ลำโพงบลูทูธ">
+  <!-- speaker.svg — ลำโพง Bluetooth แบบทรงกระบอก · สไตล์เดียวกับ mouse.svg -->
+  <defs>
+    <linearGradient id="spBody" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e9ebf0"/><stop offset="0.35" stop-color="#fdfdfe"/>
+      <stop offset="0.75" stop-color="#c8ccd6"/><stop offset="1" stop-color="#9aa0ae"/>
+    </linearGradient>
+    <linearGradient id="spCap" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#3d434f"/><stop offset="1" stop-color="#1c1f27"/>
+    </linearGradient>
+    <pattern id="spMesh" width="14" height="14" patternUnits="userSpaceOnUse">
+      <circle cx="7" cy="7" r="3.1" fill="#aeb4c0"/>
+      <circle cx="7" cy="7" r="1.5" fill="#7d838f"/>
+    </pattern>
+    <linearGradient id="spSheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.28" stop-color="#ffffff" stop-opacity="0.65"/>
+      <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="spDrop" x="-30%" y="-20%" width="160%" height="150%">
+      <feDropShadow dx="0" dy="24" stdDeviation="24" flood-color="#1d1d1f" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="400" cy="634" rx="152" ry="28" fill="#1d1d1f" opacity="0.13"/>
+
+  <g filter="url(#spDrop)">
+    <!-- ตัวกระบอก -->
+    <rect x="272" y="188" width="256" height="404" rx="72" fill="url(#spBody)"/>
+    <!-- ตาข่ายผ้าเสียง -->
+    <rect x="300" y="252" width="200" height="300" rx="48" fill="url(#spMesh)"/>
+    <!-- แผงควบคุมด้านบน -->
+    <rect x="316" y="212" width="168" height="30" rx="15" fill="url(#spCap)"/>
+    <circle cx="352" cy="227" r="8" fill="#4a505c"/>
+    <circle cx="400" cy="227" r="8" fill="#4a505c"/>
+    <circle cx="448" cy="227" r="8" fill="#0071e7"/>
+    <circle cx="448" cy="227" r="16" fill="#0071e7" opacity="0.2"/>
+    <!-- แถบไฟ + ผิวเงาแนวตั้ง -->
+    <rect x="272" y="188" width="256" height="404" rx="72" fill="url(#spSheen)"/>
+    <!-- ฐานยาง -->
+    <rect x="286" y="586" width="228" height="18" rx="9" fill="#5f6572" opacity="0.55"/>
+  </g>
+</svg>

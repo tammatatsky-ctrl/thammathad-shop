@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 800" width="800" height="800" role="img" aria-label="พาวเวอร์แบงก์ 20000mAh">
+  <!-- powerbank.svg — พาวเวอร์แบงก์ 20,000mAh 65W · สไตล์เดียวกับ mouse.svg -->
+  <defs>
+    <linearGradient id="pbBody" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fdfdfe"/><stop offset="0.5" stop-color="#dfe3ea"/><stop offset="1" stop-color="#a8aeb9"/>
+    </linearGradient>
+    <linearGradient id="pbScreen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#101a26"/><stop offset="1" stop-color="#060a11"/>
+    </linearGradient>
+    <linearGradient id="pbSheen" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="0.3" stop-color="#ffffff" stop-opacity="0.6"/>
+      <stop offset="0.55" stop-color="#ffffff" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="pbDrop" x="-30%" y="-25%" width="160%" height="155%">
+      <feDropShadow dx="0" dy="22" stdDeviation="22" flood-color="#1d1d1f" flood-opacity="0.22"/>
+    </filter>
+  </defs>
+
+  <ellipse cx="400" cy="628" rx="176" ry="26" fill="#1d1d1f" opacity="0.13"/>
+
+  <g filter="url(#pbDrop)">
+    <!-- ตัวกล่อง -->
+    <rect x="252" y="252" width="296" height="340" rx="38" fill="url(#pbBody)"/>
+    <rect x="252" y="252" width="296" height="340" rx="38" fill="url(#pbSheen)"/>
+    <rect x="252" y="568" width="296" height="24" rx="12" fill="#9aa0ae" opacity="0.5"/>
+
+    <!-- จอแสดงผลแบบดิจิทัล -->
+    <rect x="288" y="300" width="224" height="118" rx="20" fill="url(#pbScreen)"/>
+    <text x="320" y="352" font-family="-apple-system,Segoe UI,sans-serif" font-size="42" font-weight="700" fill="#e8eaef">100%</text>
+    <text x="320" y="384" font-family="-apple-system,Segoe UI,sans-serif" font-size="18" font-weight="600" fill="#7d838f">20,000 mAh</text>
+    <!-- ขีดแบตตามแถบสีเขียวตามจริง ไม่ใช่สี่เหลี่ยมเปล่า -->
+    <g fill="#22a55b">
+      <rect x="446" y="318" width="12" height="34" rx="3"/>
+      <rect x="462" y="318" width="12" height="34" rx="3"/>
+      <rect x="478" y="318" width="12" height="34" rx="3"/>
+    </g>
+    <rect x="446" y="318" width="44" height="34" rx="5" fill="none" stroke="#5f6572" stroke-width="2"/>
+
+    <!-- พอร์ต: USB-C 2 ช่อง + USB-A -->
+    <rect x="288" y="452" width="48" height="18" rx="9" fill="#0c0f14"/>
+    <rect x="350" y="452" width="48" height="18" rx="9" fill="#0c0f14"/>
+    <rect x="412" y="452" width="70" height="18" rx="6" fill="#0c0f14"/>
+
+    <!-- ไฟสถานะ -->
+    <circle cx="400" cy="524" r="8" fill="#0071e7"/>
+    <circle cx="400" cy="524" r="18" fill="#0071e7" opacity="0.18"/>
+  </g>
+</svg>
