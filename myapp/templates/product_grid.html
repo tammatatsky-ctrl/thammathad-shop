@@ -19,20 +19,27 @@
             </a>
             {% if product.category %}<p class="catalog-tag mb-1">{{ product.category }}</p>{% endif %}
             <h5 class="mb-1"><a href="{% url 'product_detail' product.id %}" class="text-decoration-none product-link">{{ product.name }}</a></h5>
-            <p class="text-muted-apple small mb-2 product-description">{{ product.description }}</p>
-            <p class="product-price product-price--emphasis tabular-nums">฿ {{ product.price|floatformat:2 }}</p>
-            {% with u=product.price|usd %}{% if u %}<p class="text-muted-apple small mb-2 usd-price tabular-nums">{{ u }}</p>{% endif %}{% endwith %}
-            <div class="d-flex align-items-center justify-content-between text-muted-apple small mb-3">
-                <span><i class="bi bi-box-seam me-1"></i>คงเหลือ {{ product.stock }} ชิ้น</span>
-                {% if product.stock <= 5 and product.stock > 0 %}
-                <span class="badge bg-warning-subtle text-warning-emphasis">ใกล้หมด</span>
-                {% elif product.stock > 5 %}
-                <span class="badge bg-success-subtle text-success">พร้อมส่ง</span>
-                {% else %}
-                <span class="badge bg-danger-subtle text-danger">หมดชั่วคราว</span>
-                {% endif %}
+            {% if product.description %}<p class="text-muted-apple small mb-2 product-description">{{ product.description }}</p>{% endif %}
+            {% comment %}
+                บล็อกราคา/สต็อกใช้ mt-auto = ดันลงล่างสุดเสมอ
+                → ราคาของทุกการ์ดในแถวเดียวกันจึงอยู่ระดับเดียวกัน ไม่ขัดกันตอนชื่อสินค้ายาวไม่เท่ากัน
+                (ก่อนแก้: ราคาลอยตามความยาว description ทำให้การ์ดดูเบี้ยว)
+            {% endcomment %}
+            <div class="mt-auto pt-3">
+                <p class="product-price product-price--emphasis tabular-nums mb-1">฿ {{ product.price|floatformat:2 }}</p>
+                {% with u=product.price|usd %}{% if u %}<p class="text-muted-apple small mb-2 usd-price tabular-nums">{{ u }}</p>{% endif %}{% endwith %}
+                <div class="d-flex align-items-center justify-content-between gap-2 text-muted-apple small mb-3">
+                    <span class="stock-remaining text-nowrap"><i class="bi bi-box-seam me-1"></i>คงเหลือ {{ product.stock }} ชิ้น</span>
+                    {% if product.stock <= 5 and product.stock > 0 %}
+                    <span class="badge bg-warning-subtle text-warning-emphasis">ใกล้หมด</span>
+                    {% elif product.stock > 5 %}
+                    <span class="badge bg-success-subtle text-success">พร้อมส่ง</span>
+                    {% else %}
+                    <span class="badge bg-danger-subtle text-danger">หมดชั่วคราว</span>
+                    {% endif %}
+                </div>
             </div>
-            <div class="mt-auto">
+            <div class="product-card-cta">
                 <a href="{% url 'product_detail' product.id %}" class="btn btn-primary btn-sm w-100">
                     <i class="bi bi-eye me-1"></i>ดูรายละเอียดสเปก
                 </a>
