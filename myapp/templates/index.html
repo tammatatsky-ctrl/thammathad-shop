@@ -1,314 +1,139 @@
 {% extends 'basetemplate.html' %}
-{# ===== index.html: หน้าแรกโซนผู้ใช้ — hero Liquid Glass เรียบหรู + ฟีเจอร์ + สินค้าแนะนำ (featured) ===== #}
-{# โครงสร้าง (กลับเป็น v1 — การ์ดแก้วหลักเล่นแสงเมาส์จัดเต็ม): #}
-{# hero .liquid-glass hero-ultimate (กล่องแก้วใหญ่+แสงเมาส์สด ผ่าน vars ของ fx-glass — ไม่แตะ engine) #}
-{# > 3 การ์ดบริการ (apple-tile/icon-circle) > สินค้าโดดเด่น grid 3 คอล (apple-card-glow — ใช้ได้จริง). #}
-{# hero-ultimate เพิ่มเลเยอร์: specular/bloom ขยายผูก --spec-o/--bloom-o/--mouse-x ตัวเดิมของ #}
-{# fx-glass (UNCHANGED); โมด fx-scene (tilt 3D + scroll depth) ถูกถอดออกแล้ว — hero แผ่นแก้วนิ่งเรียบ #}
-{# ไม่เอียง/หมุนตามเมาส์; เหลือ entrance นุ่ม ๆ (motion-core .hero-in) + แสงเมาส์ spotlight on การ์ด. #}
+{# ===== index.html: หน้าแรกโซนผู้ใช้ — โครงแบบ "หน้าร้านจริง" ===== #}
+{# โครงสร้าง 3 ส่วน (เรียงตามลำดับสายตา): #}
+{#   1. hero แยกสองคอลัมน์ — ซ้ายคำโปรย+ปุ่ม CTA / ขวาตารางสินค้า 4 ใบ #}
+{#      → เห็นของที่ขายได้ + ทางเลือกภายในหน้าจอแรก ไม่ต้องเลื่อน #}
+{#   2. แถบหมวด 4 อัน (คลิกกรองได้จริง ลิงก์ไป /product/?cat=) #}
+{#   3. กริดสินค้า 8 ใบ #}
+{# ตัดออกแล้ว: hero แบบ scroll-expand (fx-hero-expand) + "ห้องทดสอบสวิตช์" 2142px #}
+{#   เหตุผล: lab เป็นหน้าทดลองสวิตช์คีย์บอร์ด ไม่เกี่ยวกับแคตตาล็อก 4 หมวด #}
+{#   และดันสินค้าจริงไปได้ 3500px — ดูซ้ำยิ่งทำให้หน้าแรกไม่เป็นหน้าร้าน #}
+{# เอฟเฟกต์ที่ยังทำงานอยู่: fx-glass (.hero-shell) · fx-liquid (.liquid-mesh) · #}
+{#   fx-halo (.apple-tile) · fx-blur-up (.product-img) · fx-reveal (data-motion) #}
 {% load static %}
 
 {% block content %}
-<!-- ==================== 1. Hero Section: 21st.dev Scroll Expansion Hero (Apple Liquid Glass) ==================== -->
-<div class="scroll-expand-track" id="heroExpandTrack">
-    <section class="hero-shell scroll-expand-stage glass-canvas" id="heroExpandStage">
-        <!-- Spatial Grid Plane: โครงข่ายเรขาคณิตนำสายตา 3 มิติ -->
-        <div class="spatial-grid-plane" aria-hidden="true"></div>
 
-        <!-- Liquid Mesh: แสงออโรร่าพลาสมานุ่มลึก ไม่กินแรง GPU (Pure GPU Compositor) -->
-        <div class="liquid-mesh" aria-hidden="true">
-            <div class="aurora-stream stream-1"></div>
-            <div class="aurora-stream stream-2"></div>
-            <div class="aurora-stream stream-3"></div>
-            <div class="cyber-orb orb-cyan" data-depth="0.05"></div>
-            <div class="cyber-orb orb-purple" data-depth="0.08"></div>
-            <div class="cyber-orb orb-amber" data-depth="0.04"></div>
-        </div>
+<!-- ==================== 1. Hero — หน้าร้านจริง ==================== -->
+<section class="hero-shell shop-hero">
+    <!-- แสง/ฟองออโรร่าหลัง (fx-glass + fx-liquid) -->
+    <div class="liquid-mesh" aria-hidden="true">
+        <div class="aurora-stream stream-1"></div>
+        <div class="aurora-stream stream-2"></div>
+        <div class="aurora-stream stream-3"></div>
+    </div>
+    <div class="hero-glass-layer" aria-hidden="true"></div>
 
-        <!-- Split Headline Typography (แยกคำซ้าย-ขวาอย่างนุ่มนวลตามการ Scroll) -->
-        <div class="expand-title-wrap" aria-hidden="true">
-            <span class="expand-title-part expand-title-left">อุปกรณ์ไอที</span>
-            <span class="expand-title-part expand-title-right">ระดับมาสเตอร์พีซ</span>
-        </div>
+    <div class="container position-relative">
+        <div class="row align-items-center g-5">
 
-        <!-- Expanding Prismatic Glass Masterpiece Card -->
-        <div class="expand-media-card">
-            <!-- Media Visual: ภาพสินค้า Flagship โดดเด่น -->
-            <div class="expand-media-visual">
-                {% if featured.0 %}
-                <img src="{% static featured.0.image %}" alt="{{ featured.0.name }}" id="heroMasterpieceImg">
-                {% else %}
-                <img src="{% static 'images/prod2.jpg' %}" alt="Masterpiece Mechanical Keyboard" id="heroMasterpieceImg">
-                {% endif %}
-            </div>
+            <!-- ---------- ซ้าย: คำโปรย + ปุ่ม ---------- -->
+            <div class="col-md-6">
+                <p class="eyebrow mb-3" data-motion="reveal">
+                    <i class="bi bi-box-seam"></i> อุปกรณ์คอมพิวเตอร์คัดสรร
+                </p>
 
-            <!-- Dark Gradient Vignette for perfect text legibility -->
-            <div class="expand-media-vignette" aria-hidden="true"></div>
+                <h1 class="shop-hero-title mb-3" data-motion="reveal">
+                    อุปกรณ์ที่ใช้ทุกวัน<br>ส่งถึงทั่วประเทศ
+                </h1>
 
-            <!-- Optical Specular Reflection -->
-            <div class="expand-media-lens" aria-hidden="true"></div>
+                <p class="lead-apple mb-4" data-motion="reveal">
+                    คัดมาแค่ชิ้นที่ใช้งานจริงได้ — เมาส์ คีย์บอร์ด หูฟัง จอ
+                    และอุปกรณ์ชาร์จ ทุกชิ้นมีสต็อกจริงบนหน้าเว็บ
+                </p>
 
-            <!-- Card Content Overlays -->
-            <div class="expand-card-content">
-                <div class="expand-card-top">
-                    <span class="expand-edition-badge">
-                        <i class="bi bi-shield-check text-primary"></i>
-                        <span>CUSTOM HARDWARE &amp; AUDIO</span>
-                    </span>
-                    {% if featured.0 %}
-                    <span class="expand-price-pill tabular-nums">
-                        <i class="bi bi-tag-fill me-1"></i> ฿ {{ featured.0.price|floatformat:2 }}
-                    </span>
-                    {% else %}
-                    <span class="expand-price-pill">
-                        <i class="bi bi-lightning-charge-fill me-1"></i> READY TO SHIP
-                    </span>
-                    {% endif %}
+                <div class="d-flex flex-wrap gap-3 mb-4" data-motion="reveal">
+                    <a href="{% url 'product' %}" class="btn btn-primary btn-lg px-4">
+                        <i class="bi bi-bag me-2"></i>เลือกซื้อสินค้า
+                    </a>
+                    <a href="{% url 'product' %}#catalog" class="btn btn-light btn-lg btn-liquid-glass">
+                        ดูตามหมวด
+                    </a>
                 </div>
 
-                <div class="expand-card-bottom">
-                    <div>
-                        <h2 class="expand-card-title">
-                            {% if featured.0 %}{{ featured.0.name }}{% else %}Mechanical Keyboard Pro Series{% endif %}
-                        </h2>
-                        <p class="expand-card-desc">
-                            {% if featured.0 %}{{ featured.0.description }} รับประกันศูนย์ไทย 2 ปี{% else %}อุปกรณ์คอมพิวเตอร์คัดสรร ส่งถึงทั่วประเทศ รับประกันศูนย์ไทย 2 ปี{% endif %}
-                        </p>
-                    </div>
+                <!-- ข้อเท็จจริงที่ช่วยลดความกังวล — ไม่ใช้ตัวเลขปลอม -->
+                <ul class="hero-trust list-unstyled mb-0" data-motion="reveal">
+                    <li><i class="bi bi-truck"></i> ส่งถึงทั่วประเทศ</li>
+                    <li><i class="bi bi-shield-check"></i> ประกันศูนย์ไทย 2 ปี</li>
+                    <li><i class="bi bi-qr-code"></i> ชำระผ่าน PromptPay</li>
+                </ul>
+            </div>
 
-                    <div class="expand-card-actions">
-                        <!-- Pure GPU Composited Liquid Aurora Shimmer Button -->
-                        <a class="btn-aurora-liquid" href="{% if featured.0 %}{% url 'product_detail' featured.0.id %}{% else %}{% url 'product' %}{% endif %}" id="heroAuroraBtn" title="สำรวจสินค้าชิ้นนี้">
-                            <span class="aurora-glow-backdrop" aria-hidden="true"></span>
-                            <span class="aurora-liquid-border" aria-hidden="true"></span>
-                            <span class="aurora-liquid-surface" aria-hidden="true">
-                                <span class="aurora-liquid-shimmer" aria-hidden="true"></span>
-                            </span>
-                            <span class="button-content">
-                                <i class="bi bi-star-fill star-icon"></i>
-                                <span>สำรวจสินค้า</span>
-                            </span>
-                        </a>
-                        <a class="btn btn-light btn-lg btn-liquid-glass" href="{% url 'cart' %}">
-                            <i class="bi bi-bag me-1"></i> ดูตะกร้าสินค้า
+            <!-- ---------- ขวา: ตารางสินค้า 4 ใบ ---------- -->
+            <div class="col-md-6">
+                <div class="row g-3 hero-picks" data-motion="stagger">
+                    {% for product in hero_picks %}
+                    <div class="col-6">
+                        <a href="{% url 'product_detail' product.id %}" class="text-decoration-none d-block h-100">
+                            <div class="apple-tile hero-pick-card h-100">
+                                <img src="{% static product.image %}" alt="{{ product.name }}"
+                                     class="product-img" loading="lazy">
+                                <h3 class="hero-pick-name">{{ product.name }}</h3>
+                                <p class="product-price tabular-nums mb-0">฿ {{ product.price|floatformat:0 }}</p>
+                            </div>
                         </a>
                     </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Scroll Affordance Prompt -->
-        <div class="expand-scroll-prompt" id="expandScrollPrompt" role="button" aria-label="เลื่อนลงเพื่อขยาย">
-            <span>เลื่อนลงเพื่อขยาย</span>
-            <i class="bi bi-chevron-down"></i>
-        </div>
-    </section>
-</div>
-
-<hr class="apple-divider">
-
-<!-- ==================== 2. Switch Sound & Feel Laboratory ==================== -->
-<section class="page-section">
-    <div class="container">
-        <div class="text-center mb-5" data-motion="reveal">
-            <p class="eyebrow mb-2"><i class="bi bi-soundwave"></i> ACOUSTIC &amp; TACTILE LABORATORY</p>
-            <h2 class="section-heading">ห้องทดสอบเสียงและสัมผัสสวิตช์</h2>
-            <p class="lead-apple">คลิกเพื่อทดสอบน้ำหนักการกด ระยะการเดินทาง และโปรไฟล์เสียงของสวิตช์แต่ละประเภทที่ผ่านการ Lubed มือ</p>
-        </div>
-
-        <div class="switch-lab mb-5" data-motion="reveal">
-            <div class="row g-4 mb-4">
-                <!-- Linear Red -->
-                <div class="col-md-4">
-                    <div class="switch-card active" data-switch="linear" role="button" tabindex="0">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="switch-visual-chip switch-chip--danger">
-                                <i class="bi bi-circle-fill"></i>
-                            </div>
-                            <span class="badge bg-danger-subtle text-danger rounded-pill px-3 py-1 font-mono">45g LINEAR</span>
-                        </div>
-                        <h4 class="h5 fw-bold mb-1">Gateron Pro Red (Lubed)</h4>
-                        <p class="text-muted-apple small mb-3">สัมผัสลื่นไหล นุ่มนวล ไร้แรงกระแทก เสียง Thock ทุ้มแน่น เหมาะกับการพิมพ์ยาวนานและเกมมิ่ง</p>
-                        <div class="d-flex flex-column gap-2 small">
-                            <div>
-                                <div class="d-flex justify-content-between text-muted-apple mb-1">
-                                    <span>แรงกดทำงาน (Actuation)</span>
-                                    <span class="font-mono tabular-nums fw-semibold">45 gf</span>
-                                </div>
-                                <div class="switch-meter-bar"><div class="switch-meter-fill switch-meter-fill--danger" style="width: 45%;"></div></div>
-                            </div>
-                            <div>
-                                <div class="d-flex justify-content-between text-muted-apple mb-1">
-                                    <span>ระยะการกด (Travel)</span>
-                                    <span class="font-mono tabular-nums fw-semibold">2.0 / 4.0 mm</span>
-                                </div>
-                                <div class="switch-meter-bar"><div class="switch-meter-fill switch-meter-fill--danger" style="width: 50%;"></div></div>
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                            <span class="text-muted-apple small"><i class="bi bi-volume-down-fill me-1"></i> ระดับเสียง: <strong>ทุ้ม นุ่ม (Thock)</strong></span>
-                            <button type="button" class="btn btn-sm btn-outline-danger rounded-pill px-3 test-click-btn">
-                                <i class="bi bi-play-fill"></i> กดทดสอบ
-                            </button>
+                    {% empty %}
+                    <div class="col-12">
+                        <div class="apple-tile p-4 text-center text-muted-apple">
+                            ยังไม่มีสินค้าที่แสดงอยู่
                         </div>
                     </div>
-                </div>
-
-                <!-- Tactile Brown -->
-                <div class="col-md-4">
-                    <div class="switch-card" data-switch="tactile" role="button" tabindex="0">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="switch-visual-chip switch-chip--bronze">
-                                <i class="bi bi-triangle-fill"></i>
-                            </div>
-                            <span class="badge bg-warning-subtle text-warning-emphasis rounded-pill px-3 py-1 font-mono">55g TACTILE</span>
-                        </div>
-                        <h4 class="h5 fw-bold mb-1">Gateron Baby Kangaroo</h4>
-                        <p class="text-muted-apple small mb-3">จังหวะ Bump คมชัด นุ่มลึก มีแรงต้านตอบสนองชัดเจน เสียง Marbly สุภาพ เหมาะกับงานพิมพ์เอกสารและโปรแกรมมิ่ง</p>
-                        <div class="d-flex flex-column gap-2 small">
-                            <div>
-                                <div class="d-flex justify-content-between text-muted-apple mb-1">
-                                    <span>แรงกดทำงาน (Actuation)</span>
-                                    <span class="font-mono tabular-nums fw-semibold">55 gf</span>
-                                </div>
-                                <div class="switch-meter-bar"><div class="switch-meter-fill switch-meter-fill--bronze" style="width: 65%;"></div></div>
-                            </div>
-                            <div>
-                                <div class="d-flex justify-content-between text-muted-apple mb-1">
-                                    <span>ระยะการกด (Travel)</span>
-                                    <span class="font-mono tabular-nums fw-semibold">2.0 / 3.4 mm</span>
-                                </div>
-                                <div class="switch-meter-bar"><div class="switch-meter-fill switch-meter-fill--bronze" style="width: 58%;"></div></div>
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                            <span class="text-muted-apple small"><i class="bi bi-volume-up-fill me-1"></i> ระดับเสียง: <strong>ปานกลาง (Marbly)</strong></span>
-                            <button type="button" class="btn btn-sm btn-outline-secondary rounded-pill px-3 test-click-btn">
-                                <i class="bi bi-play-fill"></i> กดทดสอบ
-                            </button>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Clicky Blue -->
-                <div class="col-md-4">
-                    <div class="switch-card" data-switch="clicky" role="button" tabindex="0">
-                        <div class="d-flex justify-content-between align-items-start">
-                            <div class="switch-visual-chip switch-chip--blue">
-                                <i class="bi bi-square-fill"></i>
-                            </div>
-                            <span class="badge bg-primary-subtle text-primary rounded-pill px-3 py-1 font-mono">60g CLICKY</span>
-                        </div>
-                        <h4 class="h5 fw-bold mb-1">Kailh Box White V2</h4>
-                        <p class="text-muted-apple small mb-3">เสียงคลิกสองจังหวะ คมกระชับด้วย Click Bar พิเศษ ตอบสนองนิ้วแม่นยำ เหมาะกับผู้ที่ต้องการฟีดแบ็กเสียงทรงพลัง</p>
-                        <div class="d-flex flex-column gap-2 small">
-                            <div>
-                                <div class="d-flex justify-content-between text-muted-apple mb-1">
-                                    <span>แรงกดทำงาน (Actuation)</span>
-                                    <span class="font-mono tabular-nums fw-semibold">60 gf</span>
-                                </div>
-                                <div class="switch-meter-bar"><div class="switch-meter-fill switch-meter-fill--blue" style="width: 80%;"></div></div>
-                            </div>
-                            <div>
-                                <div class="d-flex justify-content-between text-muted-apple mb-1">
-                                    <span>ระยะการกด (Travel)</span>
-                                    <span class="font-mono tabular-nums fw-semibold">1.8 / 3.6 mm</span>
-                                </div>
-                                <div class="switch-meter-bar"><div class="switch-meter-fill switch-meter-fill--blue" style="width: 52%;"></div></div>
-                            </div>
-                        </div>
-                        <div class="mt-3 pt-2 border-top border-secondary-subtle d-flex justify-content-between align-items-center">
-                            <span class="text-muted-apple small"><i class="bi bi-megaphone-fill me-1"></i> ระดับเสียง: <strong>กังวาน คม (Click)</strong></span>
-                            <button type="button" class="btn btn-sm btn-outline-primary rounded-pill px-3 test-click-btn">
-                                <i class="bi bi-play-fill"></i> กดทดสอบ
-                            </button>
-                        </div>
-                    </div>
+                    {% endfor %}
                 </div>
             </div>
 
-            <!-- Active Switch Audio Synthesizer Status -->
-            <div class="p-3 rounded-4 bg-body-tertiary d-flex align-items-center justify-content-between flex-wrap gap-2">
-                <div class="d-flex align-items-center gap-3">
-                    <span class="badge bg-success-subtle text-success rounded-pill px-3 py-1">
-                        <i class="bi bi-cpu me-1"></i> Web Audio Synth Active
-                    </span>
-                    <span class="small text-muted-apple" id="switchLabFeedback">กำลังทดสอบ: <strong>Gateron Pro Red (Lubed)</strong> — สังเคราะห์เสียง Thock ด้วยความถี่ 160Hz &rarr; 40Hz</span>
-                </div>
-                <span class="font-mono small text-muted-apple"><i class="bi bi-mouse2 me-1"></i> กดบนการ์ดสวิตช์หรือแป้น Spacebar เพื่อลองเสียง</span>
-            </div>
-        </div>
-
-        <!-- ==================== 3. Hardware Blueprint Comparison Matrix ==================== -->
-        <div class="text-center my-5" data-motion="reveal">
-            <p class="eyebrow mb-2"><i class="bi bi-layers-half"></i> ARCHITECTURAL BLUEPRINT</p>
-            <h2 class="section-heading">เปรียบเทียบมาตรฐานโครงสร้าง</h2>
-            <p class="lead-apple">ความแตกต่างระหว่างงานประกอบ Custom Craftsman กับคีย์บอร์ดสำเร็จรูปทั่วไปในท้องตลาด</p>
-        </div>
-
-        <div class="blueprint-matrix mb-5" data-motion="reveal">
-            <div class="table-responsive">
-                <table class="table align-middle">
-                    <thead>
-                        <tr>
-                            <th scope="col" style="width: 26%;">สเปกสถาปัตยกรรม (Specifications)</th>
-                            <th scope="col" style="width: 37%;" class="text-primary"><i class="bi bi-check-circle-fill me-1"></i> ธรรมทัต Custom Gasket Build</th>
-                            <th scope="col" style="width: 37%;" class="text-muted"><i class="bi bi-x-circle me-1"></i> คีย์บอร์ดทั่วไป (Mass-Market)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr>
-                            <td class="fw-semibold text-nowrap"><i class="bi bi-box me-2 text-primary"></i> โครงสร้างการยึด (Mounting)</td>
-                            <td><strong class="text-success">Gasket Mount + Poron 3 ชั้น</strong><br><span class="small text-muted-apple">ยืดหยุ่น ซับแรงกระแทก ลดความล้าของข้อนิ้ว</span></td>
-                            <td class="text-muted-apple">Tray Mount น็อตยึดกับเคสพลาสติกตรงๆ<br><span class="small text-muted-apple">สัมผัสแข็งกระด้าง ก้องสะท้อน</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-semibold text-nowrap"><i class="bi bi-droplet-half me-2 text-primary"></i> สวิตช์และสารหล่อลื่น</td>
-                            <td><strong class="text-success">Factory Pre-Lubed (Krytox 205g0)</strong><br><span class="small text-muted-apple">ลื่นไหลตั้งแต่แกะกล่อง ไม่สาก ไร้เสียงสปริงเสียดสี</span></td>
-                            <td class="text-muted-apple">Dry Switch ไม่หล่อลื่นสารคัดเกรด<br><span class="small text-muted-apple">สากนิ้ว มีเสียงสปริงดังกังวาน (Ping noise)</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-semibold text-nowrap"><i class="bi bi-grid-3x3-gap me-2 text-primary"></i> วัสดุคีย์แคป (Keycaps)</td>
-                            <td><strong class="text-success">Double-Shot PBT หนา 1.5mm</strong><br><span class="small text-muted-apple">ทนทาน ตัวอักษรคมชัด ไม่ขึ้นเงามันตลอดอายุการใช้งาน</span></td>
-                            <td class="text-muted-apple">Thin ABS 0.8mm เลเซอร์สลัก<br><span class="small text-muted-apple">สึกหรอไว ผิวขึ้นเงา ลื่นมันเมื่อใช้ไปนาน</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-semibold text-nowrap"><i class="bi bi-motherboard me-2 text-primary"></i> แผงวงจรและฮอตสว็อป (PCB)</td>
-                            <td><strong class="text-success">South-Facing RGB + Kailh Hotswap 5-Pin</strong><br><span class="small text-muted-apple">เปลี่ยนสวิตช์ได้ไม่จำกัด รองรับ Cherry profile ไม่ติดขอบ</span></td>
-                            <td class="text-muted-apple">North-Facing บัดกรีติดแผง (Soldered)<br><span class="small text-muted-apple">เปลี่ยนสวิตช์เองไม่ได้ ติดขอบคีย์แคป Cherry</span></td>
-                        </tr>
-                        <tr>
-                            <td class="fw-semibold text-nowrap"><i class="bi bi-shield-check me-2 text-primary"></i> การรับประกันและบริการ</td>
-                            <td><strong class="text-success">ประกันศูนย์ไทย 2 ปี + อะไหล่สลับเร็ว</strong><br><span class="small text-muted-apple">เคลมตรง ตรวจเช็กระบบ พร้อมบริการจูนสวิตช์ฟรี</span></td>
-                            <td class="text-muted-apple">ประกันร้าน 3 - 6 เดือน<br><span class="small text-muted-apple">ส่งซ่อมต่างประเทศ ใช้เวลานานหลายสัปดาห์</span></td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
         </div>
     </div>
 </section>
 
-<!-- ==================== 3. Featured Products ==================== -->
+<!-- ==================== 2. แถบหมวดหมู่ ==================== -->
+{% if categories %}
+<section class="page-section pt-5 pb-5" id="catalog">
+    <div class="container">
+        <div class="mb-4" data-motion="reveal">
+            <p class="eyebrow mb-2"><i class="bi bi-grid"></i> เลือกตามหมวด</p>
+            <h2 class="section-heading mb-0">มีอะไรขายบ้าง</h2>
+        </div>
+
+        <div class="row g-3" data-motion="stagger">
+            {% for cat in cat_tiles %}
+            <div class="col-6 col-md-3">
+                <a href="{% url 'product' %}?cat={{ cat.name|urlencode }}"
+                   class="category-tile apple-tile d-block h-100 text-decoration-none">
+                    <span class="category-tile-icon" aria-hidden="true">
+                        <i class="bi {{ cat.icon }}"></i>
+                    </span>
+                    <span class="category-tile-name">{{ cat.name }}</span>
+                    <span class="category-tile-count tabular-nums">{{ cat.count }} ชิ้น</span>
+                </a>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</section>
+{% endif %}
+
+<!-- ==================== 3. สินค้า ==================== -->
 <section class="page-section section-muted">
     <div class="container">
         <div class="d-flex justify-content-between align-items-end mb-5 flex-wrap gap-2" data-motion="reveal">
             <div>
-                <p class="eyebrow mb-2"><i class="bi bi-gem"></i> คอลเลกชันแนะนำ</p>
-                <h2 class="section-heading">สินค้าโดดเด่นยอดนิยม</h2>
+                <p class="eyebrow mb-2"><i class="bi bi-gem"></i> คอลเลกชันทั้งร้าน</p>
+                <h2 class="section-heading mb-0">สินค้าที่คัดมา</h2>
             </div>
             <a href="{% url 'product' %}" class="link-arrow">ดูสินค้าทั้งหมด</a>
         </div>
+
         <div class="row g-4" data-motion="stagger">
             {% for product in featured %}
-            <div class="col-md-4 product-grid-item">
-                <a href="{% url 'product_detail' product.id %}" class="text-decoration-none">
-                    <div class="apple-tile apple-card-glow prismatic-product-card h-100">
-                        <span class="holographic-sheen" aria-hidden="true"></span>
-                        <img loading="lazy" src="{% static product.image %}" alt="{{ product.name }}" class="product-img mb-4">
-                        <h5 class="mb-2 product-name">{{ product.name }}</h5>
-                        <p class="product-price">฿ {{ product.price|floatformat:2 }}</p>
-                        <span class="link-arrow">ดูรายละเอียด</span>
+            <div class="col-6 col-md-4 col-lg-3 product-grid-item">
+                <a href="{% url 'product_detail' product.id %}" class="text-decoration-none d-block h-100">
+                    <div class="apple-tile apple-card-glow h-100">
+                        <img src="{% static product.image %}" alt="{{ product.name }}"
+                             class="product-img mb-3" loading="lazy">
+                        <h3 class="product-name mb-1">{{ product.name }}</h3>
+                        <p class="product-price tabular-nums mb-0">฿ {{ product.price|floatformat:0 }}</p>
                     </div>
                 </a>
             </div>
@@ -320,328 +145,128 @@
 </section>
 
 <style>
-/* ===================== index: hero-ultimate (แสงเมาส์ขั้นสุด) ===================== */
-/* ทั้งหมดผูกกับ CSS vars เดิมที่ fx-glass.js (UNCHANGED) ตั้งให้ —
-   --mouse-x/--mouse-y, --spec-o, --bloom-o, --rim-o, --ring-angle, --chroma.
-   ไม่แตะตัว engine: เพิ่มเลเยอร์/ความแรงจากภายนอกเท่านั้น. */
+/* ===================== index: hero แบบหน้าร้านจริง =====================
+   ผูกกับ CSS vars เดิมที่ fx-glass.js ตั้งให้ (--mouse-x/--mouse-y/--spec-o/
+   --bloom-o/--rim-o) — ไม่แตะตัว engine เพิ่มแค่เลเยอร์และความสูง */
 
-/* ---- Hero main: ขยายการ์ดให้เป็นจุดสนใจ พร้อม GPU Layer Promotion ---- */
-.hero-ultimate {
-  max-width: 1000px;
-  margin-inline: auto;
-  border-radius: 56px;
-  padding: clamp(3rem, 7vw, 5rem) clamp(1.5rem, 5vw, 4rem);
-  isolation: isolate;
-  contain: layout paint style;
-  transform: translateZ(0);
-  will-change: transform;
-  /* High-Performance Optical Glass: รวมเงาเป็นเลเยอร์คมชัด เบา GPU ไม่ re-rasterize หนัก */
-  box-shadow:
-    inset 0 1.5px 2px rgba(255, 255, 255, 0.9),
-    inset var(--hi-offset-x, 0px) var(--hi-offset-y, 1px) 3px rgba(255, 255, 255, 0.5),
-    inset 0 -1.5px 3px rgba(0, 0, 0, 0.08),
-    0 24px 48px -12px rgba(0, 0, 0, calc(0.12 + var(--cast-i, 0) * 0.04)),
-    0 0 0 1px rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.25));
+.shop-hero {
+  padding: clamp(3rem, 7vw, 5.5rem) 0;
+  overflow: hidden;
 }
 
-/* ---- ตัวหนังสืออยู่เหนือชั้นแสงเสมอ (รอ z5 ตาม core) ---- */
-.hero-ultimate .hero-title,
-.hero-ultimate .hero-lead,
-.hero-ultimate .eyebrow,
-.hero-ultimate .hero-aurora-badge-wrap,
-.hero-ultimate .hero-actions {
-  position: relative;
-  z-index: 6;
+/* หัวเรื่อง: ตัดคำให้เป็น 2 บรรทัดด้วย <br> — ขนาดใหญ่แต่ไม่กินความสูงจอ */
+.shop-hero-title {
+  font-size: clamp(2.1rem, 4.6vw, 3.6rem);
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.035em;
+  color: var(--ink);
+  text-wrap: balance;
 }
 
-/* ---- เลเยอร์แสงตามเมาส์: 1-pass specular highlight ไม่ overdraw ---- */
-.hero-glass-layer {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 4;
-  mix-blend-mode: screen;
-  background:
-    radial-gradient(
-      420px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.35)) 0%,
-      rgba(160, 200, 255, calc(var(--bloom-o, 0) * 0.16)) 30%,
-      transparent 70%
-    );
+/* แถวความน่าเชื่อถือ — ไอคอน + ข้อความ ไม่ใช้เลขปลอม */
+.hero-trust {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.875rem;
+  color: var(--ink-soft);
 }
-html[data-theme="dark"] .hero-glass-layer {
-  background:
-    radial-gradient(
-      420px circle at var(--mouse-x, 50%) var(--mouse-y, 50%),
-      rgba(255, 255, 255, calc(var(--spec-o, 0) * 0.45)) 0%,
-      rgba(120, 175, 255, calc(var(--bloom-o, 0) * 0.22)) 30%,
-      transparent 70%
-    );
+.hero-trust li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.hero-trust i {
+  color: var(--apple-blue);
+  font-size: 1.05rem;
 }
 
-/* ---- มือถือ: ลดมุม-ขนาดบ้าง ---- */
-@media (max-width: 768px) {
-  .hero-ultimate { border-radius: 40px; }
+/* ตารางสินค้าฝั่งขวา: ภาพเป็นสัดส่วนเต็มกว้าง ชื่อ/ราคาต่อใต้ */
+.hero-picks .col-6 {
+  /* บังคับให้สองคอลัมน์เท่ากันแม้จำนวนสินค้าไม่ครบ 4 */
+  flex: 0 0 auto;
+  width: 50%;
+}
+.hero-pick-card {
+  padding: 0.85rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.hero-pick-card .product-img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  margin-bottom: 0;
+  object-fit: contain;
+  border-radius: 12px;
+}
+.hero-pick-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--ink);
+  margin: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  /* ล็อก 2 บรรทัดเสมอ → ราคาของทั้ง 4 ใบอยู่ระดับเดียวกัน
+     (ชื่อยาว 1 ใบจะดันราคาการ์ดอื่นต่ำละเหมือนเคย) */
+  min-height: 2.7em;
+}
+.hero-pick-card .product-price {
+  margin-top: auto;
 }
 
-/* ==================== Pure GPU Composited Liquid Aurora Button ==================== */
-.btn-aurora-liquid {
-  position: relative;
+/* แถบหมวด: ไอคอนใหญ่กลางบน + ชื่อ + จำนวน (ข้อมูลจริงจาก DB) */
+.category-tile {
+  padding: 1.4rem 1rem;
+  text-align: center;
+  transition:
+    transform 0.35s var(--ease-apple, cubic-bezier(0.34, 1.56, 0.64, 1)),
+    box-shadow 0.35s ease;
+}
+.category-tile:hover {
+  transform: translateY(-3px);
+}
+.category-tile-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 32px;
-  height: 50px;
-  border-radius: 980px;
-  text-decoration: none !important;
-  cursor: pointer;
-  user-select: none;
-  -webkit-user-select: none;
-  vertical-align: middle;
-  transform: translate3d(0, 0, 0);
-  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.35s ease;
-  box-sizing: border-box;
-  box-shadow:
-    inset 0 1.5px 1px 0 rgba(255, 255, 255, 0.65),
-    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.3),
-    0 8px 24px -4px rgba(0, 113, 227, 0.5),
-    0 2px 8px rgba(0, 0, 0, 0.15);
+  width: 52px;
+  height: 52px;
+  margin-bottom: 0.75rem;
+  border-radius: 16px;
+  background: var(--apple-blue);
+  color: #fff;
+  font-size: 1.4rem;
 }
-.btn-aurora-liquid:hover {
-  transform: translateY(-2px) scale(1.03);
-  box-shadow:
-    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -1.5px 2px 0 rgba(0, 0, 0, 0.3),
-    0 14px 32px -4px rgba(0, 113, 227, 0.65),
-    0 4px 12px rgba(0, 0, 0, 0.2);
+.category-tile-name {
+  display: block;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
 }
-.btn-aurora-liquid:active {
-  transform: scale(0.97);
+.category-tile-count {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.8125rem;
+  color: var(--muted, var(--ink-soft));
+}
+html[data-theme="dark"] .category-tile-icon {
+  color: #fff;
 }
 
-/* Ambient Glow Behind */
-.aurora-glow-backdrop {
-  position: absolute;
-  inset: -3px;
-  border-radius: 980px;
-  background: radial-gradient(ellipse at center, rgba(0, 113, 227, 0.6) 0%, rgba(59, 130, 246, 0.25) 50%, transparent 75%);
-  opacity: 0.6;
-  pointer-events: none;
-  z-index: 0;
-  transition: opacity 0.35s ease, transform 0.35s ease;
-}
-.btn-aurora-liquid:hover .aurora-glow-backdrop {
-  opacity: 1;
-  transform: scale(1.08);
-}
-
-/* Prismatic Glass Border */
-.aurora-liquid-border {
-  position: absolute;
-  inset: 0;
-  border-radius: 980px;
-  padding: 1.5px;
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.95) 0%,
-    rgba(147, 197, 253, 0.55) 35%,
-    rgba(99, 102, 241, 0.4) 70%,
-    rgba(255, 255, 255, 0.8) 100%
-  );
-  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: 3;
-}
-
-/* Surface with fluid Apple Blue glass */
-.aurora-liquid-surface {
-  position: absolute;
-  inset: 1px;
-  border-radius: 980px;
-  overflow: hidden;
-  background: linear-gradient(135deg, #0056b3 0%, #0071e3 45%, #2563eb 100%);
-  z-index: 1;
-  pointer-events: none;
-  box-shadow:
-    inset 0 1.5px 1px rgba(255, 255, 255, 0.7),
-    inset 0 -1.5px 2px rgba(0, 0, 0, 0.25);
-}
-
-/* Crisp Glass Lens Specular Curve */
-.aurora-liquid-surface::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(
-    ellipse 85% 55% at 50% 0%,
-    rgba(255, 255, 255, 0.45) 0%,
-    rgba(255, 255, 255, 0) 70%
-  );
-  pointer-events: none;
-  z-index: 2;
-}
-
-/* Smooth Liquid Aurora Shimmer Wave (Organic, Soft, and Seamless) */
-.aurora-liquid-shimmer {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(
-    105deg,
-    transparent 15%,
-    rgba(255, 255, 255, 0.15) 35%,
-    rgba(255, 255, 255, 0.45) 50%,
-    rgba(147, 197, 253, 0.35) 65%,
-    transparent 85%
-  );
-  background-size: 250% 100%;
-  animation: auroraLiquidWave 4.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  will-change: background-position;
-  z-index: 1;
-}
-@keyframes auroraLiquidWave {
-  0% {
-    background-position: 180% 0;
+/* มือถือ: hero ซ้อนเป็นบล็อกเดียว ตารางสินค้าลงล่างคำโปรย */
+@media (max-width: 767.98px) {
+  .shop-hero {
+    padding: 2.5rem 0;
   }
-  50% {
-    background-position: -80% 0;
+  .hero-picks {
+    margin-top: 0.5rem;
   }
-  100% {
-    background-position: 180% 0;
-  }
-}
-html[data-motion="off"] .aurora-liquid-shimmer {
-  animation: none !important;
-}
-
-/* Button Content */
-.button-content {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  color: #ffffff !important;
-  font-weight: 700;
-  font-size: 1.05rem;
-  letter-spacing: -0.01em;
-  z-index: 5;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
-}
-.star-icon {
-  font-size: 1.15rem;
-  color: #ffffff !important;
-  transition: color 0.3s ease, transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), filter 0.3s ease;
-}
-.btn-aurora-liquid:hover .star-icon {
-  color: #facc15 !important;
-  transform: scale(1.2) rotate(12deg);
-  filter: drop-shadow(0 0 8px rgba(250, 204, 21, 0.85));
-}
-.btn-aurora-liquid:hover .button-content {
-  color: #ffffff !important;
 }
 </style>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-(function() {
-    // Switch Synthesizer Sound Engine (Pure Web Audio API, Zero Audio Files)
-    function playSwitchSound(type) {
-        try {
-            const AudioContext = window.AudioContext || window.webkitAudioContext;
-            if (!AudioContext) return;
-            const ctx = new AudioContext();
-            const now = ctx.currentTime;
-
-            if (type === 'linear') { // Thock (160Hz -> 40Hz)
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(160, now);
-                osc.frequency.exponentialRampToValueAtTime(40, now + 0.07);
-                gain.gain.setValueAtTime(0.35, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.07);
-            } else if (type === 'tactile') { // Marbly (280Hz -> 60Hz)
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'sine';
-                osc.frequency.setValueAtTime(280, now);
-                osc.frequency.exponentialRampToValueAtTime(60, now + 0.06);
-                gain.gain.setValueAtTime(0.38, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.06);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.06);
-            } else if (type === 'clicky') { // Sharp Crisp Snap (800Hz -> 120Hz)
-                const osc = ctx.createOscillator();
-                const gain = ctx.createGain();
-                osc.type = 'square';
-                osc.frequency.setValueAtTime(800, now);
-                osc.frequency.exponentialRampToValueAtTime(120, now + 0.045);
-                gain.gain.setValueAtTime(0.25, now);
-                gain.gain.exponentialRampToValueAtTime(0.001, now + 0.045);
-                osc.connect(gain);
-                gain.connect(ctx.destination);
-                osc.start(now);
-                osc.stop(now + 0.045);
-            }
-        } catch(e) {}
-    }
-
-    const switchCards = document.querySelectorAll('.switch-card');
-    const feedbackEl = document.getElementById('switchLabFeedback');
-
-    const descriptions = {
-        linear: 'กำลังทดสอบ: <strong>Gateron Pro Red (Lubed)</strong> — สังเคราะห์เสียง Thock ด้วยความถี่ 160Hz &rarr; 40Hz',
-        tactile: 'กำลังทดสอบ: <strong>Gateron Baby Kangaroo</strong> — สังเคราะห์เสียง Marbly พร้อม Tactile Bump ที่ 280Hz &rarr; 60Hz',
-        clicky: 'กำลังทดสอบ: <strong>Kailh Box White V2</strong> — สังเคราะห์เสียง Crisp Click Bar ด้วยความถี่ 800Hz &rarr; 120Hz'
-    };
-
-    switchCards.forEach(card => {
-        const swType = card.dataset.switch;
-        const trigger = (e) => {
-            switchCards.forEach(c => c.classList.remove('active'));
-            card.classList.add('active');
-            if (feedbackEl && descriptions[swType]) {
-                feedbackEl.innerHTML = descriptions[swType];
-            }
-            playSwitchSound(swType);
-            card.style.transform = 'scale(0.97)';
-            setTimeout(() => { card.style.transform = ''; }, 120);
-        };
-
-        card.addEventListener('click', trigger);
-        card.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                trigger(e);
-            }
-        });
-    });
-
-    // Spacebar triggers active switch sound
-    window.addEventListener('keydown', (e) => {
-        if (e.code === 'Space' && !['INPUT', 'TEXTAREA', 'BUTTON'].includes(document.activeElement.tagName)) {
-            const activeCard = document.querySelector('.switch-card.active');
-            if (activeCard) {
-                e.preventDefault();
-                playSwitchSound(activeCard.dataset.switch);
-                activeCard.style.transform = 'scale(0.97)';
-                setTimeout(() => { activeCard.style.transform = ''; }, 100);
-            }
-        }
-    });
-})();
-</script>
 {% endblock %}

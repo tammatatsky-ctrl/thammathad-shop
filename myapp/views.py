@@ -609,20 +609,52 @@ class StaffLogoutView(View):
 # ==================== หน้าร้าน (Public) ====================
 
 class IndexView(TemplateView):
-    """หน้าแรกของร้าน — hero Liquid Glass การ์ดแก้วหลัก (แสงเมาส์ขั้นสุด) + ฟีเจอร์ +
-    สินค้าแนะนำ grid 3 คอล. โครงสร้างกลับเป็น v1 (การ์ดหลักเล่นแสงผ่าน fx-glass engine
-    เดิม — ไม่แตะ core) ยกระดับด้วย .hero-ultimate (เลเยอร์แสงนอก — ผูก CSS vars เดิม).
+    """หน้าแรกของร้าน — โครงแบบ "หน้าร้านจริง" (แก้จากเดิมที่เป็น hero การ์ดเดียว + lab 2142px)
 
-    categories: หมวดหมู่ของสินค้าที่ยังแสดงอยู่ — ถ้าว่าง template ซ่อนแถวหมวดเอง.
-    featured: สินค้าแนะนำเพดาน 6 ชิ้น (grid 3 คอล 2 แถว) — ถ้ามีน้อยกว่าจะแสดงเท่าที่มี.
+    หลักการ: ผู้มาแรกต้อง **เห็นสินค้าและทางเลือกภายในหน้าจอแรก**
+    ตอนนี้หน้าเดิมยาว 5120px และ "ห้องทดสอบสวิตช์" กิน 42% ของหน้า
+    ทำให้ต้องเลื่อน 4 จอถึงจะเจอของที่ขายได้ — จึงรื้อเป็น
+    hero แบบแยกสองคอลัมน์ (ซ้ายคำโปรย+ปุ่ม / ขวาสินค้า 4 ใบ) → แถบหมวด 4 อัน → สินค้า
+
+    Attributes:
+        featured: สินค้าเพดาน 8 ชิ้น สำหรับกริด "สินค้าทั้งหมด" ด้านล่าง
+        hero_picks: 4 ชิ้นแรก สำหรับตารางโชว์ฝั่งขวาของ hero
+        categories: หมวดหมู่ที่ยังมีสินค้าแสดงอยู่ (ถ้าว่าง template ซ่อนแถวหมวดเอง)
+        cat_tiles: รายการ {name, icon, count} สำหรับแถบหมวด — ค่า icon จับคู่จาก
+            CAT_ICONS, count คือจำนวนสินค้าจริงในหมวดนั้น (ไม่ใช่ตัวเลขประดับ)
     """
     template_name = 'index.html'
+
+    #: ไอคอนประจำหมวด — ถ้าหมวดใหม่ไม่อยู่ในนี้จะใช้ไอคอนกลางแทน
+    CAT_ICONS = {
+        'อุปกรณ์ต่อพ่วง': 'bi-keyboard',
+        'เครื่องเสียง': 'bi-headphones',
+        'จอภาพ': 'bi-display',
+        'สายและเครื่องชาร์จ': 'bi-lightning-charge',
+    }
 
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         listed = Product.objects.listed()
-        ctx['featured'] = listed[:6]
-        ctx['categories'] = Catalog.categories(only_listed=True)
+        featured = list(listed[:8])
+        ctx['featured'] = featured
+        ctx['hero_picks'] = featured[:4]
+
+        cats = Catalog.categories(only_listed=True)
+        ctx['categories'] = cats
+        # นับต่อหมวดใน Python แทน extra() — แคตตาล็อกเล็ก (สินค้าร้อยระดับ)
+        # และโค้ดสั้นกว่า aggregation ที่ต้อง import อย่าง QuerySet เพิ่ม
+        counts = dict.fromkeys(cats, 0)
+        for name in listed.values_list('category', flat=True):
+            if name in counts:
+                counts[name] += 1
+
+        # แปลงเป็นรายการ {name, icon, count} ให้ template วนได้ตรง ๆ
+        # (Django ไม่รองรับ {{ dict[key_var] }} — ต้องเตรียมมาให้ใน view)
+        ctx['cat_tiles'] = [
+            {'name': name, 'icon': self.CAT_ICONS.get(name, 'bi-tag'), 'count': counts[name]}
+            for name in cats
+        ]
         return ctx
 
 
