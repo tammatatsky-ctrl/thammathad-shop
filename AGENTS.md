@@ -134,6 +134,14 @@ python manage.py collectstatic       # Collect to staticfiles/
 ```bash
 python manage.py test myapp.tests.test_template_hygiene myapp.tests.test_dashboard myapp.tests.test_ajax_convention
 ```
+⚠️ **แก้ static แล้วเห็นไม่เปลี่ยน = ต้องทำ 2 อย่าง** (เจอจริง 2 รอบติดกัน)
+```bash
+python manage.py collectstatic --noinput   # 1. staticfiles คือสิ่งที่เสิร์ฟจริง
+# 2. restart runserver — STATIC_VERSION คำนวณตอน settings โหลด (recipe #7)
+```
+`?v=` ตอนนี้ครอบคลุมทั้ง `css/theme.css` **และ** `css/effects/*` + `js/effects/*`
+และเปิดใช้ทั้ง dev/prod → แก้แล้วรีเฟรชแล้วต้องเห็นผล ถ้าไม่เห็นแปลว่า
+collectstatic ยังไม่รัน หรือ server ยังไม่ restart (ไม่ใช่เรื่อง OS motion)
 ครอบคลุม 3 อย่างที่ UI พังบ่อยที่สุด:
 - เทมเพลตหลุด/คอมเมนต์ข้ามบรรทัด/BOM (Bug Recipe #8 + #11)
 - สัญญา layout ของแดชบอร์ด (`id="reports"`, ลำดับ KPI, empty state, ห้ามพึ่ง CDN)
