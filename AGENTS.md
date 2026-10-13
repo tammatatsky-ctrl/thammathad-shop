@@ -125,6 +125,46 @@ python manage.py collectstatic       # Collect to staticfiles/
 | Translate | แปล EN↔TH ช่วยฟอร์มสินค้า (ใช้ได้โดยไม่ต้องมี key) | MyMemory — keyless |
 | ThaiCalendar.holidays | วันหยุดราชการไทย + วันทำการถัดไป (ETA หน้าสั่งซื้อสำเร็จ) | Google Calendar ICS — keyless |
 
+### แนวทางแก้ UX/UI — ตรวจก่อน-หลังทุกครั้ง
+
+ระบบฝั่ง "ความถูกต้อง/ปลอดภัย" นิ่งแล้ว จึงแก้หน้าตาได้อย่างอิสระ
+เพราะมี **258 เทสต์เป็นตาข่ายนิรภัย** — แต่ต้องรู้ว่าอะไรเปราะ
+
+**ตรวจเร็วหลังแก้หน้าตา (7 วินาที — ใช้ทุกครั้งที่แก้)**
+```bash
+python manage.py test myapp.tests.test_template_hygiene myapp.tests.test_dashboard myapp.tests.test_ajax_convention
+```
+ครอบคลุม 3 อย่างที่ UI พังบ่อยที่สุด:
+- เทมเพลตหลุด/คอมเมนต์ข้ามบรรทัด/BOM (Bug Recipe #8 + #11)
+- สัญญา layout ของแดชบอร์ด (`id="reports"`, ลำดับ KPI, empty state, ห้ามพึ่ง CDN)
+- สัญญา partial/AJAX ของตาราง staff (`X-Requested-With`, `?partial=1`, POST-only)
+
+**ตรวจเต็มก่อน commit (2 นาที)**
+```bash
+python manage.py test myapp
+```
+
+**ไฟล์ที่แก้ได้อิสระ** — หน้าเนื้อหา ตาราง partial (`*_rows.html`) · `404.html`
+· layout/spacing ภายใน `.card` · ข้อความ/คำอธิบาย · `*_log.html`, `product_grid.html`
+
+**ไฟล์ที่แตะได้แต่ต้องรู้ผลกระทบ**
+| ไฟล์ | ถ้าแตะแล้วต้องทำอะไรต่อ |
+|---|---|
+| `theme.css` | `python manage.py collectstatic --noinput` (preflight จะ FAIL ถ้าลืม) |
+| `basetemplate.html` | ทุกหน้าเรนเดอร์ผ่านไฟล์นี้ — คอมเมนต์ผิดจะโผล่**ทั้งเว็บ** (Recipe #11) |
+| `css/effects/*` | ถ้าเปลี่ยนชื่อ class → ต้องแก้ `match` ใน `fx-assets.js` ให้ตรง มิฉะนั้น effect ไม่ถูกโหลด |
+| `adminbase.html` | เมนู navbar ทุกหน้า staff |
+
+**ห้ามแตะ**
+- `{% static %}` ใส่ `?v=` เอง → `VersionedStaticFilesStorage` จัดการแล้ว (recipe #2)
+- ย้าย `<script motion-core / fx-assets / fx-boot>` ออกจากท้าย `basetemplate`
+- `confirm()/alert()/prompt()` → ใช้ `data-confirm` / `islandAlert()` (Conventions)
+- `{# ... #}` หลายบรรทัด → `{% comment %}` และอยู่หลัง `{% extends %}` (Recipe #11)
+- `prefers-reduced-motion` ทุกที่ → ถูกตัดออกจากระบบแล้ว ห้ามเพิ่มกลับ (Recipe #3)
+
+**หลังแก้เสร็จ**: `git status` ต้องเห็นเฉพาะไฟล์ที่ตั้งใจแก้ ·
+ไม่มี `.pyc` / `logs/` / `backups/` / `staticfiles/test` ปน · `preflight --quiet` เขียว
+
 ### Frontend
 
 - **theme.css**: Apple Liquid Glass design system (core). Variables: `--ink`, `--ink-soft`, `--gray-bg`, `--apple-blue`, `--nav-bg`, `--ease-apple`. เอฟเฟกต์ (reveal, morph, ripple, ...) แยกอยู่ใน `css/effects/*.css` — core มีแต่ส่วนประกอบ/component transitions + motion-off gates ของ core เท่านั้น.
