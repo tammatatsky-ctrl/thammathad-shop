@@ -183,6 +183,12 @@
                             </tbody>
                         </table>
                     </div>
+                    {% comment %}
+                        ปุ่มแจ้งชำระอยู่**นอก** `{% if payments %}` โดยตั้งใจ
+                        เดิมมันอยู่ข้างใน → ออเดอร์ที่ยังไม่เคยมีประวัติการชำระ
+                        (ซึ่งคือสถานะปกติของออเดอร์ใหม่) จะไม่เห็นปุ่มชำระเลย
+                        = ตรงกันข้ามกับที่ควรเป็น ปุ่มสำคัญที่สุดตอนยังไม่มียอด
+                    {% endcomment %}
                     {% if order.status == 'pending' and remaining > 0 %}
                     <form method="POST" action="{% url 'payment_quick' %}" class="mt-3">
                         {% csrf_token %}
@@ -195,6 +201,7 @@
                     </form>
                     {% endif %}
                     {% endif %}
+                    {% include 'payment_manual_form.html' with back_url=request.get_full_path %}
 
                     <div class="mt-4">
                         {% include 'slip_upload.html' %}

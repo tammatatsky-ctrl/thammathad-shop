@@ -94,6 +94,8 @@
                 </div>
                 {% endif %}
 
+                {% include 'payment_manual_form.html' with back_url=request.get_full_path %}
+
                 <p class="text-muted-apple mb-5">กรุณาจดหมายเลขนี้ไว้เพื่อติดตามสถานะและแจ้งชำระเงิน</p>
 
                 <div class="card panel-card--tight mx-auto text-start mb-4 order-summary-card">

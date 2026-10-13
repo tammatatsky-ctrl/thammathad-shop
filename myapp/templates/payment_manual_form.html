@@ -1,0 +1,66 @@
+{% comment %}
+    payment_manual_form.html — กล่อง "แจ้งยอดโอนเอง" (ไม่ต้องมี OCR)
+
+    ทำไมต้องมี
+        เดิมลูกค้ามีทางเดียวเมื่อไม่มี `SLIPOK_API_KEY`: ปุ่ม 1 คลิก (สมมติว่าจ่ายเต็ม)
+        → จ่ายบางส่วนโชว์ไม่ได้เลย และข้อความ error ของ OCR ยังสั่งให้
+        "กรอกแบบฟอร์มด้านล่าง" ทั้งที่ไม่มีฟอร์มนั้นอยู่จริง
+
+    การใช้งาน
+        คาดหวังว่า view ส่งมา: order, back_url (ไม่บังคับ)
+        ซ่อนอัตโนมัติเมื่อ: ออเดอร์ไม่ pending / เป็นเก็บเงินสด (ไม่ต้องโอน)
+        ทุกอย่างเดินผ่าน PaymentService.record_payment() เหมือนทางอื่น
+{% endcomment %}
+{% if order.status == 'pending' and order.payment_method != 'cod' %}
+<div class="card panel-card mb-4 payment-manual-card">
+    <h5 class="mb-2"><i class="bi bi-pencil-square me-2 text-primary"></i>แจ้งยอดโอนเอง</h5>
+    <p class="text-muted-apple small mb-3">
+        ถ้าโอนแล้วแต่ไม่สะดวกอัปโหลดสลิป ให้กรอกยอดและวันที่ที่โอน
+        ระบบจะบันทึกผ่านจุดรับเงินจุดเดียวเหมือนกันทุกช่องทาง
+        {% if not slip_enabled %}
+        <br><span class="text-muted-apple">ระบบอ่านสลิปอัตโนมัติยังไม่ได้เปิดใช้งาน
+            (ต้องตั้ง <code>SLIPOK_API_KEY</code>) — ใช้ช่องนี้แทนได้</span>
+        {% endif %}
+    </p>
+
+    <form method="POST" action="{% url 'payment_manual' %}" class="row g-2 align-items-end">
+        {% csrf_token %}
+        <input type="hidden" name="order_id" value="{{ order.id }}">
+        <input type="hidden" name="phone" value="{{ order.phone }}">
+        <input type="hidden" name="back" value="{{ back_url|default:request.get_full_path }}">
+
+        <div class="col-6 col-sm-4">
+            <label class="form-label small mb-1" for="pmAmount-{{ order.id }}">ยอดที่โอน (บาท)</label>
+            <input type="number" step="0.01" min="0.01" required
+                   name="amount" id="pmAmount-{{ order.id }}"
+                   class="form-control form-control-sm tabular-nums"
+                   placeholder="{{ order.remaining|floatformat:2 }}"
+                   value="{{ order.remaining|floatformat:2 }}">
+        </div>
+        <div class="col-6 col-sm-4">
+            <label class="form-label small mb-1" for="pmDate-{{ order.id }}">วันที่โอน</label>
+            <input type="date" name="transfer_date" id="pmDate-{{ order.id }}"
+                   class="form-control form-control-sm" value="">
+        </div>
+        <div class="col-12 col-sm-4">
+            <button type="submit" class="btn btn-primary btn-sm w-100">
+                <i class="bi bi-check2-circle me-1"></i>บันทึกยอดที่แจ้ง
+            </button>
+        </div>
+        <div class="col-12">
+            <label class="form-label small mb-1" for="pmNote-{{ order.id }}">
+                หมายเหตุ (ไม่บังคับ)
+            </label>
+            <input type="text" name="note" id="pmNote-{{ order.id }}" maxlength="200"
+                   class="form-control form-control-sm" placeholder="เช่น โอนจากแอปธนาคาร">
+        </div>
+    </form>
+
+    {% if order.remaining and order.reported_total > 0 %}
+    <p class="text-muted-apple small mb-0 mt-2">
+        <i class="bi bi-info-circle me-1"></i>แจ้งมาแล้ว ฿{{ order.reported_total|floatformat:2 }}
+        จาก ฿{{ order.total|floatformat:2 }} — เหลืออีก ฿{{ order.remaining|floatformat:2 }}
+    </p>
+    {% endif %}
+</div>
+{% endif %}

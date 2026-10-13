@@ -45,11 +45,19 @@
                                     <button type="button" id="translateBtn" class="btn btn-sm btn-outline-secondary">
                                         <i class="bi bi-translate me-1"></i> แปล EN→TH
                                     </button>
-                                    {% if ai_enabled %}
-                                    <button type="button" id="aiBtn" class="btn btn-sm btn-outline-primary ai-btn">
-                                        <i class="bi bi-stars me-1"></i> AI ช่วยเขียน
+                                    {% comment %}
+                                        ปุ่มช่วยเขียนคำอธิบาย — แสดงเสมอ
+                                        มี GEMINI_API_KEY → ใช้ AI จริง
+                        ไม่มี key        → ใช้แม่แบบตามชื่อ/หมวด (ProductDescription)
+                        เดิมซ่อนปุ่มทั้งหมดเมื่อไม่มี key = ฟีเจอร์นี้ทดสอบไม่ได้เลย
+                        ป้ายกำกับบอกตรงว่าเส้นทางไหนกำลังทำงานอยู่
+                                    {% endcomment %}
+                                    <button type="button" id="aiBtn" class="btn btn-sm btn-outline-primary ai-btn"
+                                            data-ai-mode="{% if ai_enabled %}ai{% else %}rule{% endif %}"
+                                            title="{% if ai_enabled %}ใช้ Google Gemini{% else %}ยังไม่ได้ตั้ง GEMINI_API_KEY — จะสร้างจากแม่แบบตามชื่อ/หมวด{% endif %}">
+                                        <i class="bi bi-stars me-1"></i>
+                                        {% if ai_enabled %}AI ช่วยเขียน{% else %}ช่วยเขียน (แม่แบบ){% endif %}
                                     </button>
-                                    {% endif %}
                                 </div>
                             </div>
                             <textarea name="description" id="prodDesc" rows="3" class="form-control" placeholder="รายละเอียดสินค้า" data-live="desc">{{ product.description|default:'' }}</textarea>
@@ -200,10 +208,14 @@
         invalid[0].focus({ preventScroll: true });
     }
 
-    /* ---- Gemini AI ช่วยเขียนคำอธิบาย ---- */
+    /* ---- ช่วยเขียนคำอธิบาย (AI เมื่อมี key / แม่แบบตามชื่อ-หมวดเมื่อไม่มี) ---- */
     var aiBtn = document.getElementById('aiBtn');
     if (aiBtn) {
         var aiHint = document.querySelector('.ai-hint');
+        // โหมดถูกประกาศไว้ใน template: 'ai' หรือ 'rule' — ใช้ข้อความแจ้งเตือนตรงกับจริง
+        var aiIsAi = aiBtn.getAttribute('data-ai-mode') === 'ai';
+        var aiRestLabel = aiIsAi ? 'AI ช่วยเขียน' : 'ช่วยเขียน (แม่แบบ)';
+        var aiBusyLabel = aiIsAi ? 'กำลังคิด...' : 'กำลังสร้าง...';
         aiBtn.addEventListener('click', function () {
             var nameEl = document.getElementById('prodName');
             if (!nameEl.value.trim()) {
@@ -212,7 +224,7 @@
                 return;
             }
             aiBtn.disabled = true;
-            aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> กำลังคิด...';
+            aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> ' + aiBusyLabel;
             if (aiHint) aiHint.classList.remove('d-none');
             fetch("{% url 'product_describe_ai' %}", { method: 'POST', body: new FormData(form) })
                 .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
@@ -221,14 +233,19 @@
                         var desc = document.getElementById('prodDesc');
                         desc.value = res.j.description;
                         desc.dispatchEvent(new Event('input', { bubbles: true }));
+                        // บอกตรงว่าได้ข้อความจากทางไหน — ไม่ให้เข้าใจว่าเป็น AI เสมอ
+                        if (res.j.source === 'rule') {
+                            islandAlert(res.j.notice || 'สร้างจากแม่แบบ ไม่ได้ใช้ AI',
+                                        'สร้างจากแม่แบบ (ไม่ใช่ AI)');
+                        }
                     } else {
-                        islandAlert(res.j.error || 'AI ไม่ตอบสนอง', 'AI ไม่ตอบสนอง');
+                        islandAlert(res.j.error || 'ไม่ตอบสนอง', 'ช่วยเขียนไม่สำเร็จ');
                     }
                 })
-                .catch(function () { islandAlert('เชื่อมต่อ AI ไม่สำเร็จ'); })
+                .catch(function () { islandAlert('เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ'); })
                 .finally(function () {
                     aiBtn.disabled = false;
-                    aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> AI ช่วยเขียน';
+                    aiBtn.innerHTML = '<i class="bi bi-stars me-1"></i> ' + aiRestLabel;
                     if (aiHint) aiHint.classList.add('d-none');
                 });
         });

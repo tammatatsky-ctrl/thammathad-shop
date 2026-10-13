@@ -370,7 +370,17 @@ class StaffPagesRenderTest(TestCase):
         self.assertEqual(self.product.stock, old_stock + 5)
 
     @override_settings(GEMINI_API_KEY='')
-    def test_ai_disabled_returns_503(self):
-        """ไม่มี GEMINI_API_KEY → /describe-ai/ ตอบ 503 พร้อมข้อความไทย"""
+    def test_ai_disabled_falls_back_to_rule_based_description(self):
+        """ไม่มี GEMINI_API_KEY → ยังตอบ 200 พร้อมข้อความที่ใช้ได้จริง
+
+        เดิมตอบ 503 (ฟีเจอร์ตายทั้งหมดเมื่อไม่มี key ซึ่งเป็น secret ของเจ้าของงาน
+        ตั้งบนเซิร์ฟเวอร์ที่ส่งงานไม่ได้ → อาจารย์ทดสอบฟีเจอร์นี้ไม่ได้เลย)
+        ตอนนี้ตกไปใช้ `ProductDescription` (แม่แบบตามชื่อ/หมวด) และ
+        ต้องระบุ `source` + `notice` ให้ผู้ใช้รู้ว่า**ไม่ได้ใช้ AI**
+        """
         r = self.client.post(reverse('product_describe_ai'), {'name': 'เมาส์'})
-        self.assertEqual(r.status_code, 503)
+        self.assertEqual(r.status_code, 200)
+        data = r.json()
+        self.assertTrue(data['description'].strip())
+        self.assertEqual(data['source'], 'rule')
+        self.assertIn('ไม่ได้ใช้ AI', data['notice'])

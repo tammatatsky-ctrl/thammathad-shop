@@ -41,6 +41,7 @@ urlpatterns = [
     path('order/tracking/', views.OrderTrackingView.as_view(), name='order_tracking'),
     path('payment/', views.PaymentRedirectView.as_view(), name='payment'),
     path('payment/quick/', views.QuickPayView.as_view(), name='payment_quick'),
+    path('payment/manual/', views.PaymentManualView.as_view(), name='payment_manual'),
     path('payment/slip/', views.SlipVerifyView.as_view(), name='payment_slip'),
 
     # ==================== บัญชีลูกค้า ====================

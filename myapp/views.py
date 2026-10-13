@@ -8,6 +8,7 @@
 """
 import csv
 import os
+from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
 from django.conf import settings
@@ -48,7 +49,8 @@ from .forms import (
 from .models import (ActivityLog, CustomerAddress, CustomerProfile, Employee, Order,
                     OrderItem, Payment, Product)
 from .services import (Audit, Cart, Catalog, GeoIP, GeminiAI, LoginThrottle,
-                      OrderStatusService, PaymentService, PromptPay, QrCode, RateLimit,
+                      OrderStatusService, PaymentService, ProductDescription,
+                      PromptPay, QrCode, RateLimit,
                       SlipOK, ThaiCalendar, Translate, Validators)
 
 
@@ -986,20 +988,38 @@ class OrderSuccessView(TemplateView):
 
 
 class ProductDescribeAIView(StaffRequiredMixin, View):
-    """POST /product/describe-ai/ — Gemini ช่วยเขียนคำอธิบายสินค้า (staff only)"""
+    """POST /product/describe-ai/ — ช่วยเขียนคำอธิบายสินค้า (staff only)
+
+    เดิมบั๊กหนัก: `return JsonResponse({'description': text})` อยู่**ในบล็อก except
+    หลัง return** → เส้นทางสำเร็จไม่มีการคืนค่าเลย (Django ตอบ 500 "view didn't
+    return an HttpResponse") และบรรทัดนั้นเป็นโค้ดตาย
+    = ปุ่มนี้พังทุกครั้ง แม้ตั้ง API key ถูกต้องแล้ว
+
+    ตอนนี้: มี key → ใช้ Gemini · ไม่มี key → ใช้ตัวสำรองแบบกฎ (`ProductDescription`)
+    และตอบ `source` กลับไปให้ UI แสดงว่าได้ข้อความมาจากทางไหน (ไม่หลอกว่าเป็น AI)
+    """
 
     def post(self, request, *args, **kwargs):
         name = request.POST.get('name', '').strip()
         if not name:
-            return JsonResponse({'error': 'กรอกชื่อสินค้าก่อน แล้วกดปุ่ม AI'}, status=400)
+            return JsonResponse({'error': 'กรอกชื่อสินค้าก่อน แล้วกดปุ่มช่วยเขียน'}, status=400)
+        category = request.POST.get('category', '').strip()
+
         if not GeminiAI.enabled():
-            return JsonResponse({'error': 'ยังไม่ได้ตั้งค่า GEMINI_API_KEY บนเซิร์ฟเวอร์'}, status=503)
+            # ไม่มี key: ยังให้ผลลัพธ์ใช้ได้ เพื่อให้ฟีเจอร์นี้ทดสอบได้จริง
+            return JsonResponse({
+                'description': ProductDescription.suggest(name, category),
+                'source': 'rule',
+                'notice': 'สร้างจากแม่แบบตามชื่อ/หมวด — ไม่ได้ใช้ AI '
+                          '(ยังไม่ได้ตั้ง GEMINI_API_KEY) ผู้ดูแลต้องตรวจทานก่อนใช้จริง',
+            })
+
         try:
-            text = GeminiAI.describe_product(name, request.POST.get('category', '').strip())
+            text = GeminiAI.describe_product(name, category)
         except Exception as exc:
             detail = f' — {exc}' if settings.DEBUG else ''
             return JsonResponse({'error': f'AI ขัดข้องหรือตอบไม่สำเร็จ{detail}'}, status=502)
-            return JsonResponse({'description': text})
+        return JsonResponse({'description': text, 'source': 'ai'})
 
 
 class ProductTranslateView(StaffRequiredMixin, View):
@@ -1153,6 +1173,72 @@ class QuickPayView(View):
         return redirect(back)
 
 
+class PaymentManualView(View):
+    """POST /payment/manual/ — ลูกค้ากรอกยอดที่โอนเอง (ไม่ต้องพึ่ง OCR)
+
+    ทำไมต้องมี
+        เดิมมีแค่ 2 ทาง: อัปโหลดสลิป (ต้องมี `SLIPOK_API_KEY`) หรือกดปุ่ม
+        1-คลิก (สมมติว่าจ่ายเต็ม) — ถ้าไม่มี key จะ**ไม่เหลือทางให้ลูกค้าแจ้งยอด**
+        และข้อความ error ของ OCR ยังบอกลูกค้าว่า "หรือกรอกแบบฟอร์มด้านล่าง"
+        ทั้งที่ไม่มีฟอร์มนั้นอยู่จริง → ระบบหลอกผู้ใช้เรื่องที่ควรห้ามหลอก
+
+        ฟอร์มนี้ปิดช่องโหว่นั้น และทำให้ขั้น "ชำระเงิน" โชว์ได้ครบทุกกรณี
+        ไม่ว่าจะมี OCR หรือไม่ — รวมถึงกรณีจ่ายบางส่วน
+
+    ความปลอดภัย
+        ใช้ `_authed_order` ยืนยันเจ้าของออเดอร์ด้วยเบอร์โทร เหมือนทางอื่น
+        ทุกอย่างเดินผ่าน `PaymentService.record_payment()` จุดเดียวเดียวกัน
+        → ยอดเกิน/จ่ายซ้ำ/ออเดอร์ที่ปิดแล้ว ถูกปฏิเสธที่ service อยู่แล้ว
+    """
+
+    def post(self, request, *args, **kwargs):
+        order, err = _authed_order(request, request.POST.get('order_id'),
+                                   request.POST.get('phone'))
+        back = request.POST.get('back') or reverse('order_tracking')
+        if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
+            back = reverse('order_tracking')
+        if err:
+            messages.error(request, err)
+            return redirect(back)
+
+        # เขียนยอดก่อนข้างบน (เช่น 500) เพื่อกันพิมพ์ผิดเป็นจำนวนมหศาล
+        try:
+            amount = Decimal(request.POST.get('amount', '').replace(',', '').strip())
+        except (InvalidOperation, ValueError, TypeError):
+            messages.error(request, 'ยอดที่โอนไม่ถูกต้อง — กรอกเป็นตัวเลข เช่น 1290')
+            return redirect(back)
+        if amount <= 0:
+            messages.error(request, 'ยอดที่โอนต้องมากกว่า 0')
+            return redirect(back)
+
+        raw_date = request.POST.get('transfer_date', '').strip()
+        try:
+            transfer_date = (datetime.strptime(raw_date, '%Y-%m-%d').date()
+                             if raw_date else timezone.localtime().date())
+        except ValueError:
+            messages.error(request, 'วันที่โอนไม่ถูกต้อง')
+            return redirect(back)
+
+        result = PaymentService.record_payment(
+            order=order, name=order.customer_name, phone=order.phone,
+            amount=amount, transfer_date=transfer_date,
+            note=(request.POST.get('note', '') or 'กรอกยอดเองจากหน้าเว็บ').strip()[:200],
+            source='manual',
+            request=request,
+        )
+        if not result['ok']:
+            messages.info(request, result['error'])
+        elif result['just_paid']:
+            messages.success(request,
+                             f'ออเดอร์ #{order.id} รับยอดโอนครบแล้ว — ชำระเงินเรียบร้อย!')
+        else:
+            messages.success(
+                request,
+                f'บันทึกยอด ฿{amount:,.2f} แล้ว — ยังขาดอีก '
+                f'฿{result["remaining"]:,.2f} ยอดรวม ฿{order.total:,.2f}')
+        return redirect(back)
+
+
 class SlipVerifyView(View):
     """POST /payment/slip/ — อัปโหลดสลิป → SlipOK OCR → สร้าง Payment อัตโนมัติ
     คืน JSON สำหรับ fetch (X-Requested-With)
@@ -1189,7 +1275,7 @@ class SlipVerifyView(View):
         except RuntimeError as e:
             msg = {
                 'no-api-key': 'ระบบยังไม่เปิดใช้งาน',
-            }.get(str(e), 'อ่านสลิปไม่สำเร็จ — ลองถ่ายใหม่ให้ชัด หรือกรอกแบบฟอร์มด้านล่าง')
+            }.get(str(e), 'อ่านสลิปไม่สำเร็จ — ลองถ่ายใหม่ให้ชัด หรือใช้ช่อง "แจ้งยอดโอนเอง" ด้านล่าง')
             detail = str(e) if settings.DEBUG else ''
             return JsonResponse({'ok': False, 'error': msg + (f' ({detail})' if detail else '')}, status=502)
         except Exception:
