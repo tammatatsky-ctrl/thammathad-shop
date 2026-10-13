@@ -60,10 +60,21 @@
         return false;
     }
 
-    /* ---- static base (ฉีดจาก basetemplate ผ่าน {% static %} — เปลี่ยน STATIC_URL
-            ได้โดยไม่ต้องแก้ JS ตรงนี้; fallback ไว้สำหรับ dev ที่ไม่ได้ผ่าน template) ---- */
-    function baseCss() { return window.FX_CSS_BASE || "/static/css/effects/"; }
-    function baseJs() { return window.FX_JS_BASE || "/static/js/effects/"; }
+    /* ---- static base (ฉีดจาก basetemplate เป็น STATIC_URL + "css/effects/" —
+            เปลี่ยน STATIC_URL ได้โดยไม่ต้องแก้ JS ตรงนี้;
+            fallback ไว้สำหรับ dev ที่ไม่ได้ผ่าน template) ----
+     * ตัด "?..." / "#..." ออกจาก path ฐาน — จำเป็นมาก
+     * ถ้า base มี query ติดมา (เช่นถ้าวันหนึ่งใครเขียนกลับไปใช้
+     * {% static 'css/effects/' %} ซึ่ง storage แบบ versioned จะเติม ?v=...
+     * ต่อท้ายให้แม้ทั้งที่เป็นโฟลเดอร์) แล้วเอาไปต่อชื่อไฟล์
+     * จะได้ URL พัง ".../effects/?v=2026...fx-glass.css" → 404 → effect ไม่โหลด */
+    function stripQuery(url) {
+        if (!url) return url;
+        var i = url.search(/[?#]/);
+        return i === -1 ? url : url.slice(0, i);
+    }
+    function baseCss() { return stripQuery(window.FX_CSS_BASE || "/static/css/effects/"); }
+    function baseJs() { return stripQuery(window.FX_JS_BASE || "/static/js/effects/"); }
 
     /* ---- cache-busting สำหรับ URL ที่ "สร้างเองตอน runtime" ----
      *  URL ที่ inject ตรงนี้เกิดหลัง Django render เสร็จ จึงไม่ได้ผ่าน static

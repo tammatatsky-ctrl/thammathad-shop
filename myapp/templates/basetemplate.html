@@ -179,7 +179,7 @@
        เกิดหลัง Django render เสร็จ จึงไม่ได้ ?v= จาก static storage อัตโนมัติ
        ถ้าไม่ส่งมาให้ ผู้ใช้จะได้ effect เวอร์ชันเก่าจาก cache หลัง deploy ใหม่
        (ชื่อไฟล์ไม่เปลี่ยน จึงต่อ query ได้เลย — ดู myapp/static_storage.py) {% endcomment %}
-    <script>window.FX_CSS_BASE = "{% static 'css/effects/' %}"; window.FX_JS_BASE = "{% static 'js/effects/' %}";
+    <script>window.FX_CSS_BASE = "{{ STATIC_URL }}css/effects/"; window.FX_JS_BASE = "{{ STATIC_URL }}js/effects/";
     window.FX_STATIC_V = "{{ STATIC_VERSION|default:'' }}";</script>
     <script defer src="{% static 'vendor/js/bootstrap.bundle.min.js' %}"></script>
     <script defer src="{% static 'js/motion-core.js' %}"></script>

@@ -20,4 +20,9 @@ def cart_context(request):
         # จะถูกเบราว์เซอร์ cache โดยไม่มี ?v= → แก้ effect แล้วผู้ใช้ไม่เห็น
         # (settings ไม่ได้อยู่ใน context เป็นอัตโนมัติ ต้องส่งมาเอง)
         'STATIC_VERSION': getattr(settings, 'STATIC_VERSION', ''),
+        # path ฐานของ static — ใช้สร้าง URL ของไฟล์ effect ที่โหลดตอน runtime
+        # ต้องใช้ค่านี้ ไม่ใช่ {% static 'css/effects/' %}: storage แบบ versioned
+        # จะเติม ?v=... ต่อท้าย "โฟลเดอร์" ด้วย แล้ว JS เอาไปต่อชื่อไฟล์
+        # → ได้ URL พังเป็น ".../?v=2026...fx-glass.css" แล้วทุก effect โหลดไม่ขึ้น
+        'STATIC_URL': getattr(settings, 'STATIC_URL', '/static/'),
     }

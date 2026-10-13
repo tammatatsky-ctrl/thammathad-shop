@@ -56,7 +56,7 @@ myapp/
 
 staticfiles/        collectstatic output (production serves from here)
 media/employees/    Uploaded employee avatars
-db.sqlite3          Database with seed data (12 employees, 3 products)
+db.sqlite3          Database with seed data (12 employees, 12 products / 4 หมวด — `manage.py seed_catalog`)
 ```
 
 ## Key Commands
@@ -111,7 +111,7 @@ python manage.py collectstatic       # Collect to staticfiles/
 - `DEFAULT_PERMISSION_CLASSES = IsAuthenticated` (fail-safe ใน settings.py) — view ใหม่ที่ลืมระบุ permission จะถูกล็อกก่อน; view สาธารณะ (products/categories/api root) ระบุ `AllowAny` เองอยู่แล้ว
 - `/api/orders/` prefetch `items__product` — กัน N+1 จาก `product_name` (`source='product.name'`); วัดได้ 4 queries คงที่ต่อหน้า (COUNT + orders + items + products)
 - เทสต์ API: `myapp/tests/test_api.py` + `test_ratelimit.py` + `test_ajax_convention.py` + `test_external_apis.py` — ระวัง gotcha ของ Django 6.0 test client (Bug Recipe #10)
-- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron)
+- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron) · `seed_catalog.py` (ชุดสินค้าตัวอย่าง 12 ชิ้น/4 หมวด — upsert ตาม id รันซ้ำได้ ไม่ลบอะไรทิ้ง)
 
 ### External Integrations (services.py)
 
@@ -304,9 +304,30 @@ python manage.py test myapp
   ไม่ใช่ `{# ... #}` · `{# #}` ใช้ได้เฉพาะ **บรรทัดเดียว**
 - **อีกข้อ**: `{% comment %}` ต้องวาง**หลัง** `{% extends %}` เสมอ
   ไม่งั้น Django error `{% extends %} must be the first tag in ...`
-- **กันไว้แล้ว**: `myapp/tests/test_template_hygiene.py` (6 เคส) ตรวจ 3 ชั้น —
+- **กันไว้แล้ว**: `myapp/tests/test_template_hygiene.py` (8 เคส) ตรวจ 4 ชั้น —
   ไม่มี `{# #}` ข้ามบรรทัด · ทุกเทมเพลตคอมไพล์ผ่าน · หน้าเว็บที่เรนเดอร์แล้ว
-  ไม่มีซาก `{% %}` / `{# #}` โผล่ (ตรวจทั้งหน้าบ้าน/หน้าร้าน/หน้า 404)
+  ไม่มีซาก `{% %}` / `{# #}` โผล่ (ตรวจทั้งหน้าบ้าน/หน้าร้าน/หน้า 404) ·
+  path ฐานของ effect ไม่มี query ติด
+
+### 12. `{% static 'css/effects/' %}` → effect ทุกไฟล์ 404 เงียบ ๆ (หน้าเว็บยัง "เปิดได้")
+- **สาเหตุ**: path ฐานของ effect เคยปั่นด้วย `{% static 'css/effects/' %}` ใน
+  `basetemplate.html` → `VersionedStaticFilesStorage` (โค้ด `static_storage.py`)
+  เติม `?v=<STATIC_VERSION>` ต่อท้าย URL **แม้ทั้งที่เป็นโฟลเดอร์**
+  → `FX_CSS_BASE` กลายเป็น `/static/css/effects/?v=20261014-000257`
+  แล้ว `fx-assets.js` เอา base นั้นไปต่อชื่อไฟล์ →
+  URL ขยะ `/static/css/effects/?v=2026...fx-glass.css` → 404 ทุกไฟล์
+- **อาการ**: หน้าเว็บยังเปิดได้ ไม่มี error ที่ console, แต่ **hero ไม่มี CSS**
+  (การ์ดเต็มจอ ไม่มีกรอบมน) และ ripple/glass/halo/liquid/reveal ไม่ทำงานทั้งหมด
+  → ดูเหมือน "CSS หาย" ทั้งที่ CSS อยู่ครบ และยิ่งแยกยากเพราะเป็นแบบเงียบ
+- **กฎ**: path ฐานของ static **ต้องไม่มี query string เด็ดขาด** ให้ `stamp()`
+  ใน `fx-assets.js` เป็นคนเติม `?v=` ทีหลังเท่านั้น · ต้องใช้ `{{ STATIC_URL }}`
+  (จาก context processor) ไม่ใช่ `{% static %}` · มี `stripQuery()` เป็นการ์ดป้องกันชั้นสอง
+- **วิธีตรวจจับ**: ดู `href` ของ `<link>` ที่ fx-boot inject ในหน้า:
+  `document.querySelectorAll('link[rel=stylesheet]')` → ถ้ามีอันที่ขึ้นต้นด้วย
+  `?v=` (ไม่มี `/css/`) แปลว่าพัง
+- **กันไว้แล้ว**: `test_template_hygiene.EffectAssetBaseUrlTest` — ยืนยันว่า
+  `FX_CSS_BASE`/`FX_JS_BASE` ไม่มี `?` และ `FX_STATIC_V` ไม่ว่าง
+  (ยืนยันแล้วว่าจับได้จริง: แก้กลับเป็น `{% static %}` → เทสต์แดง)
 
 ## Conventions
 

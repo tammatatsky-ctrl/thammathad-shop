@@ -129,3 +129,45 @@ class RenderedOutputHasNoTemplateSyntaxTest(TestCase):
         html = r.content.decode('utf-8')
         for marker in self.LEAK_MARKERS:
             self.assertNotIn(marker, html, f'หน้า 404 มีซากเทมเพลต: "{marker}"')
+
+
+class EffectAssetBaseUrlTest(TestCase):
+    """กัน path ฐานของ effect พัง — อาการคือ "ทุกเอฟเฟกต์หายไปเงียบ ๆ"
+
+    บั๊กที่เคยเกิดจริง:
+        `basetemplate.html` เคยปั่น path ฐานด้วย `{% static 'css/effects/' %}`
+        แต่ `VersionedStaticFilesStorage` จะเติม `?v=<STATIC_VERSION>` ต่อท้าย
+        **แม้ทั้งที่เป็นโฟลเดอร์** → ได้ `FX_CSS_BASE = "/static/css/effects/?v=..."`
+        แล้ว `fx-assets.js` เอาไปต่อชื่อไฟล์ ได้ URL ขยะแบบ
+        `/static/css/effects/?v=2026...fx-glass.css` → 404
+
+        ผลคือ ทุก effect (hero, ripple, glass, halo, liquid...) โหลดไม่ขึ้น
+        แต่หน้าเว็บยัง "เปิดได้" → สังเกตยากมาก เพราะไม่มี error ที่ console
+
+    กฎ: path ฐานต้อง**ไม่มี query** เด็ดขาด ให้ `stamp()` เป็นคนเติม `?v=` ทีหลัง
+    """
+
+    def _base(self, name):
+        html = self.client.get('/').content.decode('utf-8')
+        m = re.search(rf'{name} = "([^"]*)"', html)
+        self.assertIsNotNone(m, f'ไม่พบ {name} ใน HTML ของหน้าแรก')
+        return m.group(1)
+
+    def test_css_and_js_base_have_no_query(self):
+        for name in ('FX_CSS_BASE', 'FX_JS_BASE'):
+            with self.subTest(base=name):
+                base = self._base(name)
+                self.assertNotIn('?', base,
+                                 f'{name} มี query string ติดมา → URL ของ effect จะพัง')
+                self.assertNotIn('#', base, f'{name} มี fragment ติดมา')
+                self.assertTrue(base.endswith('/'),
+                                f'{name} ต้องลงท้ายด้วย "/" เพราะ JS เอาไปต่อชื่อไฟล์')
+
+    def test_static_version_is_exposed_for_cache_busting(self):
+        """`window.FX_STATIC_V` ต้องมีค่า — ถ้าว่าง `stamp()` จะไม่เติม ?v=
+        แล้วแก้ effect แล้วผู้ใช้ได้ไฟล์เก่าจาก cache (Bug Recipe #2)"""
+        html = self.client.get('/').content.decode('utf-8')
+        m = re.search(r'FX_STATIC_V = "([^"]*)"', html)
+        self.assertIsNotNone(m, 'ไม่พบ FX_STATIC_V ใน HTML')
+        self.assertTrue(m.group(1).strip(),
+                        'FX_STATIC_V ว่าง → effect ที่โหลดตอน runtime ไม่มี cache-busting')
