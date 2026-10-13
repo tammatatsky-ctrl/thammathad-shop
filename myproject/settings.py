@@ -367,27 +367,45 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'  # สำหรับ deploy (python mana
 # วิธีแก้: custom storage ใส่ query string (ไม่ใช่ hash ในชื่อไฟล์ —
 #   เพราะ fx-boot.js สร้าง URL effect เองตอน runtime จากสตริงคงที่
 #   ถ้าเปลี่ยนชื่อไฟล์จะ 404 ทั้งระบบเอฟเฟกต์)
-if not DEBUG:
-    STORAGES = {
-        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
-        'staticfiles': {'BACKEND': 'myapp.static_storage.VersionedStaticFilesStorage'},
-    }
+# เปิด `VersionedStaticFilesStorage` ทั้ง dev และ prod (เดิมเปิดเฉพาะ prod)
+#   เหตุผล: ตอนนี้ `{% static %}` ใน dev ได้ URL ตรง ๆ ไม่มี ?v=
+#   → แก้ theme.css แล้วเบราว์เซอร์ยังยกไฟล์เก่าจาก cache มาใช้
+#     (อาการเหมือน "แก้แล้วไม่มีอะไรเกิดขึ้น" = Bug Recipe #2)
+#   ผลข้างเคียงที่ดี: dev กับ prod หน้าตาเหมือนกันเป๊ะ ต่างกันแค่ DEBUG
+STORAGES = {
+    'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+    'staticfiles': {'BACKEND': 'myapp.static_storage.VersionedStaticFilesStorage'},
+}
 
 
 def _compute_static_version():
-    """เวอร์ชัน static คำนวณจาก mtime ของไฟล์ core → แก้ไฟล์แล้วเปลี่ยนเองอัตโนมัติ
+    """เวอร์ชัน static คำนวณจาก mtime ของไฟล์ core + effect ทั้งหมด
 
     ไม่ใช้ hash ของเนื้อหา (อ่านทุกไฟล์ช้าเกินไป) และไม่ต้องแก้มือ bump เลข
     ถ้าอยากบังคับให้เปลี่ยนทุกครั้งที่ deploy ให้ตั้ง env STATIC_VERSION เอง
 
+    ทำไมต้องรวม `css/effects/*` + `js/effects/*` ด้วย
+        URL ของ effect ถูกสร้างเองตอน runtime โดย `fx-assets.js stamp()`
+        (ไม่ผ่าน `{% static %}` ของ template) → ถ้าเวอร์ชันไม่เปลี่ยนเมื่อแก้
+        effect ผู้ใช้จะได้ไฟล์เก่าจาก cache แล้วเห็นว่า "แก้แล้วไม่มีอะไรเกิดขึ้น"
+        = บั๊กครอบครัวของ Bug Recipe #2/#5
+
     Returns:
-        str: สตริงเวอร์ชัน เช่น '20261013-113648' (เวลาแก้ไฟล์ core ล่าสุด)
+        str: สตริงเวอร์ชัน เช่น '20261013-113648' (เวลาแก้ไฟล์ static ล่าสุด)
     """
+    static_root = Path(BASE_DIR) / 'myapp' / 'static'
     cores = ['css/theme.css', 'js/motion-core.js', 'js/fx-boot.js', 'js/fx-assets.js']
-    newest = 0.0
-    for rel in cores:
+    targets = [static_root / rel for rel in cores]
+    # effect ทุกไฟล์ (รวม .css และ .js) — ยิงซ้ำเป็น .bak/.map ได้ ไม่กรองไม่เป็นไร
+    for sub in ('css/effects', 'js/effects'):
         try:
-            newest = max(newest, (Path(BASE_DIR) / 'myapp' / 'static' / rel).stat().st_mtime)
+            targets.extend(p for p in (static_root / sub).iterdir() if p.is_file())
+        except OSError:
+            continue
+    newest = 0.0
+    for path in targets:
+        try:
+            newest = max(newest, path.stat().st_mtime)
         except OSError:
             continue
     if not newest:
