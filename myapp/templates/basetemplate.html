@@ -175,10 +175,10 @@
     {# ผ่าน fx-assets.js (deferred loading) — สั่งงาน FX.boot() เองหลัง inject ครบ ที่นี้จึงเหลือแค่ 4 ไฟล์ #}
     {# ดูไฟล์: myapp/static/js/fx-assets.js / fx-boot.js #}
     {# static base ฉีดผ่าน {% static %} → ถ้าเปลี่ยน STATIC_URL ไม่ต้องแก้ JS (fx-assets มี fallback /static/) #}
-    {# เวอร์ชัน static สำหรับ URL ที่ fx-assets.js "สร้างเองตอน runtime" — URL พวกนี้
+    {% comment %} เวอร์ชัน static สำหรับ URL ที่ fx-assets.js "สร้างเองตอน runtime" — URL พวกนี้
        เกิดหลัง Django render เสร็จ จึงไม่ได้ ?v= จาก static storage อัตโนมัติ
        ถ้าไม่ส่งมาให้ ผู้ใช้จะได้ effect เวอร์ชันเก่าจาก cache หลัง deploy ใหม่
-       (ชื่อไฟล์ไม่เปลี่ยน จึงต่อ query ได้เลย — ดู myapp/static_storage.py) #}
+       (ชื่อไฟล์ไม่เปลี่ยน จึงต่อ query ได้เลย — ดู myapp/static_storage.py) {% endcomment %}
     <script>window.FX_CSS_BASE = "{% static 'css/effects/' %}"; window.FX_JS_BASE = "{% static 'js/effects/' %}";
     window.FX_STATIC_V = "{{ STATIC_VERSION|default:'' }}";</script>
     <script defer src="{% static 'vendor/js/bootstrap.bundle.min.js' %}"></script>

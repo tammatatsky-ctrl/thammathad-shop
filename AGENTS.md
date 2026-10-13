@@ -243,10 +243,28 @@ python manage.py collectstatic       # Collect to staticfiles/
 - **401 vs 403**: endpoint ที่ต้อง auth (เช่น `/api/employees/`) ตอบ **403 ไม่ใช่ 401** เมื่อไม่ auth/token มั่ว เพราะ `SessionAuthentication` เป็น authenticator ตัวแรกและ `authenticate_header` เป็น None → DRF แปลง `NotAuthenticated` เป็น 403 (เทสต์เดิมจึงใช้ `assertIn(status, (401, 403))` — assert `401` ตรง ๆ จะพัง)
 - **วิธีตรวจจับ**: เทสต์ PATCH/POST ได้ 415 แต่ live curl/APIClient ได้ 200 → ดู `CONTENT_TYPE` ที่ test client ส่งจริงก่อนสรุปว่า API พัง (อ้างอิง: `myapp/tests/test_api.py` — `test_token_full_crud_flow`)
 
-### Conventions
+#### 11. คอมเมนต์เทมเพลต `{# #}` หลุดออกมาเป็นข้อความบนหน้าเว็บ
+
+- **สาเหตุ**: Django แยกแท็กด้วย regex `r"({%.*?%}|{{.*?}}|{#.*?#})"` **โดยไม่มี DOTALL**
+  → `.` ไม่จับขึ้นบรรทัดใหม่ → `{#` ที่ปิดด้วย `#}` ในบรรทัดถัดไป
+  **ไม่ถูกมองเป็นคอมเมนต์** แล้วหลุดออกมาเป็นข้อความที่ผู้ใช้เห็น
+  สังเกตจากหน้าจอ: ข้อความขึ้นต้นด้วย `# =====` และลงท้ายด้วย `===== #}`
+  (คือ `{#` ถูกกินไป 1 ตัวอักษร)
+- **ทำไกร้ายที่สุด**: คอมเมนต์ที่ผิดคือใน `basetemplate.html` ซึ่ง**ทุกเทมเพลต
+  extends อยู่** → ข้อความนั้นโผล่บน **ทุกหน้าของเว็บ**
+- **กฎ**: คอมเมนต์ยาว/หลายบรรทัด → ใช้ `{% comment %}...{% endcomment %}`
+  ไม่ใช่ `{# ... #}` · `{# #}` ใช้ได้เฉพาะ **บรรทัดเดียว**
+- **อีกข้อ**: `{% comment %}` ต้องวาง**หลัง** `{% extends %}` เสมอ
+  ไม่งั้น Django error `{% extends %} must be the first tag in ...`
+- **กันไว้แล้ว**: `myapp/tests/test_template_hygiene.py` (6 เคส) ตรวจ 3 ชั้น —
+  ไม่มี `{# #}` ข้ามบรรทัด · ทุกเทมเพลตคอมไพล์ผ่าน · หน้าเว็บที่เรนเดอร์แล้ว
+  ไม่มีซาก `{% %}` / `{# #}` โผล่ (ตรวจทั้งหน้าบ้าน/หน้าร้าน/หน้า 404)
+
+## Conventions
 
 - **Thai language** for ALL user-facing text (labels, messages, template content, model verbose_name).
-- **Advanced comments เป็นข้อกำหนดของใบงาน — ห้ามลบ/ลดระดับ**: โค้ด Python มี docstring ไทยแบบ Google-style (โมดูล header + class/method รวมถึง Args/Returns/Raises), JS มี JSDoc (engine/mod/ฟังก์ชัน), template มี header `{# #}` อธิบายหน้าที่+สายเงิน+edge case รวมถึงบันทึกบั๊กสำคัญ (เช่น Motion toggle re-observe, บันไดสถานะ, PaymentService จุดรับเงินจุดเดียว). แก้/เขียนโค้ดใหม่ในโปรเจกต์นี้ต้องรักษาระดับข้อมูลนี้ไว้เสมอ (เดิมเคยเป็น "no comments" — ถูกแทนด้วยกติกานี้แล้ว).
+- **Advanced comments เป็นข้อกำหนดของใบงาน — ห้ามลบ/ลดระดับ**: โค้ด Python มี docstring ไทยแบบ Google-style (โมดูล header + class/method รวมถึง Args/Returns/Raises), JS มี JSDoc (engine/mod/ฟังก์ชัน), template มี header อธิบายหน้าที่+สายเงิน+edge case รวมถึงบันทึกบั๊กสำคัญ (เช่น Motion toggle re-observe, บันไดสถานะ, PaymentService จุดรับเงินจุดเดียว). แก้/เขียนโค้ดใหม่ในโปรเจกต์นี้ต้องรักษาระดับข้อมูลนี้ไว้เสมอ (เดิมเคยเป็น "no comments" — ถูกแทนด้วยกติกานี้แล้ว).
+  ⚠️ **รูปแบบคอมเมนต์เทมเพลต**: `{# #}` ใช้ได้เฉพาะ **บรรทัดเดียว** — ถ้ายาว/หลายบรรทัดต้องใช้ `{% comment %}` (ดู Bug Recipe #11) และต้องอยู่หลัง `{% extends %}`
 - **Glass modals only — ห้ามใช้ native `confirm()`/`alert()`/`prompt()`**: form ลบ/อันตรายใช้ `data-confirm="..."` (auto-wired ผ่าน motion-core), โค้ด JS ใช้ `islandAlert(msg[, title])` — ทั้งคู่แสดงเป็นกล่องแก้ว `.glass-confirm-card`. Native กล่อง Window/เบราว์เซอร์ไม่ตรงธีมและเคยถูกแทนทั้งหมดแล้ว (ตัวอย่างแก้: account.html ลบที่อยู่, product_form.html alert AI)
 - **OOP patterns**: QuerySets, Managers, Mixins, Services, CBV with `.as_view()`.
 - **AJAX pattern**: ตรวจด้วย **`is_ajax(request)`** (`myapp/views.py`) เท่านั้น — จุดเดียวของทั้งระบบ (ห้ามเขียน `request.headers.get('X-Requested-With') == ...` เองใน view ใหม่) รองรับ:

@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ใบเสร็จรับเงิน / ใบสั่งซื้อ #{{ order.id }} — Thammathad Shop</title>
-    {# เอกสารใบเสร็จ — self-host ทั้งหมด ไม่พึ่ง CDN ภายนอกเลย (พิมพ์ PDF ออฟไลน์ได้ถูกต้อง)
+    {% comment %} เอกสารใบเสร็จ — self-host ทั้งหมด ไม่พึ่ง CDN ภายนอกเลย (พิมพ์ PDF ออฟไลน์ได้ถูกต้อง)
        - prompt.css: ฟอนต์ Prompt 4 weights (latin + thai subset) ตัวเดียวกับทั้งเว็บ
-       - bootstrap-icons.min.css: ไอคอนชุดเดียวกับ basetemplate (w2) #}
+       - bootstrap-icons.min.css: ไอคอนชุดเดียวกับ basetemplate (w2) {% endcomment %}
     <link rel="stylesheet" href="{% static 'vendor/css/prompt.css' %}">
     <link rel="stylesheet" href="{% static 'vendor/css/bootstrap-icons.min.css' %}">
     <style>
