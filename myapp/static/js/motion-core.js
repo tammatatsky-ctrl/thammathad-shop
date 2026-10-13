@@ -937,21 +937,30 @@ try {
          *  @param {string} msg ข้อความยืนยัน
          *  @param {Function} onConfirm callback เมื่อกดปุ่ม "ยืนยัน"
          *  @param {Node} [detailsNode] template รายละเอียดเสริม (content ของ template)
+         *  @param {Object} [opts] {title, icon, okText, tone}
+         *        tone: "danger" (ค่าเริ่มต้น) | "warning" | "primary"
          */
-        function islandConfirm(msg, onConfirm, detailsNode) {
+        function islandConfirm(msg, onConfirm, detailsNode, opts) {
+            opts = opts || {};
+            var tone = opts.tone || "danger";
+            var title = opts.title || "ยืนยันการลบ";
+            var icon = opts.icon || "bi-trash3-fill";
+            var okText = opts.okText || "ยืนยันลบ";
             var backdrop = document.createElement("div");
             backdrop.className = "island-backdrop";
             var wrap = document.createElement("div");
             wrap.className = "glass-confirm-wrap";
             wrap.innerHTML =
-                '<div class="glass-confirm-card" role="alertdialog" aria-modal="true">' +
-                '<div class="gc-head"><span class="gc-icon"><i class="bi bi-trash3-fill"></i></span>' +
-                '<div><h5 class="gc-title">ยืนยันการลบ</h5><p class="gc-sub"></p></div></div>' +
+                '<div class="glass-confirm-card gc-tone-' + tone + '" role="alertdialog" aria-modal="true">' +
+                '<div class="gc-head"><span class="gc-icon"><i class="bi ' + icon + '"></i></span>' +
+                '<div><h5 class="gc-title"></h5><p class="gc-sub"></p></div></div>' +
                 '<div class="gc-details"></div>' +
                 '<div class="gc-actions">' +
                 '<button type="button" class="gc-btn" data-act="cancel">ยกเลิก</button>' +
-                '<button type="button" class="gc-btn gc-btn-danger" data-act="ok"><i class="bi bi-trash3 me-1"></i>ยืนยันลบ</button>' +
+                '<button type="button" class="gc-btn gc-btn-' + tone + '" data-act="ok">' +
+                okText + "</button>" +
                 "</div></div>";
+            wrap.querySelector(".gc-title").textContent = title;
             wrap.querySelector(".gc-sub").textContent = msg;
             var detBox = wrap.querySelector(".gc-details");
             if (detailsNode) {
@@ -1067,6 +1076,31 @@ try {
         window.islandAlert = islandAlert;
 
         /* ---- Form/link data-confirm ---- */
+
+        /** อ่านการตั้งค่ากล่องยืนยันจาก element เป็น opts ของ islandConfirm
+         *
+         *  กล่องยืนยันเดิมสร้างมาเพื่อ "การลบ" (หัวข้อ/ถังขยะ/ปุ่มแดง) ทุกจุดในระบบ
+         *  เป็นการลบจริง จุดที่ยืนยันแบบอื่น (เช่น superuser override สถานะการชำระ)
+         *  จึงต้องประกาศเองด้วย:
+         *      data-confirm-title="ยืนยันการบังคับสถานะ"
+         *      data-confirm-icon="bi-shield-lock-fill"
+         *      data-confirm-ok="บังคับเป็นชำระแล้ว"
+         *      data-confirm-tone="warning"      (danger = ค่าเริ่มต้น)
+         *  ไม่ใส่ attribute → ได้กล่องยืนยันการลบตามเดิมทุกประการ (ไม่กระทบของเดิม)
+         *
+         *  @param {Element} el element ที่มี data-confirm
+         *  @returns {Object} opts สำหรับ islandConfirm
+         */
+        function confirmOptsFrom(el) {
+            if (!el || !el.getAttribute) return {};
+            return {
+                title: el.getAttribute("data-confirm-title") || undefined,
+                icon: el.getAttribute("data-confirm-icon") || undefined,
+                okText: el.getAttribute("data-confirm-ok") || undefined,
+                tone: el.getAttribute("data-confirm-tone") || undefined,
+            };
+        }
+
         document.addEventListener(
             "submit",
             function (e) {
@@ -1084,6 +1118,7 @@ try {
                             f.submit();
                         },
                         f.querySelector("template.confirm-details"),
+                        confirmOptsFrom(f),
                     );
                 }
             },
@@ -1108,6 +1143,7 @@ try {
                         window.location.href = a.href;
                     },
                     details,
+                    confirmOptsFrom(a),
                 );
             }
         });

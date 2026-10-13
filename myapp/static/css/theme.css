@@ -1873,6 +1873,16 @@ html[data-theme="dark"] .glass-confirm-card {
   background: linear-gradient(135deg, #4f9cff, #0071e3);
   box-shadow: 0 8px 24px rgba(0, 113, 227, 0.4);
 }
+/* โทนเตือน — ใช้กับการยืนยันที่ "ไม่ใช่การลบ" เช่น superuser override
+   เพื่อไม่ให้ผู้ใช้เข้าใจผิดว่ากำลังจะลบข้อมูล */
+.gc-tone-warning .gc-icon {
+  background: linear-gradient(135deg, #ffd05c, #f5a300);
+  box-shadow: 0 8px 24px rgba(245, 163, 0, 0.35);
+}
+.gc-tone-primary .gc-icon {
+  background: linear-gradient(135deg, #4f9cff, #0071e3);
+  box-shadow: 0 8px 24px rgba(0, 113, 227, 0.4);
+}
 .gc-title {
   font-size: 1.25rem;
   font-weight: 700;
@@ -1945,6 +1955,26 @@ html[data-theme="dark"] .glass-confirm-card {
 .gc-btn-danger:hover {
   background: linear-gradient(135deg, #ff7f78, #ff6961);
   box-shadow: 0 10px 32px rgba(255, 69, 58, 0.5);
+}
+.gc-btn-warning {
+  background: linear-gradient(135deg, #ffb340, #f5a300);
+  color: #1d1d1f;
+  border: none;
+  box-shadow: 0 8px 26px rgba(245, 163, 0, 0.4);
+}
+.gc-btn-warning:hover {
+  background: linear-gradient(135deg, #ffc164, #ffb340);
+  box-shadow: 0 10px 32px rgba(245, 163, 0, 0.5);
+}
+.gc-btn-primary {
+  background: linear-gradient(135deg, #4f9cff, #0071e3);
+  color: #fff;
+  border: none;
+  box-shadow: 0 8px 26px rgba(0, 113, 227, 0.4);
+}
+.gc-btn-primary:hover {
+  background: linear-gradient(135deg, #6fb0ff, #4f9cff);
+  box-shadow: 0 10px 32px rgba(0, 113, 227, 0.5);
 }
 
 /* ---- Dark Mode: explicit theme + system fallback ---- */

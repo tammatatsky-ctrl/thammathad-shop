@@ -57,7 +57,11 @@
                     {% endcomment %}
                     <form method="POST" action="{% url 'order_status' order.id %}"
                           class="superuser-override"
-                          data-confirm="บังคับออเดอร์นี้เป็น &quot;ชำระแล้ว&quot; โดยไม่ผ่านจุดรับเงินยังไง? การกระทำนี้จะถูกบันทึกชื่อคุณและเหตุผลไว้ตรวจย้อนหลัง">
+                          data-confirm="บังคับออเดอร์นี้เป็น &quot;ชำระแล้ว&quot; โดยไม่ผ่านจุดรับเงิน — การกระทำนี้จะถูกบันทึกชื่อคุณและเหตุผลไว้ตรวจย้อนหลัง"
+                          data-confirm-title="ยืนยันการบังคับสถานะ"
+                          data-confirm-icon="bi-shield-lock-fill"
+                          data-confirm-ok="บังคับเป็นชำระแล้ว"
+                          data-confirm-tone="warning">
                         {% csrf_token %}
                         <input type="hidden" name="status" value="paid">
                         <label class="form-label small fw-bold mb-1">
