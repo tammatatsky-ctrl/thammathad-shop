@@ -1140,6 +1140,7 @@ class QuickPayView(View):
             order=order, name=order.customer_name, phone=order.phone,
             amount=remaining, transfer_date=timezone.localtime().date(),
             note='ยืนยันโอนยอดเต็มจากหน้าเว็บ (1-คลิก)', source='quickpay',
+            request=request,
         )
         if not result['ok']:
             # ออเดอร์ถูกจ่ายครบจาก request อื่นระหว่างที่กด (race) — บอกตามจริง
@@ -1213,6 +1214,7 @@ class SlipVerifyView(View):
             amount=parsed['amount'],
             transfer_date=parsed['transfer_date'] or timezone.localtime().date(),
             note=parsed['note'], source='slip',
+            request=request,
         )
         # ชั้น service อาจปฏิเสธ (เช่น อีก request เข้ามาจ่ายครบพอดีระหว่าง OCR)
         if not result['ok']:

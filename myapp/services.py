@@ -1051,7 +1051,8 @@ class PaymentService:
     """
 
     @classmethod
-    def record_payment(cls, order, name, phone, amount, transfer_date, note='', source=''):
+    def record_payment(cls, order, name, phone, amount, transfer_date, note='', source='',
+                       request=None):
         """จุดรับเงินจุดเดียวของทุกช่องทาง — สลิป OCR / ปุ่มโอน 1 คลิก / เจ้าหน้าที่ยืนยัน.
 
         กติกาเงินของใบงานรวมอยู่ที่จุดนี้:
@@ -1079,7 +1080,8 @@ class PaymentService:
             amount: ยอดที่จ่ายรอบนี้ (Decimal) — บวกรวมกับยอดก่อนหน้า กลไก "จ่ายบางส่วน"
             transfer_date: วันที่โอน
             note: บันทึกเสริม (เช่น ผล OCR)
-            source: ระบุช่องทาง ('slip-ocr', 'button', ...) — เอาไปบันทึกใน actor
+            source: ระบุช่องทาง ('slip-ocr', 'quickpay', ...) — เอาไปเขียนใน audit log
+            request: HttpRequest (ถ้ามี) — ใช้บันทึก IP และผู้กดลงใน audit log
 
         Returns:
             dict {ok, error, payment, reported, remaining, just_paid, paid}:
@@ -1118,6 +1120,22 @@ class PaymentService:
             if reported >= locked.total:
                 just_paid = OrderStatusService.auto_move(
                     locked, 'paid', actor=f'payment:{source or "record"}')
+
+            # บันทึก audit ทุกครั้งที่มียอดเข้า ไม่ใช่เฉพาะตอนปิดออเดอร์
+            # เหตุผล: ขั้น 'pending → paid' เป็นการเปลี่ยนแปลงที่กระทบเงินและเกิด
+            # โดย "ระบบ" ไม่ใช่เจ้าหน้าที่ — ถ้าไม่บันทึกไว้ จะไม่มีร่องรอยว่า
+            # ออเดอร์นี้รับเงินผ่านช่องทางไหน เมื่อไร ใครเป็นคนกด
+            Audit.record(
+                request.user if request is not None else None, 'payment',
+                summary=(f'ออเดอร์ #{locked.id}: รับยอด ฿{amount:,.2f} '
+                         f'({source or "ไม่ระบุช่องทาง"})'
+                         + (' — ยอดครบ ปิดออเดอร์อัตโนมัติ' if just_paid
+                            else f' (ยังขาด ฿{max(locked.total - reported, Decimal("0")):,.2f})')),
+                target=locked,
+                before={'status': 'pending'},
+                after={'status': locked.status},
+                request=request,
+            )
 
         return {
             'ok': True,
