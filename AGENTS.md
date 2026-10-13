@@ -277,6 +277,12 @@ tar.exe -a -c -f pa_update.zip --exclude=__pycache__ --exclude=.venv --exclude=d
 > ไม่ถูกอัปเดต (เป็นบั๊กเงียบ — เว็บยังรันได้แต่เป็น config เก่า)
 > ตรวจหลังสร้าง ZIP: `tar.exe -tf pa_update.zip | Select-String 'myproject/settings.py'` ต้องเจอ
 
+### เอกสารส่งอาจารย์ — `SUBMISSION.md`
+
+คู่มือสำหรับผู้ตรวจงาน: ระบบคืออะไร · ต้องลองอะไรเพื่อดูว่าครบ ·
+จุดที่ออกแบบมาเป็นพิเศษ · ข้อจำกัดที่ทราบ (เปิดเผยตรง ๆ ไม่อ้างเกินจริง)
+**เมื่อเพิ่มฟีเจอร์ใหม่ ต้องอัปเดตไฟล์นี้ด้วย** — เป็นสิ่งที่อาจารย์เปิดอ่านก่อน
+
 ### Deploy Flow
 
 1. Upload `pa_update.zip` via PythonAnywhere Files tab
@@ -324,6 +330,24 @@ Copy-Item "myapp\static\js\effects\*.js" "staticfiles\js\effects\" -Force
 - เข้าสำเร็จ → ล้างเฉพาะชั้นบัญชี · **ไม่ล้างชั้น IP** (ถ้าล้าง ผู้โจมตีเคลียร์ตัวนับตัวเองได้ทันที)
 - ทุกกรณีที่โดนจำกัดตอบข้อความเดียวกัน (`LoginThrottle.MESSAGE`) — ห้ามแยกข้อความ ไม่งั้นผู้โจมตีเรียนรู้ว่าโดนชั้นไหน
 
+### Audit trail — ActivityLog + `Audit` service
+
+บันทึก "ใครทำอะไร เมื่อไหร่" สำหรับการกระทำที่กระทบเงิน/ของจริง/สิทธิ์บัญชี
+→ หน้า `/staff/activity/` (ค้นหา + กรอง + ส่งออก CSV)
+
+หลักการที่ยึด (สำคัญกว่าตัวฟังก์ชัน):
+- **log พังห้ามทำให้งานหลักพัง** — `Audit.record()` กลืน error แล้วคืน `None`
+- **เก็บเฉพาะ `Audit.SAFE_FIELDS`** — กันการ dump ข้อมูลส่วนตัวลง log
+- **คง `actor_name` เป็นข้อความ** เพราะ FK เป็น `SET_NULL` — บัญชีถูกลบแล้ว
+  ประวัติต้องยังบอกได้ว่าใครเป็นคน
+- **อ่านค่าเดิมจาก `form.initial` ไม่ใช่ `form.instance`** — ModelForm เขียน
+  `cleaned_data` ทับ `instance` ตั้งแต่ตอน `is_valid()` แล้ว (อ่าน instance
+  ตอน `form_valid` จะได้ค่าใหม่ทั้งหมด → log ไม่บอกว่าอะไรเปลี่ยน)
+- ปิดได้ด้วย `ACTIVITY_LOG_ENABLED = False` (ปิดอัตโนมัติตอนรันเทสต์)
+
+จุดที่เรียก `Audit.record()`: ปรับสต็อก · เปลี่ยนสถานะออเดอร์ · ยืนยันยอดชำระ ·
+สร้าง/แก้/ลบพนักงาน · สร้าง/แก้/ลบสินค้า · เปลี่ยนบทบาทบัญชี
+
 ### `manage.py preflight` — ตรวจความพร้อมก่อน/หลัง deploy (รันก่อนอัปโิลด์ ZIP เสมอ)
 
 บั๊กที่ทำให้ "deploy แล้วเว็บพังแต่ไม่มีอาการ" ในโปรเจกต์นี้**มีรูปแบบเดียวกันหมด**: ระบบรันได้ปกติ แต่ไม่ได้ทำงานที่ตั้งใจ — preflight จับได้ในคำสั่งเดียว
@@ -343,7 +367,21 @@ python manage.py preflight --quiet   # เฉพาะรายการที�
 | staticfiles vs `myapp/static` | ไม่ sync → ผู้ใช้เห็น CSS/JS เก่า |
 | migration | ยังไม่ apply หรือแก้ model ลืม `makemigrations` |
 | ฐานข้อมูล | ไฟล์ไม่มี / `integrity_check` ไม่ผ่าน |
+| ไฟล์ log | เขียนไม่ได้ → error หายเงียบ ไม่มี traceback ให้ไล่ |
 | backup | ไม่มีไฟล์สำรอง หรือเก่ากว่า 2 วัน |
+
+### Logging — `logs/` (หมุนรายวัน เก็บย้อนหลังได้)
+
+| ไฟล์ | เก็บ | เนื้อหา |
+|---|---|---|
+| `logs/shop.log` | 14 วัน | ทุกอย่างระดับ INFO ขึ้นไป |
+| `logs/error.log` | 30 วัน | ERROR เท่านั้น (ใช้ `django.request` / `django.security`) |
+
+- เดิมไม่มี `LOGGING` เลย → ทุกอย่างไป `django.server` (console ของ WSGI)
+  บน PythonAnywhere ต้องเปิดแท็บ Error log ถึงเห็น และ**ย้อนหลังไม่ได้**
+- `handler500` log ผ่าน `django.request` ด้วย `logger.exception()` (ได้ traceback)
+- **ตอนรันเทสต์ไม่เขียนไฟล์ log** (`_WRITE_LOG_FILES`) — กันเติมดิสก์/ผลไม่นิ่ง
+- `logs/` อยู่ใน `.gitignore` + นอก `staticfiles/`
 
 ### สำรองฐานข้อมูล — `manage.py backup_db`
 

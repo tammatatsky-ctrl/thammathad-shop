@@ -18,6 +18,9 @@ myapp/static/test/
 # สำรองฐานข้อมูล (manage.py backup_db) — เป็นข้อมูลจริงของร้าน ไม่ใช่โค้ด
 backups/
 
+# ไฟล์ log ของเว็บ (shop.log / error.log + ไฟล์หมุนรายวัน)
+logs/
+
 # IDE
 .vscode/
 .idea/

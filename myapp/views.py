@@ -45,10 +45,11 @@ from .forms import (
     StaffLoginForm,
     UserRoleChangeForm,
 )
-from .models import CustomerAddress, CustomerProfile, Employee, Order, OrderItem, Payment, Product
-from .services import (Cart, Catalog, GeoIP, GeminiAI, LoginThrottle, OrderStatusService,
-                      PaymentService, PromptPay, QrCode, RateLimit, SlipOK, ThaiCalendar,
-                      Translate, Validators)
+from .models import (ActivityLog, CustomerAddress, CustomerProfile, Employee, Order,
+                    OrderItem, Payment, Product)
+from .services import (Audit, Cart, Catalog, GeoIP, GeminiAI, LoginThrottle,
+                      OrderStatusService, PaymentService, PromptPay, QrCode, RateLimit,
+                      SlipOK, ThaiCalendar, Translate, Validators)
 
 
 # ==================== Permissions: Mixin แทน decorator ====================
@@ -1328,9 +1329,91 @@ class PaymentVerifyView(StaffRequiredMixin, View):
             else:
                 OrderStatusService.auto_move(order, 'paid', actor='staff:payment_verify')
                 messages.success(request, f'ยืนยันการชำระออเดอร์ #{order.id} ({payment.amount} บาท) แล้ว')
+                # ยืนยันเงิน = กระทำที่กระทบตัวเงินโดยตรง ต้องตรวจสอบย้อนหลังได้
+                Audit.record(
+                    request.user, 'payment',
+                    summary=f'ยืนยันยอด ฿{payment.amount} ออเดอร์ #{order.id} '
+                            f'(ยอดสะสม ฿{reported})',
+                    target=order,
+                    after={'status': order.status, 'total': str(reported)},
+                    request=request,
+                )
         else:
             messages.info(request, f'ออเดอร์ #{order.id} ถูกดำเนินการไปแล้ว ({order.get_status_display()})')
         return redirect(reverse('dashboard') + '#reports')
+
+
+class ActivityLogListView(LiveSearchListView):
+    """หน้า "ประวัติการทำงาน" — ตอบคำถาม "ใครทำอะไร เมื่อไหร่"
+
+    ออกแบบตามหลัก UX ของคนทำงานจริง (user-centric):
+    - ค้นหาได้ทันที (live search ผ่าน partial fetch) ด้วยชื่อคน/คำอธิบาย/สิ่งที่แก้
+    - กรองตามประเภทการกระทำได้ — เพราะ "เงิน" กับ "สินค้า" คนละเรื่องกัน
+    - แสดง before → after ในตาราง เพื่อไม่ต้องเปิดรายละเอียดอีกชั้น
+    - เรียงตามเวลาล่าสุดก่อน (เรื่องที่เพิ่งเกิดสำคัญที่สุด)
+    """
+
+    model = ActivityLog
+    template_name = 'activity_log.html'
+    partial_template_name = 'activity_log_rows.html'
+    context_object_name = 'logs'
+    paginate_by = 15
+    filter_params = ('action',)
+
+    def filter_queryset(self, queryset):
+        action = self.request.GET.get('action', '').strip()
+        return queryset.filter(action=action) if action else queryset
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        # ตัวเลือก dropdown + ป้ายสีสำหรับแต่ละประเภท (ใช้ร่วมกันทั้งหน้า)
+        ctx['action_choices'] = ActivityLog.ACTION_CHOICES
+        return ctx
+
+
+class ActivityLogExportCsvView(CsvSafeMixin, StaffRequiredMixin, View):
+    """ส่งออกประวัติเป็น CSV — ใช้เมื่อต้องส่งรายงานให้ผู้ใหญ่/อาจารย์"""
+
+    HEADERS = ['เวลา', 'ผู้ทำ', 'ประเภท', 'คำอธิบาย', 'สิ่งที่ถูกแก้',
+               'ค่าเดิม', 'ค่าใหม่', 'IP']
+
+    MAX_ROWS = 20000      # กัน export กิน memory จน process ตาย
+
+    def get(self, request, *args, **kwargs):
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
+        filename = f"activity_{timezone.localdate().isoformat()}.csv"
+        response['Content-Disposition'] = f'attachment; filename={filename}'
+        response.write('﻿')   # BOM กัน Excel อ่านไทยเพี้ยน
+        writer = csv.writer(response)
+        writer.writerow(self.HEADERS)
+
+        qs = ActivityLog.objects.select_related('actor').order_by('-created_at')
+        action = request.GET.get('action', '').strip()
+        query = request.GET.get('q', '').strip()
+        if action:
+            qs = qs.filter(action=action)
+        if query:
+            qs = qs.search(query)
+
+        for log in qs[:self.MAX_ROWS]:
+            writer.writerow([
+                timezone.localtime(log.created_at).strftime('%d/%m/%Y %H:%M:%S'),
+                self._safe_cell(log.actor_name or (log.actor.username if log.actor else 'ระบบ')),
+                self._safe_cell(log.get_action_display()),
+                self._safe_cell(log.summary),
+                self._safe_cell(log.target_label or log.target_id),
+                self._safe_cell(self._fmt(log.before)),
+                self._safe_cell(self._fmt(log.after)),
+                self._safe_cell(log.ip or ''),
+            ])
+        return response
+
+    @staticmethod
+    def _fmt(payload):
+        """แปลง dict before/after เป็นข้อความอ่านง่าย"""
+        if not payload:
+            return ''
+        return ', '.join(f'{k}={v}' for k, v in payload.items())
 
 
 class EmployeeExportCsvView(CsvSafeMixin, StaffRequiredMixin, View):
@@ -1390,10 +1473,30 @@ class EmployeeFormBaseView(StaffRequiredMixin):
         return reverse('employee_list')
 
     def form_valid(self, form):
+        # snapshot ค่าเดิมจาก `form.initial` — ไม่ใช่ `form.instance`
+        # เพราะ ModelForm จะเขียน cleaned_data ทับลง instance ตั้งแต่ตอน
+        # `is_valid()` แล้ว (ถ้าอ่าน instance ตอนนี้จะได้ค่าใหม่ทั้งหมด
+        # ทำให้ log ไม่บอกว่าอะไรเปลี่ยน) ส่วน `initial` เก็บค่าจาก DB ไว้ก่อน
+        before = None
+        if form.instance and form.instance.pk:
+            before = {f: form.initial.get(f)
+                      for f in ('salary', 'department', 'status', 'name')
+                      if f in form.initial}
+
         emp = form.save(commit=False)
         if not emp.emp_code:
             emp.emp_code = self.resolve_missing_code(emp)
         emp.save()
+
+        # บันทึกเฉพาะฟิลด์ที่เปลี่ยนจริง — ตอน "สร้างใหม่" ไม่มีค่าเดิมให้เทียบ
+        # จึงไม่ต้องคำนวณ diff (ไม่งั้นทุกฟิลด์จะถูกรายงานว่า "เปลี่ยน")
+        after = Audit.diff(emp, ['salary', 'department', 'status', 'name'], before) if before else None
+        Audit.record(
+            self.request.user, 'employee',
+            summary=f'{"แก้ไข" if before else "เพิ่ม"}พนักงาน {emp.emp_code} — {emp.name}'
+                    + (f' (เปลี่ยน: {", ".join(after)})' if after else ''),
+            target=emp, before=before, after=after, request=self.request,
+        )
         messages.success(self.request, self.success_message.format(name=emp.name))
         return HttpResponseRedirect(self.get_success_url())
 
@@ -1452,6 +1555,14 @@ class EmployeeDeleteView(StaffRequiredMixin, View):
         name = employee.name
         if employee.avatar:
             employee.avatar.delete(save=False)  # ลบไฟล์รูปออกจากดิสก์ด้วย
+        # บันทึก "ก่อน" ลบ — เพราะหลังลบแล้ว target_label จะหายไป
+        Audit.record(
+            request.user, 'employee',
+            summary=f'ลบพนักงาน {employee.emp_code} — {name}',
+            target=employee, before={'department': employee.department,
+                                     'status': employee.status},
+            request=request,
+        )
         employee.delete()
         messages.error(request, f'ลบข้อมูลพนักงาน {name} เรียบร้อยแล้ว!')
         return redirect(reverse('employee_list'))
@@ -1521,8 +1632,24 @@ class ProductFormBaseView(StaffRequiredMixin, View):
             messages.error(request, 'ราคาและจำนวนต้องไม่ติดลบ')
             return self._render_error(request, product)
 
+        # snapshot ก่อน apply_form_data (ซึ่งเขียนทับ field บน instance เดิม)
+        was_existing = product.pk is not None
+        before = ({f: getattr(product, f, None)
+                   for f in ('price', 'stock', 'is_active', 'category', 'name')}
+                  if was_existing else None)
+
         product.apply_form_data(request.POST, image_fallback=self.get_image_fallback(product))
         product.save()
+
+        # ตอนสร้างใหม่ไม่มีค่าเดิมให้เทียบ → ไม่ต้องคำนวณ diff
+        after = (Audit.diff(product, ['price', 'stock', 'is_active', 'category', 'name'],
+                            before) if before else None)
+        Audit.record(
+            request.user, 'product',
+            summary=f'{"แก้ไข" if was_existing else "เพิ่ม"}สินค้า "{product.name}"'
+                    + (f' (เปลี่ยน: {", ".join(after)})' if after else ''),
+            target=product, before=before, after=after, request=request,
+        )
         messages.success(request, self.success_message)
         return redirect(reverse('product_manage'))
 
@@ -1564,6 +1691,13 @@ class ProductDeleteView(StaffRequiredMixin, View):
 
     def post(self, request, *args, **kwargs):
         product = get_object_or_404(Product, id=kwargs['product_id'])
+        Audit.record(
+            request.user, 'product',
+            summary=f'ลบสินค้า "{product.name}" (สต็อก {product.stock} ชิ้น)',
+            target=product, before={'price': str(product.price), 'stock': product.stock,
+                                   'is_active': product.is_active},
+            request=request,
+        )
         product.delete()
         messages.error(request, 'ลบสินค้าเรียบร้อยแล้ว!')
         return redirect(reverse('product_manage'))
@@ -1651,8 +1785,17 @@ class OrderStatusView(StaffRequiredMixin, View):
                 return JsonResponse({'ok': False, 'msg': 'สถานะไม่ถูกต้อง'}, status=400)
             messages.error(request, 'สถานะไม่ถูกต้อง')
             return redirect(reverse('order_manage'))
+        old_status = order.status
         ok, msg = OrderStatusService.move(order, new_status)
         if ok:
+            # บันทึกการกระทำ: เปลี่ยนสถานะออเดอร์ = กระทำที่กระทบลูกค้าโดยตรง
+            Audit.record(
+                request.user, 'order_status',
+                summary=f'ออเดอร์ #{order.id}: {old_status} → {order.status}',
+                target=order,
+                before={'status': old_status}, after={'status': order.status},
+                request=request,
+            )
             if ajax:
                 return JsonResponse({
                     'ok': True,
@@ -1959,9 +2102,19 @@ class ProductStockAdjustView(StaffRequiredMixin, View):
             delta = int(request.POST.get('delta', 0))
         except (ValueError, TypeError):
             delta = 0
+        old_stock = product.stock
         new_stock = max(0, product.stock + delta)
         product.stock = new_stock
         product.save(update_fields=['stock'])
+        # ปรับสต็อก = กระทำที่กระทบของจริง + กระทบยอดขาย → ต้องมีประวัติ
+        Audit.record(
+            request.user, 'stock',
+            summary=f'ปรับสต็อก "{product.name}" {old_stock} → {new_stock} '
+                    f'({delta:+d})',
+            target=product,
+            before={'stock': old_stock}, after={'stock': new_stock},
+            request=request,
+        )
         if is_ajax(request):
             return JsonResponse({'ok': True, 'stock': product.stock, 'name': product.name})
         messages.success(request, f'ปรับ stock {product.name} เป็น {product.stock} ชิ้นแล้ว')
@@ -2024,6 +2177,8 @@ class StaffUserRoleUpdateView(ManagerRequiredMixin, View):
             return redirect(reverse('staff_users'))
 
         # ล้างกลุ่มเดิมใน 3 บทบาทหลัก
+        old_groups = list(target_user.groups.values_list('name', flat=True))
+        old_role = next((r for r in ('Manager', 'Staff', 'Member') if r in old_groups), '')
         for gname in ['Manager', 'Staff', 'Member']:
             g = Group.objects.filter(name=gname).first()
             if g:
@@ -2038,6 +2193,16 @@ class StaffUserRoleUpdateView(ManagerRequiredMixin, View):
             target_user.is_staff = False
         target_user.save()
 
+        # เปลี่ยนสิทธิ์บัญชี = กระทำที่ต้องตรวจสอบย้อนหลังได้เสมอ
+        # (เป็นเส้นทางสู่การเข้าถึงข้อมูลทั้งระบบ)
+        Audit.record(
+            request.user, 'role',
+            summary=f'เปลี่ยนบทบาท {target_user.username}: '
+                    f'{"Manager" if old_role == "Manager" else ("Staff" if old_role == "Staff" else "Member")}'
+                    f' → {new_role}'
+                    + (' (เปิดสิทธิ์ staff)' if target_user.is_staff else ''),
+            target=target_user, request=request,
+        )
         messages.success(request, f'เปลี่ยนบทบาทของ {target_user.username} เป็น "{new_role}" เรียบร้อยแล้ว')
         return redirect(reverse('staff_users'))
 

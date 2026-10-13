@@ -19,6 +19,7 @@ view ทำหน้าที่เรียกใช้ service เท่าน
                       กติกาใบงาน: ห้ามข้ามขั้น/ห้ามถอยหลัง, paid เป็นขั้นอัตโนมัติ
 - PaymentService: จุดรับเงินจุดเดียว — ทุกช่องทางจ่ายเงินต้องเรียกที่นี้ แล้ว
                   ระบบดูเองว่า "ครบยอดหรือยัง" → ขยับสถานะ paid อัตโนมัติ
+- Audit        : บันทึก "ใครทำอะไร" (ActivityLog) — log พังห้ามทำให้งานหลักพัง
 
 ทุก service ใช้ staticmethod/classmethod (ไม่ต้องสร้าง instance) —
 รวมโค้ดที่เกี่ยวข้องเข้าด้วยกันและ test ได้อิสระจาก view.
@@ -197,6 +198,140 @@ class LoginThrottle:
         """
         uname = (username or '').strip().lower() or '-'
         cache.delete(f'ratelimit:login-fail-user:{uname}')
+
+
+class Audit:
+    """บันทึกการกระทำของเจ้าหน้าที่ — ตอบคำถาม "ใครทำอะไร เมื่อไหร่"
+
+    หลักการที่ยึด (สำคัญกว่าตัวฟังก์ชัน):
+    1. **การ log ต้องไม่ทำให้งานหลักพัง** — ถ้าเขียน ActivityLog ล้ม
+       (เช่น ตารางยังไม่ถูก migrate) ต้องยังทำงานต่อ ไม่ใช่ทำให้
+       "กดเติมสต็อกไม่ได้เพราะ log error"
+    2. **อย่าเก็บข้อมูลส่วนตัวเกินจำเป็น** — เก็บเฉพาะฟิลด์ที่ต้องรู้ว่า
+       เปลี่ยนอะไร (เช่น stock/price/status) ไม่ dump ทั้งออบเจกต์ลง JSON
+    3. **คงชื่อผู้ทำเป็นข้อความด้วย** เพราะ FK เป็น SET_NULL — ถ้าภายหลัง
+       ลบบัญชี ประวัติต้องยังบอกได้ว่าใครเป็นคนทำ
+    4. **ปิดได้** — `settings.ACTIVITY_LOG_ENABLED = False` จะทำให้เป็น
+       no-op ทันที (ตอนเทสต์เร็ว ๆ หรือถ้าไม่ต้องการเก็บ)
+
+    ตัวอย่างการใช้:
+        Audit.record(request.user, 'stock',
+                     summary=f'ปรับสต็อกสินค้า #{p.id} +5',
+                     target=p, before={'stock': 10}, after={'stock': 15},
+                     request=request)
+    """
+
+    #: ฟิลด์ที่อนุญาตให้เก็บใน before/after (กันการ dump ข้อมูลส่วนตัว/ใหญ่เกิน)
+    SAFE_FIELDS = {
+        'stock', 'price', 'status', 'salary', 'is_active', 'department',
+        'category', 'name', 'total', 'quantity', 'payment_method', 'hire_date',
+    }
+
+    @classmethod
+    def record(cls, actor=None, action='', summary='', target=None,
+               before=None, after=None, request=None):
+        """เขียนบันทึก 1 รายการ (ไม่เคยทำให้ธุรกรรมหลักล้ม)
+
+        Args:
+            actor: User ที่กระทำ (None = ระบบ/ไม่มีผู้ใช้)
+            action: หนึ่งใน ActivityLog.ACTION_CHOICES
+            summary: คำอธิบายสั้น ๆ ที่คนอ่านรู้เรื่อง (max 300)
+            target: ออบเจกต์ที่ถูกแก้ (ใช้เลข id + label)
+            before: dict ค่าเดิม (กรองเฉพาะ SAFE_FIELDS)
+            after: dict ค่าใหม่ (กรองเฉพาะ SAFE_FIELDS)
+            request: HttpRequest (ใช้ดึง IP เท่านั้น)
+
+        Returns:
+            ActivityLog | None — instance ที่บันทึกได้, หรือ None ถ้าไม่ได้เขียน
+        """
+        if not getattr(settings, 'ACTIVITY_LOG_ENABLED', True):
+            return None
+
+        try:
+            from .models import ActivityLog
+
+            target_type = target_label = target_id = ''
+            if target is not None:
+                target_type = target.__class__.__name__.lower()
+                target_id = str(getattr(target, 'pk', ''))
+                target_label = str(target)[:150]
+
+            return ActivityLog.objects.create(
+                actor=actor if getattr(actor, 'is_authenticated', False) else None,
+                actor_name=(actor.get_username() if getattr(actor, 'is_authenticated', False)
+                            else '')[:150],
+                action=action,
+                summary=(summary or '')[:300],
+                target_type=target_type,
+                target_id=target_id,
+                target_label=target_label,
+                before=cls._clean(before),
+                after=cls._clean(after),
+                ip=cls._client_ip(request),
+            )
+        except Exception:
+            # ข้อ 1: log พังห้ามไปลากงานหลักพังตาม — แจ้งเตือนทาง log แล้วจบ
+            import logging
+            logging.getLogger(__name__).warning(
+                'บันทึก ActivityLog ไม่สำเร็จ (action=%s) — ทำงานต่อ', action,
+                exc_info=True)
+            return None
+
+    @classmethod
+    def _clean(cls, data):
+        """กรอง dict ให้เหลือเฉพาะ SAFE_FIELDS + ทำค่าให้เป็น string/ตัวเลข
+
+        Args:
+            data: dict ค่าก่อน/หลัง (อาจเป็น None)
+
+        Returns:
+            dict | None
+        """
+        if not data:
+            return None
+        out = {}
+        for key, value in data.items():
+            if key not in cls.SAFE_FIELDS:
+                continue
+            if isinstance(value, (str, int, float, bool)) or value is None:
+                out[key] = value
+            else:
+                out[key] = str(value)[:60]
+        return out or None
+
+    @staticmethod
+    def _client_ip(request):
+        """ดึง IP ของผู้ทำ
+
+        อ่าน REMOTE_ADDR ตรง ๆ ไม่ใช้ X-Forwarded-For (header ปลอมได้ —
+        การบันทึก IP เพื่อตรวจสอบ ต้องไม่เชื่อค่าที่ผู้ใช้ควบคุมได้)
+        """
+        if request is None:
+            return None
+        ip = request.META.get('REMOTE_ADDR') or ''
+        return ip or None
+
+    @classmethod
+    def diff(cls, obj, fields, before):
+        """คืน dict ของ 'ค่าที่เปลี่ยนจริง' เทียบกับ before — ลดข้อมูลเปลือกใน log
+
+        ใช้ใน view แบบ: `after = Audit.diff(emp, ['salary','department'], before=old)`
+
+        Args:
+            obj: ออบเจกต์หลังแก้ (หรือ instance ปัจจุบัน)
+            fields: รายการฟิลด์ที่อยากติดตาม
+            before: dict ค่าเดิมที่ snapshot ไว้ก่อนแก้
+
+        Returns:
+            dict — เฉพาะฟิลด์ที่ค่าเปลี่ยนจริง
+        """
+        after = {}
+        for f in fields:
+            new = getattr(obj, f, None)
+            old = (before or {}).get(f)
+            if str(new) != str(old):
+                after[f] = new
+        return after
 
 
 class ThaiCalendar:

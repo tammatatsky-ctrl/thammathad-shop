@@ -105,6 +105,10 @@ urlpatterns = [
     path('payments/export/', views.PaymentExportCsvView.as_view(), name='payment_export'),
     path('product/<int:product_id>/stock-adjust/', views.ProductStockAdjustView.as_view(), name='stock_adjust'),
 
+    # ---------- ประวัติการทำงาน (audit trail) ----------
+    path('staff/activity/', views.ActivityLogListView.as_view(), name='activity_log'),
+    path('staff/activity/export/', views.ActivityLogExportCsvView.as_view(), name='activity_export'),
+
     # ==================== REST API ====================
     path('api/', api.api_root, name='api-root'),
     path('api/categories/', api.CategoryListAPIView.as_view(), name='api-categories'),

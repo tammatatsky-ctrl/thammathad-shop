@@ -109,8 +109,9 @@ python manage.py preflight
 ผ่านหมดจะขึ้น `ระบบพร้อมใช้งาน` · ถ้าขึ้น `ยัง deploy ไม่ควร` ให้แก้ตามข้อความที่ระบุ
 (ระบบจะบอกคำสั่งที่ต้องรันให้ในแต่ละบรรทัด) · exit code 1 = มี FAIL
 
-ตรวจ 9 อย่าง: DEBUG/SECRET_KEY · ALLOWED_HOSTS · CSRF_TRUSTED_ORIGINS ·
-HSTS · อีเมล · staticfiles ตรงกับ source · migration · ฐานข้อมูล · ไฟล์สำรอง
+ตรวจ 10 อย่าง: DEBUG/SECRET_KEY · ALLOWED_HOSTS · CSRF_TRUSTED_ORIGINS ·
+HSTS · อีเมล · staticfiles ตรงกับ source · migration · ฐานข้อมูล ·
+เขียนไฟล์ log ได้ · ไฟล์สำรอง
 
 ---
 

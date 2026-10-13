@@ -73,6 +73,7 @@ class Command(BaseCommand):
         checks += self._check_static()
         checks += self._check_migrations(as_dev)
         checks += self._check_database()
+        checks += self._check_logs()
         checks += self._check_backup(as_dev)
 
         # ---------- รายงาน ----------
@@ -323,6 +324,34 @@ class Command(BaseCommand):
         size_mb = path.stat().st_size / (1024 * 1024)
         return [Check('db', 'OK',
                       f'ฐานข้อมูลปกติ ({size_mb:.2f} MB, {orders} ออเดอร์)')]
+
+    def _check_logs(self):
+        """ไฟล์ log ต้องเขียนได้จริง — ถ้าเขียนไม่ได้ error จะหายเงียบไป
+
+        เช็คแค่ "เขียนไฟล์ได้" (append 1 บรรทัด) เพราะสิ่งที่ทำให้หายคือ
+        โฟลเดอร์ไม่มีสิทธิ์เขียน หรือพื้นที่เต็ม (บน PythonAnywhere พบได้บ่อย)
+        """
+        log_dir = Path(settings.BASE_DIR) / 'logs'
+        try:
+            log_dir.mkdir(exist_ok=True)
+            probe = log_dir / '.preflight-write-test'
+            probe.write_text('ok', encoding='utf-8')
+            probe.unlink()
+        except OSError as e:
+            return [Check(
+                'logs', 'FAIL', 'เขียนไฟล์ log ไม่ได้',
+                f'{log_dir}: {e} → error ของเว็บจะหายไปเงียบ ๆ '
+                '(ไม่มี traceback ให้ไล่)',
+                'ตรวจสิทธิ์เขียนของโฟลเดอร์ logs/ หรือพื้นที่ดิสก์')]
+
+        shop = log_dir / 'shop.log'
+        size_kb = shop.stat().st_size / 1024 if shop.exists() else 0
+        if size_kb > 51200:      # > 50 MB
+            return [Check(
+                'logs', 'WARN', f'shop.log ใหญ่ถึง {size_kb / 1024:.0f} MB',
+                'ตรวจว่าหมุนไฟล์ (TimedRotatingFileHandler) ทำงานอยู่',
+                'ลบไฟล์เก่าใน logs/ หรือตั้ง LOG_DIR ไปที่พื้นที่ที่เหลือมากกว่า')]
+        return [Check('logs', 'OK', f'เขียน log ได้ ({log_dir}, shop.log {size_kb:.0f} KB)')]
 
     def _check_backup(self, as_dev):
         """ต้องมีไฟล์สำรอง และต้องไม่เก่าจนข้อมูลขาดได้หลายวัน"""

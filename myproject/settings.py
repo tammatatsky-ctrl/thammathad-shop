@@ -183,6 +183,96 @@ DATABASES = {
 }
 
 
+# ==================== Activity log (audit trail) ====================
+# เปิดไว้เป็นค่าเริ่มต้น (ปิดตอนรันเทสต์เพื่อความเร็ว — เทสต์ audit ใช้
+# override_settings เปิดเฉพาะเคสที่ต้องการตรวจ)
+ACTIVITY_LOG_ENABLED = (not _RUNNING_TESTS) and \
+    os.environ.get('ACTIVITY_LOG_ENABLED', '1') != '0'
+
+
+# ==================== Logging — ไม่ใช่แค่พิมพ์ลง console ====================
+# ปัญหาเดิม: ไม่มี LOGGING เลย → Django ใช้ค่า default ที่ส่งทุกอย่างไป
+# `django.server` (console ของ WSGI server) → บน PythonAnywhere ต้องไปเปิด
+# แท็บ "Error log" ของเว็บถึงจะเห็น และ **ย้อนหลังไม่ได้** (เฟ้อง/รีโหลดแล้วหาย)
+#
+# สิ่งที่ทำ:
+# - ไฟล์ log ต่อวัน (TimedRotatingFileHandler) เก็บย้อนหลังได้ 14 วัน
+# - แยก error ออกจาก info เพื่อให้หาเจตุกรณ์เร็ว
+# - ใส่ timestamp + level + logger name เพื่อให้ไล่ยาก (Django default ไม่มี)
+# - ตอน DEBUG ลดระดับเหลือ WARNING ขึ้น console ไม่งั้นจะเจือนจนกลบ error
+#
+# ข้อควรระวัง: โฟลเดอร์ logs/ อยู่นอก staticfiles/ และอยู่ใน .gitignore
+LOG_DIR = BASE_DIR / 'logs'
+_WRITE_LOG_FILES = not _RUNNING_TESTS     # ตอนรันเทสต์ไม่เขียนไฟล์ log
+if _WRITE_LOG_FILES:
+    try:
+        LOG_DIR.mkdir(exist_ok=True)
+    except OSError:
+        LOG_DIR = BASE_DIR      # สร้างโฟลเดอร์ไม่ได้ (เช่น read-only) → log ลงรากแทน
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname:<7} {name}: {message}',
+            'style': '{',
+        },
+        'simple': {'format': '{levelname}: {message}', 'style': '{'},
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'simple' if DEBUG else 'verbose',
+            'level': 'WARNING' if DEBUG else 'INFO',
+        },
+        # ตัวจัดการไฟล์สร้างเฉพาะตอนไม่ได้รันเทสต์ — เทสต์ไม่ควรเขียน
+        # ไฟล์จริง (จะเติมเต็มดิสก์และทำให้ผลเทสต์ไม่นิ่ง)
+        'file_all': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'shop.log',
+            'when': 'midnight',
+            'backupCount': 14,        # เก็บย้อนหลัง 14 วัน
+            'encoding': 'utf-8',
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
+        'file_error': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'filename': LOG_DIR / 'error.log',
+            'when': 'midnight',
+            'backupCount': 30,        # error เก็บนานกว่า
+            'encoding': 'utf-8',
+            'formatter': 'verbose',
+            'level': 'ERROR',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file_all'] if _WRITE_LOG_FILES else ['console'],
+        'level': 'WARNING' if DEBUG else 'INFO',
+    },
+    'loggers': {
+        # บันทึก request/response ทุกครั้ง (4xx/5xx) — ของ handler 500 ใช้ logger นี้
+        'django.request': {
+            'handlers': ['console', 'file_error'] if _WRITE_LOG_FILES else ['console'],
+            'level': 'ERROR',
+            'propagate': False,
+        },
+        'django.security': {          # เหตุการณ์ความปลอดภัย (CSRF ใช่ ฯลฯ)
+            'handlers': ['console', 'file_error'] if _WRITE_LOG_FILES else ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        # เฉพาะแอปเรา — ใช้ logger.getLogger('myapp') ในโค้ด
+        'myapp': {
+            'handlers': ['console', 'file_all'] if _WRITE_LOG_FILES else ['console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}
+
+
 # ==================== Cache (Performance) ====================
 # locmem = หน่วยความจำของแต่ละ process (เหมาะ dev/PA 1 process ไม่มีวงเวียน)
 # ใช้แคชค่าที่ถูกเรียกซ้ำข้ามหน้า เช่น หมวดหมู่สินค้า (category_choices).

@@ -4,6 +4,7 @@
 - Product / Order / OrderItem / Payment : ฝั่งขาย (หน้าร้าน + สายเงินของใบงาน)
 - Employee                            : ฝั่ง HR (หลังบ้าน)
 - CustomerProfile / CustomerAddress   : บัญชีลูกค้า + สมุดที่อยู่จัดส่ง
+- ActivityLog                         : บันทึก "ใครทำอะไร" — ตรวจสอบย้อนหลังได้
 - แต่ละโมเดลมี QuerySet + Manager ของตัวเอง → "คิวรีของโดเมนอยู่กับโดเมน": view เรียก
   Employee.objects.search(...), Order.objects.revenue() โดยไม่ต้องรู้ว่า filter ข้างในเป็นยังไง
 """
@@ -577,6 +578,125 @@ class CustomerAddress(models.Model):
         """ที่อยู่บรรทัดเดียว — ใช้ snapshot ลง Order.address"""
         return (f'{self.detail} {self.subdistrict} {self.district} '
                 f'{self.province} {self.zipcode}')
+
+
+# ==================== ActivityLog: คำตอบ "ใครทำอะไร เมื่อไหร่" ====================
+# เหตุผลที่ต้องมี: ระบบร้านมีการกระทำที่กระทบเงิน/ของจริง (เติมสต็อก เปลี่ยนสถานะ
+# ออเดอร์ ยืนยันยอด ลบพนักงาน เปลี่ยนสิทธิ์บัญชี) ถ้าไม่มีบันทึก เมื่อมีปัญหา
+# จะตอบคำถาม "ใครทำ?" ไม่ได้เลย — ซึ่งเป็นข้อร้องขาดของการตรวจงานทุกแบบ
+#
+# ออกแบบให้ "ใช้แรงน้อย": การเขียน log ต้องไม่ทำให้ผู้ใช้งานต้องคิดอะไรเพิ่ม
+#   - `record()` เป็น no-op (ไม่เขียนอะไร) ถ้า settings.ACTIVITY_LOG_ENABLED = False
+#     หรือถ้าเรียกนอก request (เช่น task/cron) ที่ไม่มี user → ไม่มี actor
+#   - เก็บ before/after เป็น JSON สั้น ๆ เฉพาะฟิลด์ที่สำคัญ ไม่ dump ทั้งออบเจกต์
+#   - ถ้าการเขียน log พัง ต้องไม่ทำให้ธุรกรรมหลักพังตาม (กันด้วย try/except)
+
+
+class ActivityLogQuerySet(models.QuerySet):
+    """คิวรีบันทึกการกระทำ: ค้นหา (ใคร/ทำอะไร/กับอะไร) + กรองตามประเภท"""
+
+    SEARCH_FIELDS = ('actor__username', 'action', 'summary', 'target_label')
+    SORT_MAP = {
+        'newest': '-created_at',
+        'oldest': 'created_at',
+        'actor': 'actor__username',
+        'action': 'action',
+    }
+    DEFAULT_SORT = '-created_at'
+
+    def search(self, term):
+        """ค้นหาจากผู้ทำ / ประเภทการกระทำ / คำอธิบาย / ชื่อสิ่งที่ถูกแก้
+
+        Args:
+            term: คำค้น (ว่าง = คืนทั้งหมด)
+
+        Returns:
+            ActivityLogQuerySet (chain ต่อได้)
+        """
+        if not term:
+            return self
+        term = term.strip()
+        return self.filter(
+            Q(actor__username__icontains=term)
+            | Q(action__icontains=term)
+            | Q(summary__icontains=term)
+            | Q(target_label__icontains=term)
+        )
+
+    def sorted_by(self, key):
+        """เรียงผลตามคีย์ที่กำหนด (ป้องกันคีย์แปลกปลอมจาก query string)
+
+        Args:
+            key: คีย์ใน SORT_MAP
+
+        Returns:
+            QuerySet
+        """
+        return self.order_by(self.SORT_MAP.get(key or '', self.DEFAULT_SORT))
+
+    def for_target(self, obj_type, obj_id):
+        """ดึงประวัติทั้งหมดของวัตถุหนึ่ง (ใช้แสดงในหน้ารายละเอียด)
+
+        Args:
+            obj_type: ชื่อโมเดล เช่น 'order'
+            obj_id: pk ของวัตถุ
+
+        Returns:
+            QuerySet (เรียงใหม่สุดก่อน)
+        """
+        return self.filter(target_type=obj_type, target_id=str(obj_id)).order_by('-created_at')
+
+
+class ActivityLog(models.Model):
+    """บันทึกการกระทำสำคัญของเจ้าหน้าที่ — ตรวจสอบย้อนหลังได้
+
+    ตัวอย่างที่บันทึก: เติม/ตัดสต็อก, เปลี่ยนสถานะออเดอร์, ยืนยันยอดชำระ,
+    สร้าง/แก้/ลบพนักงาน, สร้าง/แก้/ลบสินค้า, เปลี่ยนบทบาทบัญชี staff,
+    ล็อกบัญชีจากการเดารหัสผิดเกินโควตา
+    """
+
+    ACTION_CHOICES = [
+        ('stock', 'ปรับสต็อก'),
+        ('order_status', 'เปลี่ยนสถานะออเดอร์'),
+        ('payment', 'รับเงิน / ยืนยันยอด'),
+        ('employee', 'จัดการพนักงาน'),
+        ('product', 'จัดการสินค้า'),
+        ('role', 'เปลี่ยนสิทธิ์บัญชี'),
+        ('security', 'ความปลอดภัย'),
+        ('order', 'ออเดอร์'),
+    ]
+
+    actor = models.ForeignKey(
+        dj_settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        null=True, blank=True, related_name='activity_logs',
+        verbose_name='ผู้ทำ',
+    )
+    # เก็บชื่อผู้ใช้เป็นข้อความด้วย เผื่อบัญชีถูกลบทีหลัง (SET_NULL) ต้องยังรู้ว่าใคร
+    actor_name = models.CharField(max_length=150, blank=True, verbose_name='ชื่อผู้ทำ (สำเนา)')
+    action = models.CharField(max_length=30, choices=ACTION_CHOICES, db_index=True,
+                              verbose_name='ประเภทการกระทำ')
+    summary = models.CharField(max_length=300, verbose_name='คำอธิบาย')
+    target_type = models.CharField(max_length=30, blank=True, db_index=True,
+                                   verbose_name='ชนิดของสิ่งที่ถูกแก้')
+    target_id = models.CharField(max_length=30, blank=True, verbose_name='รหัสสิ่งที่ถูกแก้')
+    target_label = models.CharField(max_length=150, blank=True,
+                                    verbose_name='ชื่อสิ่งที่ถูกแก้')
+    before = models.JSONField(null=True, blank=True, verbose_name='ค่าเดิม')
+    after = models.JSONField(null=True, blank=True, verbose_name='ค่าใหม่')
+    ip = models.GenericIPAddressField(null=True, blank=True, verbose_name='IP ผู้ทำ')
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True,
+                                      verbose_name='เวลาที่ทำ')
+
+    objects = ActivityLogQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'บันทึกการกระทำ'
+        verbose_name_plural = 'บันทึกการกระทำ'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        who = self.actor_name or self.actor.username if self.actor_id else 'ระบบ'
+        return f'[{self.get_action_display()}] {who}: {self.summary}'
 
 
 # ==================== Signals: ล้างแคชแคตตาล็อกเมื่อสินค้าเปลี่ยน ====================

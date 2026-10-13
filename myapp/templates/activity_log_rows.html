@@ -1,0 +1,127 @@
+{# ===== activity_log_rows.html: partial แถวประวัติการกระทำ
+   ─────────────────────────────────────────────────────────────────────────────
+   แสดง before → after ในคอลัมน์เดียวกัน เพื่อให้เห็น "อะไรเปลี่ยนจากอะไร"
+   โดยไม่ต้องคลิกดูรายละเอียด (ลดการสลับบริบทตามหลัก Context Preservation)
+
+   ป้ายสีตามประเภท — ใช้สีเป็นสัญญาณ ไม่ใช่ของประดับ และมีไอคอนกำกับเสมอ
+   (Dual-Encoding: ไม่สื่อความหมายด้วยสีเพียงอย่างเดียว ตาม color-system-design) ===== #}
+<table class="table align-middle mb-0 table-cardify table-sticky-head">
+    <thead>
+        <tr>
+            <th scope="col" style="width:130px;">เวลา</th>
+            <th scope="col" style="width:150px;">ผู้ทำ</th>
+            <th scope="col" style="width:140px;">ประเภท</th>
+            <th scope="col">รายละเอียดการเปลี่ยนแปลง</th>
+        </tr>
+    </thead>
+    <tbody data-motion="stagger" class="in">
+        {% for log in logs %}
+        <tr>
+            <td data-label="เวลา">
+                <span class="text-nowrap">{{ log.created_at|date:"d/m/Y" }}</span><br>
+                <small class="text-muted-apple">{{ log.created_at|date:"H:i:s" }}</small>
+            </td>
+
+            <td data-label="ผู้ทำ">
+                {% if log.actor %}
+                    <span class="fw-semibold">{{ log.actor_name|default:log.actor.username }}</span>
+                {% elif log.actor_name %}
+                    <span class="fw-semibold">{{ log.actor_name }}</span>
+                {% else %}
+                    <span class="badge text-bg-light"><i class="bi bi-cpu me-1"></i>ระบบ</span>
+                {% endif %}
+                {% if log.ip %}<br><small class="text-muted-apple">{{ log.ip }}</small>{% endif %}
+            </td>
+
+            <td data-label="ประเภท">
+                {% if log.action == 'payment' %}
+                    <span class="badge text-bg-success"><i class="bi bi-cash-coin me-1"></i>{{ log.get_action_display }}</span>
+                {% elif log.action == 'stock' %}
+                    <span class="badge text-bg-info"><i class="bi bi-box-seam me-1"></i>{{ log.get_action_display }}</span>
+                {% elif log.action == 'order_status' %}
+                    <span class="badge text-bg-primary"><i class="bi bi-truck me-1"></i>{{ log.get_action_display }}</span>
+                {% elif log.action == 'role' or log.action == 'security' %}
+                    <span class="badge text-bg-danger"><i class="bi bi-shield-lock me-1"></i>{{ log.get_action_display }}</span>
+                {% else %}
+                    <span class="badge text-bg-secondary"><i class="bi bi-pencil me-1"></i>{{ log.get_action_display }}</span>
+                {% endif %}
+            </td>
+
+            <td data-label="รายละเอียด">
+                <div>{{ log.summary }}</div>
+
+                {% if log.before or log.after %}
+                <div class="small mt-1 d-flex flex-wrap align-items-center gap-1">
+                    <span class="text-muted-apple">เปลี่ยน:</span>
+                    {% for k, v in log.before.items %}
+                        <span class="badge text-bg-light border">{{ k }}: <s class="text-danger">{{ v }}</s></span>
+                    {% endfor %}
+                    {% for k, v in log.after.items %}
+                        {% if log.before and k in log.before %}
+                            <i class="bi bi-arrow-right text-muted-apple"></i>
+                        {% endif %}
+                        <span class="badge text-bg-light border">{{ k }}: <strong class="text-success">{{ v }}</strong></span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                {% if log.target_type == 'order' and log.target_id %}
+                    <a href="{% url 'order_detail' log.target_id %}" class="small">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>เปิดออเดอร์ #{{ log.target_id }}
+                    </a>
+                {% elif log.target_type == 'employee' and log.target_id %}
+                    <a href="{% url 'employee_update' log.target_id %}" class="small">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>เปิดพนักงาน {{ log.target_label }}
+                    </a>
+                {% elif log.target_type == 'product' and log.target_id %}
+                    <a href="{% url 'product_edit' log.target_id %}" class="small">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>เปิดสินค้า {{ log.target_label }}
+                    </a>
+                {% elif log.target_type == 'user' and log.target_id %}
+                    <a href="{% url 'staff_users' %}" class="small">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>ดูบัญชี {{ log.target_label }}
+                    </a>
+                {% endif %}
+            </td>
+        </tr>
+        {% empty %}
+        <tr>
+            <td colspan="4" class="py-5">
+                <div class="text-center">
+                    <i class="bi bi-clock-history fs-1 text-muted-apple d-block mb-2"></i>
+                    <div class="text-muted-apple">
+                        {% if has_filter %}
+                            ไม่พบรายการที่ตรงกับตัวกรอง — ลองเปลี่ยนคำค้นหรือล้างตัวกรอง
+                        {% else %}
+                            ยังไม่มีการบันทึก — รายการจะปรากฏที่นี่เมื่อเจ้าหน้าที่
+                            เติมสต็อก เปลี่ยนสถานะออเดอร์ ยืนยันยอด หรือแก้ข้อมูลสินค้า/พนักงาน
+                        {% endif %}
+                    </div>
+                </div>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-3 d-flex justify-content-center" aria-label="แบ่งหน้า">
+    <ul class="pagination">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&amp;q={{ query|urlencode }}&amp;action={{ action|urlencode }}" rel="prev">&laquo;</a>
+        </li>
+        {% endif %}
+        {% for p in page_obj.paginator.page_range %}
+        <li class="page-item {% if p == page_obj.number %}active{% endif %}">
+            <a class="page-link" href="?page={{ p }}&amp;q={{ query|urlencode }}&amp;action={{ action|urlencode }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}&amp;q={{ query|urlencode }}&amp;action={{ action|urlencode }}" rel="next">&raquo;</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
