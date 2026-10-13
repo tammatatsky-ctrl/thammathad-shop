@@ -184,10 +184,10 @@
             <div class="col-xl-8" id="reports" data-motion="reveal">
                 <div class="card panel-card--flush h-100">
                     <div class="d-flex justify-content-between align-items-center px-4 pt-4 flex-wrap gap-2">
-                        <h5 class="mb-0"><i class="bi bi-cash-coin me-2 text-primary"></i>คิวตรวจการแจ้งชำระเงิน</h5>
+                        <h5 class="mb-0"><i class="bi bi-cash-coin me-2 text-primary"></i>การแจ้งชำระเงินที่ยังรอยอดครบ</h5>
                         <a href="{% url 'payment_list' %}" class="small text-decoration-none">ดูประวัติการเงินทั้งหมด</a>
                     </div>
-                    <p class="px-4 mb-0 text-muted-apple small">ตรวจสลิป/ยอดแล้วกดยืนยัน — ระบบจะปรับสถานะเป็น “ชำระแล้ว” อัตโนมัติเมื่อครบยอด</p>
+                    <p class="px-4 mb-0 text-muted-apple small">รายการที่แจ้งมา<strong>ครบยอดแล้ว</strong> ระบบเปลี่ยนสถานะเป็น “ชำระแล้ว” ให้อัตโนมัติ ไม่ต้องกดยืนยัน — ที่เหลือในคิวนี้คือรายการที่<strong>ยังขาดอยู่</strong> รอลูกค้าแจ้งเพิ่ม</p>
                     <div class="table-responsive mt-3">
                         <table class="table align-middle text-center mb-0 table-cardify table-dense table-hover table-sticky-head">
                             <thead><tr><th scope="col">แจ้งเมื่อ</th><th scope="col">ออเดอร์</th><th scope="col">ผู้แจ้ง</th><th scope="col">ยอดที่แจ้ง</th><th scope="col">สะสม/ยอดรวม</th><th scope="col"><span class="visually-hidden">การจัดการ</span></th></tr></thead>
@@ -200,15 +200,16 @@
                                     <td class="fw-bold font-mono tabular-nums" data-label="ยอด">฿ {{ row.payment.amount|floatformat:2 }}</td>
                                     <td data-label="สะสม" class="font-mono tabular-nums"><small>{{ row.reported|floatformat:2 }} / {{ row.payment.order.total|floatformat:2 }}
                                         {% if row.remaining > 0 %}<span class="badge bg-warning text-dark ms-1">ขาด {{ row.remaining|floatformat:0 }}</span>{% endif %}</small></td>
-                                    <td data-label="ยืนยัน">
-                                        <form method="POST" action="{% url 'payment_verify' row.payment.id %}" class="d-inline">
-                                            {% csrf_token %}
-                                            <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> ยืนยัน</button>
-                                        </form>
+                                    <td data-label="สถานะ">
+                                        {% if row.short %}
+                                        <span class="badge bg-warning text-dark"><i class="bi bi-hourglass-split me-1"></i>รอยอดที่เหลือ</span>
+                                        {% else %}
+                                        <span class="badge bg-success"><i class="bi bi-check-lg"></i>ปิดออเดอร์อัตโนมัติ</span>
+                                        {% endif %}
                                     </td>
                                 </tr>
                                 {% empty %}
-                                <tr><td colspan="6" class="text-center py-4 text-muted-apple"><i class="bi bi-check2-all me-1"></i>ไม่มีรายการรอตรวจ</td></tr>
+                                <tr><td colspan="6" class="text-center py-4 text-muted-apple"><i class="bi bi-check2-all me-1"></i>ไม่มีรายการที่รอยอดครบ</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>

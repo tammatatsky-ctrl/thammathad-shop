@@ -1340,16 +1340,34 @@ class DashboardView(StaffRequiredMixin, TemplateView):
         )
         for p in payments:
             reported = reported_map.get(p.order_id) or Decimal('0')
+            remaining = max(p.order.total - reported, Decimal('0'))
             rows.append({
                 'payment': p,
                 'reported': reported,
-                'remaining': max(p.order.total - reported, Decimal('0')),
+                'remaining': remaining,
+                # ยอดที่แจ้งมา "ครบ" เท่ากับออเดอร์ถูกปิดอัตโนมัติแล้ว
+                # (PaymentService.record_payment เลื่อนสถานะทันทีที่ครบยอด)
+                # → คิวนี้เหลือได้แต่รายการที่ **ยังขาดอยู่** เท่านั้น
+                'short': remaining > 0,
             })
         return rows
 
 
 class PaymentVerifyView(StaffRequiredMixin, View):
-    """POST /dashboard/payment/<id>/verify/ — ยืนยันรายการแจ้งชำระ → ออเดอร์เป็น paid"""
+    """POST /dashboard/payment/<id>/verify/ — บันทึกว่าเจ้าหน้าที่ตรวจบัญชีแล้ว
+
+    ⚠️ ข้อจำกัดที่ต้องรู้ (และเป็นเหตุผลที่ UI ไม่มีปุ่มนี้แล้ว)
+        ออเดอร์จะถูกปิดเป็น 'paid' **อัตโนมัติ** ใน `PaymentService.record_payment()`
+        เมื่อยอดที่แจ้งครบยอดรวม ดังนั้นออเดอร์ที่ยังเป็น 'pending'
+        (คิวนี้คือคิวนี้) หมายความว่า **ยอดยังไม่ครบเสมอ**
+        → view นี้จึงปฏิเสธไปทางเดียว ไม่มีทางสำเร็จ
+
+        คงไว้เพราะยังเป็นชั้นป้องกันที่ถูกต้อง (ถ้ามีทางอื่นเรียกเข้ามา
+        ต้องได้ผลเป็นการปฏิเสธ + บอกเหตุผล ไม่ใช่เงียบๆ ไป)
+        คำสั่งซื้อซ้ำ/แก้ไขอาจารย์ยังเรียกซ้ำได้ และถ้าวันหนึ่งกติกาการชำระ
+        เปลี่ยน (เช่น ต้องให้เจ้าหน้าที่ยืนยันก่อนจึงจะปิดออเดอร์) จุดนี้คือ
+        ที่ที่ต้องแก้ — ไม่ใช่แก้ที่ template
+    """
 
     def post(self, request, *args, **kwargs):
         payment = get_object_or_404(Payment.objects.select_related('order'), id=kwargs['payment_id'])
