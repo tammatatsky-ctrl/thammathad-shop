@@ -76,7 +76,8 @@ python manage.py collectstatic       # Collect to staticfiles/
 - **Managers from QuerySets**: `EmployeeManager = models.Manager.from_queryset(EmployeeQuerySet)` — gives `Employee.objects.next_code()`, `.stats()`, etc.
 - **Service layer** (`services.py`): Cart (session-based), Catalog, RateLimit, ThaiCalendar, ExchangeRate (open.er-api.com), GeoIP (ipwho.is), Translate (MyMemory), PromptPay QR, SlipOK OCR, GeminiAI, Validators, OrderStatusService, PaymentService — no business logic in views.
 - **Order status lifecycle** (`OrderStatusService`): บันไดขั้นเดียว รอ → ชำระเงินแล้ว → จัดส่ง → ถึงมือ — ห้ามข้าม/ถอยหลัง; ขั้น "ชำระเงินแล้ว" ขึ้นอัตโนมัติ (เจ้าหน้าที่ตั้งด้วยมือไม่ได้).
-- **PaymentService.record_payment()**: จุดรับเงินจุดเดียวของทุกช่องทาง (สลิป OCR / ปุ่มโอน 1 คลิก / เจ้าหน้าที่ยืนยัน) — เมื่อยอดแจ้งสะสมครบยอดรวม → สถานะเป็น paid อัตโนมัติ.
+- **Superuser override** (`PaymentService.override_mark_paid()`): ทางออกสำหรับกรณีเงินมาผิดทาง (สดหน้าร้าน/โอนผิดบัญชี) — **เฉพาะ `is_superuser`** ต้องใส่เหตุผล, สร้าง `Payment` ให้รายได้กับประวัติเงินตรงกัน, บันทึก audit ทุกครั้ง. **ยังห้ามข้ามบันได** — override ข้ามแค่ "ขั้นอัตโนมัติ" ไม่ใช่บันได. ดูสิทธิ์ก่อนด้วย `OrderStatusService.can_override(order, user)`
+- **PaymentService.record_payment()**: จุดรับเงินจุดเดียวของทุกช่องทาง (สลิป OCR / ปุ่มโอน 1 คลิก) — เมื่อยอดแจ้งสะสมครบยอดรวม → สถานะเป็น paid อัตโนมัติ + บันทึก `ActivityLog` action=`payment` ทุกครั้งที่มียอดเข้า (รวมจ่ายบางส่วน).
 
 ### Views
 

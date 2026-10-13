@@ -1821,6 +1821,9 @@ class OrderDetailView(StaffRequiredMixin, TemplateView):
             'reported': reported,
             'remaining': order.remaining,
             'allowed_statuses': [(v, dict(Order.STATUS_CHOICES)[v]) for v in OrderStatusService.staff_options(order)],
+            # ปุ่มบังคับสถานะสำหรับ superuser เท่านั้น (can_override ตรวจ is_superuser
+            # เองอีกชั้น) — staff ธรรมดาจะไม่เห็นเลย ไม่ใช่แค่กดไม่ได้
+            'can_override_paid': OrderStatusService.can_override(order, self.request.user),
         })
         return ctx
 
@@ -1838,6 +1841,41 @@ class OrderStatusView(StaffRequiredMixin, View):
             messages.error(request, 'สถานะไม่ถูกต้อง')
             return redirect(reverse('order_manage'))
         old_status = order.status
+
+        # --- ทางพิเศษ: superuser บังคับขั้นอัตโนมัติ ('paid') ด้วยเหตุผล ---
+        # จุดนี้อยู่ "เหนือ" OrderStatusService.move() ที่ปฏิเสธไว้เสมอ
+        # เพื่อให้กติกาของระบบปกติยังอยู่ครบ ส่วนกรณีผิดปกติมีทางออก
+        # ที่ถูกต้องและตรวจสอบย้อนหลังได้ แทนการแก้ข้อมูลตรง DB
+        if new_status in OrderStatusService.AUTOMATIC:
+            if not OrderStatusService.can_override(order, request.user):
+                reason_txt = ('ต้องเป็น superuser เท่านั้น'
+                              if not getattr(request.user, 'is_superuser', False)
+                              else OrderStatusService.move(order, new_status)[1])
+                if ajax:
+                    return JsonResponse({'ok': False, 'msg': reason_txt}, status=403)
+                messages.error(request, reason_txt)
+                return redirect(reverse('order_detail', args=[order.id]))
+
+            try:
+                result = PaymentService.override_mark_paid(
+                    order, request.user, request.POST.get('reason', ''))
+            except PermissionError:
+                result = {'ok': False, 'error': 'บังคับสถานะได้เฉพาะ superuser เท่านั้น'}
+            if not result['ok']:
+                if ajax:
+                    return JsonResponse({'ok': False, 'msg': result['error']}, status=400)
+                messages.error(request, result['error'])
+            else:
+                msg = f'บังคับออเดอร์ #{order.id} เป็น "ชำระแล้ว" แล้ว (superuser override)'
+                if ajax:
+                    return JsonResponse({
+                        'ok': True, 'msg': msg,
+                        'status': order.status,
+                        'status_display': order.get_status_display(),
+                    })
+                messages.success(request, msg)
+            return redirect(reverse('order_detail', args=[order.id]))
+
         ok, msg = OrderStatusService.move(order, new_status)
         if ok:
             # บันทึกการกระทำ: เปลี่ยนสถานะออเดอร์ = กระทำที่กระทบลูกค้าโดยตรง

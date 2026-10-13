@@ -1018,6 +1018,29 @@ class OrderStatusService:
         return True, f'เปลี่ยนสถานะเป็น "{order.get_status_display()}" แล้ว'
 
     @classmethod
+    def can_override(cls, order, user):
+        """ผู้ใช้รายนี้มีสิทธิ์บังคับสถานะขั้นอัตโนมัติของออเดอร์นี้ไหม
+
+        เงื่อนไข (เจาะจง ไม่ใช่แค่ "เป็น staff"):
+        - ต้องเป็น **superuser** ไม่ใช่แค่ `is_staff` — ที่นี่คือช่องที่ข้ามกติกา
+          "ชำระแล้วต้องมาจากจุดรับเงิน" จึงต้องจำกัดเฉพาะระดับสูงสุด
+        - ต้องอยู่ที่ขั้น `pending` และยังไม่มียอดครบ — ถ้าครบแล้วระบบจะปิด
+          อัตโนมัติอยู่แล้ว ไม่ต้องบังคับ (ถ้ายังขอบังคับ = เข้าใจผิดว่าระบบไม่ทำงาน)
+
+        Args:
+            order: instance Order
+            user: User ที่กำลังจะกด
+
+        Returns:
+            bool
+        """
+        if user is None or not getattr(user, 'is_superuser', False):
+            return False
+        if order.status != 'pending':
+            return False
+        return order.remaining > 0
+
+    @classmethod
     def auto_move(cls, order, to, actor='system'):
         """ระบบสั่งเปลี่ยนสถานะเอง (เช่น ระบบเห็นยอดครบ → paid) — คืน True ถ้าเปลี่ยนใหม่.
 
@@ -1146,6 +1169,88 @@ class PaymentService:
             'just_paid': just_paid,
             'paid': locked.status == 'paid',
         }
+
+
+    @classmethod
+    def override_mark_paid(cls, order, actor, reason):
+        """บังคับให้ออเดอร์เป็น 'ชำระแล้ว' โดย Superuser — ข้ามกติกา "ต้องมาจากจุดรับเงิน"
+
+        ทำไมต้องมี (และทำไมยังไม่ทำให้กติกาเดิมพัง)
+            ขั้น 'paid' เป็นขั้น**อัตโนมัติ** โดยกติกาใบงาน และ `move()` ปฏิเสธ
+            ทุกคนรวมถึงเจ้าหน้าที่ — ซึ่งถูกต้อง เพราะกันคนตั้งสถานะเอง
+            แต่งานจริงมีบางกรณีที่รอบเงินไม่ได้มาในระบบ (เงินสดหน้าร้าน,
+            โอนผิดบัญชีแล้วแก้ทีหลัง, ออเดอร์ที่ทำร่วมกับร้านสาขา)
+            การไม่มีทางออก = ต้องแก้ข้อมูลตรง DB นอกระบบ ซึ่งอันตรายกว่า
+
+            ทางออกนี้จึงเปิดให้**เฉพาะ superuser** พร้อม 3 ข้อบังคับ:
+            1. **ต้องใส่เหตุผล** — ไม่งั้นไม่ให้ทำ (เหตุผลคือหลักฐานตอนตรวจสอบ)
+            2. **สร้าง Payment จริง** เท่ายอดที่ขาด เพื่อให้รายได้ในแดชบอร์ด
+               (`OrderQuerySet.revenue` = รวมทุกออเดอร์ที่ไม่ pending)
+               ตรงกับรายการใน `/payments/` — ถ้าไม่สร้าง ตัวเลขสองที่จะขัดกันเอง
+            3. **บันทึก audit** ทุกครั้ง พร้อมเหตุผล และระบุชัดว่าเป็นการบังคับ
+
+            กฎที่**ยังบังคับต่อ** แม้เป็น superuser: ห้ามข้ามขั้น/ห้ามถอยหลัง
+            (override มีไว้ข้าม "ขั้นอัตโนมัติ" ไม่ใช่ข้าม "บันได")
+
+        Args:
+            order: instance Order (ต้อง pending + ยอดยังขาด)
+            actor: User (ต้อง is_superuser)
+            reason: str เหตุผลที่บังคับ — ว่างไม่ได้
+
+        Returns:
+            dict {ok, error, payment}
+
+        Raises:
+            PermissionError: ถ้า actor ไม่ใช่ superuser
+        """
+        if actor is None or not getattr(actor, 'is_superuser', False):
+            raise PermissionError('บังคับสถานะได้เฉพาะ superuser เท่านั้น')
+        reason = (reason or '').strip()
+        if not reason:
+            return {
+                'ok': False,
+                'error': 'ต้องระบุเหตุผลที่บังคับสถานะ — เป็นหลักฐานตอนตรวจสอบ',
+                'payment': None,
+            }
+
+        with transaction.atomic():
+            locked = Order.objects.select_for_update().get(pk=order.pk)
+            if locked.status != 'pending':
+                return {
+                    'ok': False,
+                    'error': f'ออเดอร์ #{locked.id} ไม่ได้อยู่ในสถานะรอชำระแล้ว '
+                              f'(ตอนนี้คือ "{locked.get_status_display()}")',
+                    'payment': None,
+                }
+            outstanding = max(locked.total - locked.reported_total(), Decimal('0'))
+            if outstanding <= 0:
+                return {
+                    'ok': False,
+                    'error': f'ออเดอร์ #{locked.id} มียอดครบอยู่แล้ว — '
+                              f'ระบบปิดออเดอร์ให้อัตโนมัติ ไม่ต้องบังคับ',
+                    'payment': None,
+                }
+
+            # สร้าง Payment ให้เงินไหลเหมือนทุกช่องทางปกติ → รายได้/ประวัติตรงกัน
+            payment = Payment.objects.create(
+                order=locked,
+                name=locked.customer_name,
+                phone=locked.phone,
+                amount=outstanding,
+                transfer_date=timezone.localdate(),
+                note=f'[Superuser override] {reason}',
+            )
+            OrderStatusService.auto_move(locked, 'paid', actor='superuser:override')
+
+        Audit.record(
+            actor, 'payment',
+            summary=(f'บังคับออเดอร์ #{locked.id} เป็น "ชำระแล้ว" โดย superuser '
+                     f'({outstanding:,.2f} บาท) — เหตุผล: {reason}'),
+            target=locked,
+            before={'status': 'pending'},
+            after={'status': 'paid'},
+        )
+        return {'ok': True, 'error': '', 'payment': payment}
 
 
 class Cart:

@@ -47,7 +47,38 @@
                 {% else %}
                 <div class="mb-4">
                     {% if order.status == 'pending' %}
-                    <p class="text-muted-apple small mb-0"><i class="bi bi-info-circle me-1"></i>ขั้นถัดไป "ชำระแล้ว" ขึ้นอัตโนมัติเมื่อลูกค้าจ่ายเงินครบยอด</p>
+                    <p class="text-muted-apple small mb-2"><i class="bi bi-info-circle me-1"></i>ขั้นถัดไป "ชำระแล้ว" ขึ้นอัตโนมัติเมื่อลูกค้าจ่ายเงินครบยอด — เจ้าหน้าที่ตั้งเองไม่ได้</p>
+
+                    {% if can_override_paid %}
+                    {% comment %}
+                        ปุ่มบังคับสถานะ — เห็นเฉพาะ superuser (OrderStatusService.can_override)
+                        บังคับใส่เหตุผลเสมอ เพราะเหตุผลคือหลักฐานตอนตรวจสอบว่าทำไม
+                        ถึงข้ามกติกา "ชำระแล้วต้องมาจากจุดรับเงิน"
+                    {% endcomment %}
+                    <form method="POST" action="{% url 'order_status' order.id %}"
+                          class="superuser-override"
+                          data-confirm="บังคับออเดอร์นี้เป็น &quot;ชำระแล้ว&quot; โดยไม่ผ่านจุดรับเงินยังไง? การกระทำนี้จะถูกบันทึกชื่อคุณและเหตุผลไว้ตรวจย้อนหลัง">
+                        {% csrf_token %}
+                        <input type="hidden" name="status" value="paid">
+                        <label class="form-label small fw-bold mb-1">
+                            <i class="bi bi-shield-lock me-1"></i>สิทธิ์ Superuser — บังคับสถานะ
+                        </label>
+                        <div class="input-group input-group-sm">
+                            <input type="text" name="reason" required maxlength="200"
+                                   class="form-control" data-verify-input
+                                   placeholder="เหตุผลที่บังคับ (ต้องระบุ เช่น รับเงินสดหน้าร้าน)"
+                                   aria-label="เหตุผลที่บังคับสถานะ">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-exclamation-triangle me-1"></i>บังคับเป็น &quot;ชำระแล้ว&quot;
+                            </button>
+                        </div>
+                        <p class="text-muted-apple small mt-2 mb-0">
+                            ใช้เมื่อเงินมาผิดทาง (สดหน้าร้าน / โอนผิดบัญชีที่แก้ทีหลัง)
+                            ระบบจะสร้างรายการรับเงินให้อัตโนมัติ เพื่อให้รายได้กับประวัติเงินตรงกัน
+                            และบันทึกเหตุผลนี้ลงประวัติการทำงานทุกครั้ง
+                        </p>
+                    </form>
+                    {% endif %}
                     {% else %}
                     <p class="text-muted-apple small mb-0"><i class="bi bi-check2-all me-1"></i>สถานะถึงขั้นสุดท้ายแล้ว ไม่ต้องเลื่อนต่อ</p>
                     {% endif %}
@@ -105,4 +136,19 @@
         </div>
     </div>
 </section>
+<style>
+/* กล่องบังคับสถานะสำหรับ superuser — แยกสีจากปุ่มปกติให้เห็นทันทีว่า
+   นี่ไม่ใช่ทางเดินปกติของระบบ (ทางเดินปกติคือ ลูกค้าแจ้งชำระ → จ่ายครบ → ปิดอัตโนมัติ) */
+.superuser-override {
+  border: 1px solid rgba(255, 193, 7, 0.45);
+  border-left: 3px solid #ffc107;
+  border-radius: 14px;
+  padding: 0.9rem 1rem;
+  background: rgba(255, 193, 7, 0.08);
+}
+html[data-theme="dark"] .superuser-override {
+  border-color: rgba(255, 193, 7, 0.3);
+  background: rgba(255, 193, 7, 0.07);
+}
+</style>
 {% endblock %}
