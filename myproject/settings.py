@@ -15,6 +15,10 @@ from pathlib import Path
 import base64
 import os
 import sys
+from datetime import datetime
+
+from django.utils import timezone
+
 try:
     from dotenv import load_dotenv
     load_dotenv()
@@ -164,6 +168,17 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        # SQLite เป็น single-writer — ถ้าไม่ตั้ง จะเจอ "database is locked"
+        # ตอนมี 2 request เขียนพร้อมกัน (คิวออเดอร์ + checkout + ยืนยันเงิน)
+        #
+        # transaction_mode='IMMEDIATE' = เอา write lock ตั้งแต่ BEGIN แทนที่จะ
+        # รอจนกว่าจะเขียนจริง → read-modify-write ที่อยู่ใน transaction.atomic()
+        # (เช่น PaymentService.record_payment) จะถูก serialize จริง ไม่ใช่
+        # "อ่านค่าเดิมทั้งคู่แล้วทั้งคู่เขียน" — ต้องมี SQLite >= 3.12 (Django 5.1+)
+        'OPTIONS': {
+            'transaction_mode': 'IMMEDIATE',
+            'timeout': 20,      # busy_timeout วินาที — รอ write lock แทนที่จะ error ทันที
+        },
     }
 }
 
@@ -179,12 +194,43 @@ CACHES = {
 }
 
 
-# ==================== Email (ลืมรหัสผ่าน) ====================
-# Demo assignment — ไม่มี SMTP/ส่งเมลจริง: ใช้ console backend เพื่อให้เห็น flow
-# ลืมรหัสผ่านทำงาน (link รีเซ็ตโผล่ที่ terminal/console ของ runserver).
-# ถ้าจะ deploy จริงก็แค่เปลี่ยน backend + ใส่ SMTP credentials (env) ที่นี่.
-EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
-DEFAULT_FROM_EMAIL = 'thammathad@example.com'
+# ==================== Email (ลืมรหัสผ่าน) — env-driven, ไม่หลอกผู้ใช้ ====================
+# ปัญหาเดิม: EMAIL_BACKEND = console เด๊ะ ๆ → ลิงก์รีเซ็ตไปโผล่ใน console ของ
+# PythonAnywhere ที่ **ลูกค้าเข้าไม่ถึง** แต่หน้าเว็บยังขึ้นว่า "ส่งลิงก์ไปทางอีเมลแล้ว"
+# = ฟีเจอร์ที่ "ทำงานทั้งที่ใช้ไม่ได้จริง" (แย่กว่าไม่มีเลย เพราะหลอกผู้ใช้)
+#
+# ทางเลือกที่เลือก (option B — ไม่ต้องมีบัญชีอีเมลในการส่งงาน):
+#   - ตั้ง env EMAIL_URL → ใช้ SMTP จริง (ส่งถึงจริง)
+#     รูปแบบ: smtp://user:pass@host:port/?ssl=1  (รองรับ ssl / starttls)
+#     Gmail ใช้ "App Password" (ไม่ใช่รหัสผ่านปกติ) เป็นค่าใน URL
+#   - ไม่ตั้ง → ยังใช้ console backend เพื่อให้ dev/อาจารย์เห็น flow
+#     **แต่** EMAIL_CONFIGURED=False → หน้าเว็บจะไม่อ้างว่าส่งแล้ว
+#     และแสดงลิงก์รีเซ็ตให้ผู้ใช้เห็นตรง ๆ แทน (ไม่หลอก และสาธิตได้)
+#
+# ทำไมไม่ทำแบบ "ค่า default ปิดแล้ว error" เหมือน DEBUG:
+#   เพราะอีเมลไม่ใช่เรื่องความปลอดภัย — การไม่มี SMTP แค่ทำให้ฟีเจอร์
+#   ส่งไม่ถึง ยังพิมพ์ออกมาให้เห็นได้ จึงเลือก "ทำงาน + พูดความจริง" แทนที่จะพังเว็บ
+_EMAIL_URL = os.environ.get('EMAIL_URL', '').strip()
+
+if _EMAIL_URL:
+    import urllib.parse as _urlparse
+    _p = _urlparse.urlparse(_EMAIL_URL)
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+    EMAIL_HOST = _p.hostname or ''
+    EMAIL_PORT = _p.port or (465 if _p.scheme == 'smtps' else 587)
+    EMAIL_HOST_USER = _urlparse.unquote(_p.username or '')
+    EMAIL_HOST_PASSWORD = _urlparse.unquote(_p.password or '')
+    _q = _urlparse.parse_qs(_p.query)
+    EMAIL_USE_TLS = _q.get('starttls', ['0'])[0] == '1'
+    EMAIL_USE_SSL = _q.get('ssl', ['0'])[0] == '1' or _p.scheme == 'smtps'
+    EMAIL_TIMEOUT = 20          # ไม่ให้ request ค้างถ้า SMTP ค้าง
+    EMAIL_CONFIGURED = True
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+    EMAIL_CONFIGURED = False
+
+DEFAULT_FROM_EMAIL = os.environ.get(
+    'DJANGO_EMAIL_FROM', 'no-reply@thammathad.local')
 EMAIL_SUBJECT_PREFIX = '[Thammathad] '
 
 
@@ -224,6 +270,43 @@ USE_TZ = True
 
 STATIC_URL = '/static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'  # สำหรับ deploy (python manage.py collectstatic)
+
+# ---------- Cache-busting: ทุก URL ของ static ได้ ?v=<STATIC_VERSION> ----------
+# ปัญหา: recipe #2 ถอด `?v=N` ออกจาก template แล้ว → หลัง deploy ใหม่
+# เบราว์เซอร์ยัง cache CSS/JS เวอร์ชันเก่า → "แก้แล้วผู้ใช้ไม่เห็น"
+# วิธีแก้: custom storage ใส่ query string (ไม่ใช่ hash ในชื่อไฟล์ —
+#   เพราะ fx-boot.js สร้าง URL effect เองตอน runtime จากสตริงคงที่
+#   ถ้าเปลี่ยนชื่อไฟล์จะ 404 ทั้งระบบเอฟเฟกต์)
+if not DEBUG:
+    STORAGES = {
+        'default': {'BACKEND': 'django.core.files.storage.FileSystemStorage'},
+        'staticfiles': {'BACKEND': 'myapp.static_storage.VersionedStaticFilesStorage'},
+    }
+
+
+def _compute_static_version():
+    """เวอร์ชัน static คำนวณจาก mtime ของไฟล์ core → แก้ไฟล์แล้วเปลี่ยนเองอัตโนมัติ
+
+    ไม่ใช้ hash ของเนื้อหา (อ่านทุกไฟล์ช้าเกินไป) และไม่ต้องแก้มือ bump เลข
+    ถ้าอยากบังคับให้เปลี่ยนทุกครั้งที่ deploy ให้ตั้ง env STATIC_VERSION เอง
+
+    Returns:
+        str: สตริงเวอร์ชัน เช่น '20261013-113648' (เวลาแก้ไฟล์ core ล่าสุด)
+    """
+    cores = ['css/theme.css', 'js/motion-core.js', 'js/fx-boot.js', 'js/fx-assets.js']
+    newest = 0.0
+    for rel in cores:
+        try:
+            newest = max(newest, (Path(BASE_DIR) / 'myapp' / 'static' / rel).stat().st_mtime)
+        except OSError:
+            continue
+    if not newest:
+        return '0'
+    stamp = datetime.fromtimestamp(newest, tz=timezone.get_default_timezone())
+    return stamp.strftime('%Y%m%d-%H%M%S')
+
+
+STATIC_VERSION = os.environ.get('STATIC_VERSION', '').strip() or _compute_static_version()
 
 # Media files (user-uploaded files e.g. employee avatars)
 MEDIA_URL = '/media/'

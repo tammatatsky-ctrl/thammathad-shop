@@ -35,10 +35,11 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 from django.conf import settings
+from django.db import transaction
 from django.utils import timezone
 from django.core.cache import cache
 
-from .models import Payment, Product
+from .models import Order, Payment, Product
 
 
 class Catalog:
@@ -924,6 +925,18 @@ class PaymentService:
         3) ถ้าสถานะยัง pending และยอดสะสมครบ → OrderStatusService.auto_move
            ยกไป 'paid' อัตโนมัติ (เจ้าหน้าที่ตั้งขั้น 'paid' ด้วยมือไม่ได้)
 
+        ความถูกต้องของยอดเงิน (เพิ่ม 3 ชั้น — เคยพลาดทั้ง 3):
+        - **refuse เมื่อไม่ pending**: ออเดอร์ที่จ่ายแล้ว/ส่งแล้ว/ถึงมือแล้ว
+          จะไม่รับยอดเพิ่ม — เคยเป็นช่องโหว่เพราะ `SlipVerifyView` ไม่เช็คสถานะ
+          (ต่างจาก QuickPayView ที่เช็ค) ทำให้อัปโหลดสลิปใส่ออเดอร์ที่จ่ายแล้วได้
+          → Payment ยอดเกินยอดรวม → รายงานการเงินเพี้ยนทันที
+          *กันไว้ 2 ชั้น*: ที่ service (จุดเดียวจริง) + ที่ view (ตอบข้อความที่เข้าใจได้)
+        - **atomic**: read-modify-write ทั้งก้อนอยู่ใน transaction เดียว
+        - **lock แถวออเดอร์**: `select_for_update()` กัน 2 request พร้อมกันอ่าน
+          `reported` ได้ค่าเดิมทั้งคู่ แล้วทั้งคู่ผ่านเงื่อนไข "ครบยอด"
+          (SQLite ไม่มี row lock จริง แต่ DATABASES OPTIONS ตั้ง
+          `transaction_mode='IMMEDIATE'` ให้เขียนทีละ transaction)
+
         Args:
             order: instance Order เป้าหมาย
             name: ชื่อผู้ชำระ
@@ -934,27 +947,51 @@ class PaymentService:
             source: ระบุช่องทาง ('slip-ocr', 'button', ...) — เอาไปบันทึกใน actor
 
         Returns:
-            dict {payment, reported, remaining, just_paid, paid}:
+            dict {ok, error, payment, reported, remaining, just_paid, paid}:
+            - ok: False = ปฏิเสธ (ออเดอร์ไม่รอชำระ) → payment เป็น None, ไม่แตะ DB
+            - error: ข้อความไทยสำหรับแสดงผลเมื่อ ok=False
             - payment: instance Payment ใหม่ที่เพิ่งสร้าง
             - reported: ยอดแจ้งสะสมทั้งหมด
             - remaining: ยอดที่ยังขาด จากยอดรวม (0 = จ่ายครบแล้ว)
             - just_paid: เพิ่งปิดสถานะเป็น paid ในรอบนี้หรือไม่
             - paid: สถานะปัจจุบันของออเดอร์ = paid หรือยัง
         """
-        payment = Payment.objects.create(
-            order=order, name=name, phone=phone,
-            amount=amount, transfer_date=transfer_date, note=note,
-        )
-        reported = order.reported_total()
-        just_paid = False
-        if order.status == 'pending' and reported >= order.total:
-            just_paid = OrderStatusService.auto_move(order, 'paid', actor=f'payment:{source or "record"}')
+        with transaction.atomic():
+            locked = Order.objects.select_for_update().get(pk=order.pk)
+
+            if locked.status != 'pending':
+                # ออเดอร์ที่จ่ายแล้ว/ส่งแล้ว/ถึงมือแล้ว จะไม่รับยอดเพิ่ม
+                # ไม่บันทึกอะไรลง DB เลย — กันยอดเกินจริง (ดูคำอธิบายข้างบน)
+                return {
+                    'ok': False,
+                    'error': f'ออเดอร์ #{locked.id} ไม่ได้อยู่ในสถานะรอชำระเงิน '
+                              f'(ตอนนี้คือ "{locked.get_status_display()}") '
+                              f'— ไม่สามารถบันทึกยอดเพิ่มได้',
+                    'payment': None,
+                    'reported': locked.reported_total(),
+                    'remaining': Decimal('0'),
+                    'just_paid': False,
+                    'paid': locked.status != 'pending',
+                }
+
+            payment = Payment.objects.create(
+                order=locked, name=name, phone=phone,
+                amount=amount, transfer_date=transfer_date, note=note,
+            )
+            reported = locked.reported_total()
+            just_paid = False
+            if reported >= locked.total:
+                just_paid = OrderStatusService.auto_move(
+                    locked, 'paid', actor=f'payment:{source or "record"}')
+
         return {
+            'ok': True,
+            'error': '',
             'payment': payment,
             'reported': reported,
-            'remaining': max(order.total - reported, Decimal('0')),
+            'remaining': max(locked.total - reported, Decimal('0')),
             'just_paid': just_paid,
-            'paid': order.status == 'paid',
+            'paid': locked.status == 'paid',
         }
 
 

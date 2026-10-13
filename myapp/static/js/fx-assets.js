@@ -65,23 +65,43 @@
     function baseCss() { return window.FX_CSS_BASE || "/static/css/effects/"; }
     function baseJs() { return window.FX_JS_BASE || "/static/js/effects/"; }
 
-    /** inject <link rel="stylesheet"> เดียว (ไม่รอ — decoration โหลดแค่ให้พร้อม) */
+    /* ---- cache-busting สำหรับ URL ที่ "สร้างเองตอน runtime" ----
+     *  URL ที่ inject ตรงนี้เกิดหลัง Django render เสร็จ จึงไม่ได้ผ่าน static
+     *  storage ที่ใส่ ?v= ให้ (ดู myapp/static_storage.py) → ต้องต่อเอง
+     *  ไม่งั้นหลัง deploy ใหม่ ผู้ใช้จะได้ effect เวอร์ชันเก่าจาก cache
+     *  เวอร์ชันมาจาก window.FX_STATIC_V (basetemplate ฉีดจาก settings.STATIC_VERSION)
+     *  ว่างไว้ (dev / ไม่ได้ตั้งค่า) = ไม่ต่อ query = พฤติกรรมเดิม */
+    function stamp(url) {
+        var v = window.FX_STATIC_V;
+        if (!v || !url) return url;
+        if (url.indexOf("?") !== -1) return url;          // มี query แล้ว — ไม่ยัด
+        if (url.indexOf("http://") === 0 || url.indexOf("https://") === 0) return url;
+        var hash = "";
+        var hi = url.indexOf("#");
+        if (hi !== -1) { hash = url.slice(hi); url = url.slice(0, hi); }
+        return url + "?v=" + encodeURIComponent(v) + hash;
+    }
+
+    /** inject <link rel="stylesheet"> เดียว (ไม่รอ — decoration โหลดแค่ให้พร้อม)
+     *  stamp() = แนบ ?v=<STATIC_VERSION> กัน browser cache (ดูคอมเมนต์ข้างบน) */
     function injectCss(url) {
-        if (loadedCss[url]) return;
-        loadedCss[url] = 1;
+        var key = stamp(url);
+        if (loadedCss[key]) return;
+        loadedCss[key] = 1;
         var l = document.createElement("link");
         l.rel = "stylesheet";
-        l.href = url;
+        l.href = key;
         l.onload = l.onerror = function () { };
         (document.head || document.documentElement).appendChild(l);
     }
 
     /** inject <script> เดียว + track ครบ/พังผ่าน done() (dynamic = async ตามเบราว์เซอร์). */
     function injectJs(url, done) {
-        if (loadedJs[url]) return done();
-        loadedJs[url] = 1;
+        var key = stamp(url);
+        if (loadedJs[key]) return done();
+        loadedJs[key] = 1;
         var s = document.createElement("script");
-        s.src = url;
+        s.src = key;
         s.onload = s.onerror = function () {
             done();
         };

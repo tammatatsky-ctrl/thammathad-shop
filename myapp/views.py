@@ -14,6 +14,12 @@ from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.mixins import AccessMixin
+from django.contrib.auth.models import User
+from django.contrib.auth.forms import PasswordResetForm
+from django.contrib.auth.tokens import default_token_generator
+from django.contrib.sites.shortcuts import get_current_site
+from django.utils.encoding import force_bytes
+from django.utils.http import urlsafe_base64_encode
 from django.contrib.auth.views import PasswordChangeView, PasswordResetView
 from django.core.exceptions import PermissionDenied
 from django.db import models, transaction
@@ -204,18 +210,6 @@ class CustomerLoginView(View):
         return redirect(reverse('account') if not user.is_staff else reverse('dashboard'))
 
 
-class CustomerPasswordResetView(PasswordResetView):
-    """ลืมรหัสผ่าน — Django 6.x อ่าน template อีเมลจาก class attribute ของ view เอง
-    (form_valid ส่ง self.email_template_name ให้ form.save) → override เป็น class attr
-    เพื่อบังคับใช้ template ภาษาไทยของเรา (ไม่พึ่งตัว default ของ contrib.auth)."""
-
-    template_name = 'registration/password_reset_form.html'
-    email_template_name = 'registration/password_reset_email.html'
-    subject_template_name = 'registration/password_reset_subject.txt'
-    from_email = settings.DEFAULT_FROM_EMAIL
-    success_url = reverse_lazy('password_reset_done')
-
-
 class CustomerRequiredMixin(AccessMixin):
     """บังคับล็อกอิน (ลูกค้าหรือ staff) — redirect ไปหน้า login ลูกค้า"""
 
@@ -226,6 +220,107 @@ class CustomerRequiredMixin(AccessMixin):
 
     def get_login_url(self):
         return reverse('account_login')
+
+
+class LinkOnlyPasswordResetForm(PasswordResetForm):
+    """ฟอร์มรีเซ็ตที่ "สร้างลิงก์แต่ไม่ส่ง" — ใช้ตอนร้านยังไม่ได้ตั้ง SMTP
+
+    เหตุผลที่ต้องมีคลาสนี้ (แทนกี่เรียก `form.save()` แล้วเก็บผล):
+        `PasswordResetForm.save()` **ส่งอีเมลจริงเสมอ** — ถ้าเรียกมันแล้วบอก
+        ผู้ใช้ว่า "ไม่ได้ส่ง" ก็โกหกไปแล้ว (และถ้า backend เป็น locmem/console
+        จะมีอีเมลหลุดออกไปจริง ทำให้เทสต์จับไม่ได้ว่าเราส่งหรือไม่)
+        คลาสนี้ override `save()` ให้คืน token ที่สร้างจริง โดยไม่ติดต่อ backend
+
+    Attributes:
+        reset_links: list[dict] — {user, uid, token} ของผู้ใช้ที่อีเมลถูกต้อง
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.reset_links = []
+
+    def save(self, request=None, **kwargs):
+        """สร้าง token ให้ผู้ใช้ที่อีเมลถูกต้อง — โดยไม่ส่งอีเมล
+
+        Args:
+            request: request ปัจจุบัน (ใช้หาโดเมนในกรณี request ไม่มี)
+            **kwargs: รับทิ้งเพื่อให้เข้ากับช่องทางของ PasswordResetForm
+
+        Returns:
+            list[str] — อีเมลของผู้ใช้ที่ token ถูกสร้างจริง
+        """
+        current_site = get_current_site(request)
+        email = self.cleaned_data['email']
+        token_generator = kwargs.get('token_generator') or default_token_generator
+        for user in self.get_users(email):
+            temp_token = token_generator.make_token(user)
+            self.reset_links.append({
+                'user': user,
+                'uid': urlsafe_base64_encode(force_bytes(user.pk)),
+                'token': temp_token,
+            })
+        # ไม่เรียก self.send_mail(...) — จุดที่ตั้งใจไม่ส่ง
+        del current_site   # ไม่ได้ใช้ แต่คงไว้ให้สัญญาเหมือนของ Django
+        return [u.email for u in self.get_users(email)]
+
+
+class CustomerPasswordResetView(PasswordResetView):
+    """ลืมรหัสผ่าน — Django 6.x อ่าน template อีเมลจาก class attribute ของ view เอง
+    (form_valid ส่ง self.email_template_name ให้ form.save) → override เป็น class attr
+    เพื่อบังคับใช้ template ภาษาไทยของเรา (ไม่พึ่งตัว default ของ contrib.auth).
+
+    **ห้ามหลอกผู้ใช้ว่าส่งอีเมลแล้ว** (บั๊กที่เจอ — EMAIL_BACKEND=console ทำให้
+    ลิงก์รีเซ็ตไปโผล่ใน console ของเซิร์ฟเวอร์ ซึ่งลูกค้าเข้าไม่ถึง แต่ Django
+    ยังพาไปหน้า "ส่งลิงก์ไปทางอีเมลแล้ว" ตามปกติ):
+
+    - `settings.EMAIL_CONFIGURED` = True  → ส่งอีเมลจริง พฤติกรรมปกติ
+    - `settings.EMAIL_CONFIGURED` = False → ยังสร้าง token จริง (ไม่ใช่ของปลอม)
+      แต่แสดง "ร้านยังไม่ได้ตั้งค่าอีเมล" + ลิงก์รีเซ็ตให้ผู้ใช้กดเลย ถ้าเป็น staff
+      หรืออยู่ใน DEBUG (การส่งงาน/สาธิตให้อาจารย์) — ไม่งั้นบอกให้ติดต่อเจ้าหน้าที่
+    """
+
+    template_name = 'registration/password_reset_form.html'
+    email_template_name = 'registration/password_reset_email.html'
+    subject_template_name = 'registration/password_reset_subject.txt'
+    from_email = settings.DEFAULT_FROM_EMAIL
+    success_url = reverse_lazy('password_reset_done')
+
+    def get_context_data(self, **kwargs):
+        """เพิ่มสถานะการตั้งค่าอีเมลให้เทมเพลตแสดงคำเตือนตามความจริง"""
+        ctx = super().get_context_data(**kwargs)
+        ctx['email_configured'] = settings.EMAIL_CONFIGURED
+        return ctx
+
+    def get_form(self, form_class=None):
+        """เวลาร้านยังไม่ได้ตั้ง SMTP ให้ใช้ฟอร์มที่สร้างลิงก์แต่ไม่ส่ง"""
+        if not settings.EMAIL_CONFIGURED:
+            return LinkOnlyPasswordResetForm(**self.get_form_kwargs())
+        return super().get_form(form_class)
+
+    def form_valid(self, form):
+        if settings.EMAIL_CONFIGURED:
+            return super().form_valid(form)
+
+        # ยังไม่ได้ตั้ง SMTP -> สร้าง token จริง แต่ไม่ส่ง (ไม่หลอกว่าส่งแล้ว)
+        form.save(request=self.request)
+
+        if not form.reset_links:
+            # ไม่บอกว่าอีเมลนี้มี/ไม่มีบัญชี (user enumeration) -> ตอบเหมือนกันเสมอ
+            messages.info(self.request,
+                          'ถ้าอีเมลนี้มีบัญชีในระบบ เราจะส่งขั้นตอนถัดไปให้')
+            return redirect(self.success_url)
+
+        link = form.reset_links[0]
+        user = link['user']
+        reveal = settings.DEBUG or (
+            self.request.user.is_authenticated and self.request.user.is_staff)
+
+        return render(self.request, 'registration/password_reset_email_unconfigured.html', {
+            'email': user.email,
+            'reset_url': reverse('password_reset_confirm',
+                                 kwargs={'uidb64': link['uid'], 'token': link['token']}),
+            'can_reveal': reveal,
+        })
 
 
 class CustomerPasswordChangeView(CustomerRequiredMixin, PasswordChangeView):
@@ -1013,6 +1108,10 @@ class QuickPayView(View):
             amount=remaining, transfer_date=timezone.localtime().date(),
             note='ยืนยันโอนยอดเต็มจากหน้าเว็บ (1-คลิก)', source='quickpay',
         )
+        if not result['ok']:
+            # ออเดอร์ถูกจ่ายครบจาก request อื่นระหว่างที่กด (race) — บอกตามจริง
+            messages.info(request, result['error'])
+            return redirect(back)
         if result['just_paid']:
             messages.success(request, f'ออเดอร์ #{order.id} รับยอดโอนครบแล้ว — ชำระเงินเรียบร้อย!')
         else:
@@ -1064,12 +1163,27 @@ class SlipVerifyView(View):
 
         if parsed['amount'] <= 0:
             return JsonResponse({'ok': False, 'error': 'อ่านยอดเงินจากสลิปไม่ได้'}, status=422)
+
+        # ออเดอร์ต้องยังรอชำระ — เช็คก่อนยิง OCR ประหยัดค่าใช้จ่ายภายนอก
+        # (service กันซ้ำอีกชั้น แต่ถ้ารอถึงตรงนั้นเราจะเสียเงินค่า OCR ไปเปล่า ๆ)
+        # เคยพลาดตรงนี้: QuickPayView มีการเช็ค แต่หน้านี้ไม่มี → อัปโหลดสลิปใส่
+        # ออเดอร์ที่จ่ายแล้วได้ → Payment ยอดเกิน → รายงานการเงินเพี้ยน
+        if order.status != 'pending':
+            return JsonResponse({
+                'ok': False,
+                'error': f'ออเดอร์ #{order.id} ไม่ได้อยู่ในสถานะรอชำระเงิน '
+                         f'(ตอนนี้คือ "{order.get_status_display()}") — ไม่ต้องส่งสลิปแล้ว',
+            }, status=409)
+
         result = PaymentService.record_payment(
             order=order, name=order.customer_name, phone=order.phone,
             amount=parsed['amount'],
             transfer_date=parsed['transfer_date'] or timezone.localtime().date(),
             note=parsed['note'], source='slip',
         )
+        # ชั้น service อาจปฏิเสธ (เช่น อีก request เข้ามาจ่ายครบพอดีระหว่าง OCR)
+        if not result['ok']:
+            return JsonResponse({'ok': False, 'error': result['error']}, status=409)
         return JsonResponse({
             'ok': True,
             'amount': str(parsed['amount']),
