@@ -324,6 +324,27 @@ Copy-Item "myapp\static\js\effects\*.js" "staticfiles\js\effects\" -Force
 - เข้าสำเร็จ → ล้างเฉพาะชั้นบัญชี · **ไม่ล้างชั้น IP** (ถ้าล้าง ผู้โจมตีเคลียร์ตัวนับตัวเองได้ทันที)
 - ทุกกรณีที่โดนจำกัดตอบข้อความเดียวกัน (`LoginThrottle.MESSAGE`) — ห้ามแยกข้อความ ไม่งั้นผู้โจมตีเรียนรู้ว่าโดนชั้นไหน
 
+### `manage.py preflight` — ตรวจความพร้อมก่อน/หลัง deploy (รันก่อนอัปโิลด์ ZIP เสมอ)
+
+บั๊กที่ทำให้ "deploy แล้วเว็บพังแต่ไม่มีอาการ" ในโปรเจกต์นี้**มีรูปแบบเดียวกันหมด**: ระบบรันได้ปกติ แต่ไม่ได้ทำงานที่ตั้งใจ — preflight จับได้ในคำสั่งเดียว
+
+```bash
+python manage.py preflight           # exit 1 = มี FAIL (ห้าม deploy)
+python manage.py preflight --quiet   # เฉพาะรายการที่ไม่ผ่าน
+```
+
+| ตรวจ | จับบั๊กอะไร |
+|---|---|
+| DEBUG / SECRET_KEY | ลืมตั้ง env → รั่ว (fail-closed) |
+| ALLOWED_HOSTS | มี `*` หรือว่าง → Host header injection / ทุก request 400 |
+| CSRF_TRUSTED_ORIGINS | ไม่มี → ผู้ใช้ส่งฟอร์มไม่ได้เมื่ออยู่หลัง proxy |
+| HSTS | เปิดยาวเกิน 1 วัน → ถ้าพัง ผู้ใช้ถูกล็อกแก้ยาก |
+| EMAIL_CONFIGURED | ยังไม่ได้ตั้ง → ลืมรหัสผ่านส่งไม่ถึงลูกค้า |
+| staticfiles vs `myapp/static` | ไม่ sync → ผู้ใช้เห็น CSS/JS เก่า |
+| migration | ยังไม่ apply หรือแก้ model ลืม `makemigrations` |
+| ฐานข้อมูล | ไฟล์ไม่มี / `integrity_check` ไม่ผ่าน |
+| backup | ไม่มีไฟล์สำรอง หรือเก่ากว่า 2 วัน |
+
 ### สำรองฐานข้อมูล — `manage.py backup_db`
 
 SQLite ไฟล์เดียว = ข้อมูลทั้งหมดอยู่ไฟล์เดียว ถ้าหายกู้ไม่ได้ → ต้องรันสำรอง

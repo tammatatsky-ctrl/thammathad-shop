@@ -2049,3 +2049,54 @@ def permission_denied_view(request, exception=None):
         'user': request.user,
     }, status=403)
 
+
+def page_not_found_view(request, exception=None):
+    """หน้า 404 Not Found — ชี้ทางออกให้ผู้ใช้ (หน้าหลัก / สินค้า / ติดตามออเดอร์)
+
+    ทำไมต้องมี: เดิม Django แสดงหน้า 404 ดิบของตัวเอง (ข้อความอังกฤษยาว ๆ
+    ไม่มีปุ่ม ไม่มีเมนู) ซึ่งเป็นความรู้สึกเหมือนเว็บพัง ไม่ใช่ "หาไม่เจอ"
+
+    Args:
+        request: HttpRequest
+        exception: Http404 ที่ Django ส่งมา (เก็บไว้ debug/วิเคราะห์)
+
+    Returns:
+        HttpResponse: status 404 พร้อมเทมเพลต 404.html
+    """
+    return render(request, '404.html', {
+        'exception': exception,
+        'request_path': request.path[:200],
+    }, status=404)
+
+
+def server_error_view(request):
+    """หน้า 500 — ต้อง render ได้แม้ session/DB/static พัง
+
+    ⚠️ กฎสำคัญของ handler 500 (เคยพลาดในโปรเจกต์นี้แล้ว — เจอตอนทดสอบ):
+        ห้ามเรียก `render(request, ...)` แบบปกติ เพราะมันจะเดินผ่าน **context
+        processor ทั้งหมด** และ `cart_context` ของโปรเจกต์แตะ `request.session`
+        → ถ้าสาเหตุที่ทำให้เกิด 500 คือ session/DB พัง หน้า 500 จะพังตาม
+          และ Django จะวน error ซ้ำเป็นลูกโซ่ (ผู้ใช้เห็นหน้าว่าง)
+        วิธีที่ถูกคือ `render_to_string()` **โดยไม่ส่ง request** → ไม่มี
+        context processor ไหร่ถูกเรียก เหลือแค่อ่านไฟล์เทมเพลต
+
+        เหตุผลที่ยัง log ได้: `logging.getLogger('django.request').exception()`
+        ไม่ต้องพึ่ง session/DB เลย
+
+    Args:
+        request: HttpRequest
+
+    Returns:
+        HttpResponse: status 500 + HTML ของ 500.html (ไม่ผ่าน context processor)
+    """
+    import logging
+
+    from django.template.loader import render_to_string
+
+    # logger.exception จะดึง traceback ของ exception ที่กำลังจัดการอยู่ให้เอง
+    logging.getLogger('django.request').exception(
+        'เกิดข้อผิดพลาด 500 ที่ %s %s', request.method, request.path)
+
+    # ไม่ส่ง request → ไม่มี context processor (สำคัญมาก ดูคอมเมนต์ข้างบน)
+    return HttpResponse(render_to_string('500.html'), status=500)
+

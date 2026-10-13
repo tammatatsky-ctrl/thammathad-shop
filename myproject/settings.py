@@ -321,8 +321,47 @@ if not DEBUG:
         SECURE_SSL_REDIRECT = True        # บังคับ https ทุก request
     SESSION_COOKIE_SECURE = True          # cookie session ส่งผ่าน https เท่านั้น
     CSRF_COOKIE_SECURE = True
-    SECURE_HSTS_SECONDS = 60 * 60 * 24 * 30   # 30 วัน — browser จำใช้ https เอง
-    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
     SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')   # PythonAnywhere proxy
     X_FRAME_OPTIONS = 'DENY'
     SECURE_CONTENT_TYPE_NOSNIFF = True
+    SECURE_REFERRER_POLICY = 'same-origin'
+
+    # ---------- CSRF_TRUSTED_ORIGINS ----------
+    # ทำไมต้องมี: เว็บอยู่หลัง proxy ของ PythonAnywhere ซึ่งส่ง header
+    # `Origin: https://tammatat.pythonanywhere.com` มา ถ้า Django เทียบกับ
+    # ALLOWED_HOSTS ไม่ผ่าน (เช่น มีพอร์ต หรือ www) ผู้ใช้จะเจอ
+    # "CSRF verification failed" โดยไม่มีคำอธิบาย — แก้ที่ origin ตรง ๆ ดีกว่า
+    # ปิด `CSRF_COOKIE_SECURE` (ซึ่งเป็นการ "แก้อาการ" ไม่ใช่แก้เหตุ)
+    _EXTRA_ORIGINS = os.environ.get('CSRF_TRUSTED_ORIGINS', '').strip()
+    if _EXTRA_ORIGINS:
+        CSRF_TRUSTED_ORIGINS = [
+            o.strip() for o in _EXTRA_ORIGINS.split(',') if o.strip()
+        ]
+    else:
+        # ค่าเริ่มต้น: สร้างจาก ALLOWED_HOSTS ที่เป็น "ชื่อโดเมนจริง"
+        # ข้าม localhost และ IP address (127.0.0.1) — ไม่มีความหมายในเว็บจริง
+        import ipaddress as _ipaddr
+
+        def _is_real_domain(host):
+            try:
+                _ipaddr.ip_address(host)
+                return False
+            except ValueError:
+                return '.' in host and not host.startswith('*')
+
+        CSRF_TRUSTED_ORIGINS = [
+            f'https://{h}' for h in ALLOWED_HOSTS if _is_real_domain(h)
+        ]
+
+    # ---------- HSTS: เริ่มจากค่าเล็ก แล้วค่อยขยาย ----------
+    # ⚠️ เคยเป็น 30 วันทันที — HSTS ผูก browser ไว้แบบย้อนกลับไม่ได้
+    # ถ้า https/cookie พังกลางคัน ผู้ใช้จะกู้ได้ยากมาก (ต้องเปิด devtools ล้าง)
+    # จึงเปลี่ยนเป็นไล่ระดับ: เริ่ม 1 วัน → ยืนยันว่าทุกอย่าง OK → 1 สัปดาห์ → 1 เดือน
+    # (ค่าเริ่มต้น 1 วันยังกัน MITM การต่อครั้งแรกได้ แต่ไม่กับตัวเองเมื่อพัง)
+    _HSTS_DAYS = os.environ.get('HSTS_DAYS', '1').strip()
+    try:
+        _HSTS_DAYS = float(_HSTS_DAYS)
+    except (TypeError, ValueError):
+        _HSTS_DAYS = 1.0
+    SECURE_HSTS_SECONDS = int(_HSTS_DAYS * 24 * 3600)
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True

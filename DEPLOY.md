@@ -96,6 +96,24 @@ application = get_wsgi_application()
 - [ ] ระบบจัดการพนักงาน: `/employees/`
 - [ ] Backend Admin: `/admin/` → user `teacher` / pass `Shop2026!`
 
+---
+
+## ✅ ตรวจก่อน/หลัง deploy: `manage.py preflight`
+
+รันบน **เครื่องตัวเอง** ก่อนอัปโิลด์ ZIP และรันบน **server** หลังแตกไฟล์เสร็จ
+
+```bash
+python manage.py preflight
+```
+
+ผ่านหมดจะขึ้น `ระบบพร้อมใช้งาน` · ถ้าขึ้น `ยัง deploy ไม่ควร` ให้แก้ตามข้อความที่ระบุ
+(ระบบจะบอกคำสั่งที่ต้องรันให้ในแต่ละบรรทัด) · exit code 1 = มี FAIL
+
+ตรวจ 9 อย่าง: DEBUG/SECRET_KEY · ALLOWED_HOSTS · CSRF_TRUSTED_ORIGINS ·
+HSTS · อีเมล · staticfiles ตรงกับ source · migration · ฐานข้อมูล · ไฟล์สำรอง
+
+---
+
 ## แก้ไขโค้ดภายหลัง (Update)
 
 แก้ไฟล์บนแท็บ Files ของ PythonAnywhere โดยตรง แล้วกด **Reload** ในแท็บ Web

@@ -1,0 +1,48 @@
+{% extends 'basetemplate.html' %}
+{# ===== 404.html: ไม่พบหน้าที่ต้องการ (Not Found) ในสไตล์ Apple Liquid Glass
+   คู่ขนานกับ 403.html — หน้านี้เป็นหน้าปกติ (ไม่ใช่หน้าฉุกเฉิน) จึงใช้ธีมเต็มได้
+   ต่างจาก 500.html ที่ฝัง CSS ไว้ในตัวเพื่อให้อ่านออกแม้ static พัง ===== #}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="row justify-content-center">
+            <div class="col-md-7 col-lg-6 text-center" data-motion="reveal" data-dir="zoom">
+                <div class="card panel-card p-4 p-md-5 my-4 shadow-lg border-0 position-relative overflow-hidden">
+                    <span class="holographic-sheen" aria-hidden="true"></span>
+
+                    <div class="d-inline-flex align-items-center justify-content-center mb-4 rounded-circle mx-auto error-badge">
+                        <i class="bi bi-compass text-muted-apple"></i>
+                    </div>
+
+                    <p class="eyebrow text-muted-apple mb-1">ข้อผิดพลาด 404 (NOT FOUND)</p>
+                    <h1 class="page-title mb-2">ไม่พบหน้าที่คุณค้นหา</h1>
+
+                    <p class="lead-apple text-muted-apple mb-4">
+                        หน้านี้อาจถูกย้าย ลบไปแล้ว หรือลิงก์ถูกพิมพ์ไม่ครบ<br>
+                        ลองกลับไปหน้าหลัก หรือค้นหาสินค้าที่ต้องการได้เลย
+                    </p>
+
+                    <div class="d-flex justify-content-center gap-3 flex-wrap">
+                        <a href="{% url 'index' %}" class="btn btn-primary px-4 py-2">
+                            <i class="bi bi-house-door me-1"></i> กลับหน้าหลัก
+                        </a>
+                        <a href="{% url 'product' %}" class="btn btn-outline-secondary px-4 py-2">
+                            <i class="bi bi-bag me-1"></i> ดูสินค้าทั้งหมด
+                        </a>
+                        <a href="{% url 'order_tracking' %}" class="btn btn-outline-secondary px-4 py-2">
+                            <i class="bi bi-box-seam me-1"></i> ติดตามออเดอร์
+                        </a>
+                    </div>
+
+                    {% if request_path %}
+                    <p class="text-muted-apple small mt-4 mb-0 text-break">
+                        <i class="bi bi-info-circle me-1"></i> URL ที่คุณเปิด: <code>{{ request_path }}</code>
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+{% endblock %}

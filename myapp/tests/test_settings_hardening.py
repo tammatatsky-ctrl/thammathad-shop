@@ -61,12 +61,23 @@ def _boot_settings(env_overrides: dict, tmp_dir: Path):
         "print('DEBUG=%s' % s.DEBUG);"
         "print('SECRET_SET=%s' % bool(s.SECRET_KEY));"
         "print('SSL_REDIRECT=%s' % getattr(s, 'SECURE_SSL_REDIRECT', False));"
-        "print('HSTS=%s' % getattr(s, 'SECURE_HSTS_SECONDS', 0))"
+        "print('HSTS=%s' % getattr(s, 'SECURE_HSTS_SECONDS', 0));"
+        "print('CSRF_ORIGINS=%s' % ','.join(getattr(s, 'CSRF_TRUSTED_ORIGINS', None) or []));"
+        "print('EMAIL_CONFIGURED=%s' % getattr(s, 'EMAIL_CONFIGURED', False));"
+        "print('REFERER=%s' % getattr(s, 'SECURE_REFERRER_POLICY', ''))"
     )
     proc = subprocess.run([sys.executable, '-c', code], cwd=str(PROJECT_DIR),
                           env=env, capture_output=True, text=True,
                           encoding='utf-8', errors='replace', timeout=120)
     return proc.returncode, proc.stdout, proc.stderr
+
+
+def _value(out: str, key: str) -> str:
+    """ดึงค่าจากบรรทัด `KEY=value` ที่ subprocess พิมพ์มา"""
+    for line in out.splitlines():
+        if line.startswith(f'{key}='):
+            return line.split('=', 1)[1]
+    raise AssertionError(f'ไม่พบ "{key}" ในผลลัพธ์:\n{out}')
 
 
 class DebugFailsClosedTest(TestCase):
@@ -127,8 +138,127 @@ class SecretKeyFailsClosedTest(TestCase):
         self.assertIn('DEBUG=False', out)
         self.assertIn('SSL_REDIRECT=True', out,
                       'production ต้องบังคับ https (อยู่ใต้ if not DEBUG)')
-        hsts = [ln for ln in out.splitlines() if ln.startswith('HSTS=')][0]
-        self.assertNotEqual(hsts, 'HSTS=0', 'HSTS ต้องถูกตั้งใน production')
+        hsts = _value(out, 'HSTS')
+        self.assertNotEqual(hsts, '0', 'HSTS ต้องถูกตั้งใน production')
+
+
+class ProductionHstsPolicyTest(TestCase):
+    """HSTS ต้อง "ไล่ระดับ" ไม่ใช่เปิด 30 วันทันที
+
+    HSTS ผูก browser แบบย้อนกลับไม่ได้: ถ้าเปิด 30 วันแล้ว https/cookie พัง
+    ผู้ใช้จะกู้ได้ยากมาก (ต้องเปิด devtools ล้าง header) → จึงเริ่มจาก 1 วัน
+    แล้วค่อยขยายผ่าน env `HSTS_DAYS` เมื่อมั่นใจ
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        _make_clean_settings(self.tmp)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _prod(self, **extra):
+        env = {'DJANGO_DEBUG': '0', 'DJANGO_SECRET_KEY': 'c' * 50, **extra}
+        return _boot_settings(env, self.tmp)
+
+    def test_default_is_one_day_not_thirty(self):
+        rc, out, err = self._prod()
+        self.assertEqual(rc, 0, f'{err}')
+        self.assertEqual(_value(out, 'HSTS'), str(86400),
+                         'ค่าเริ่มต้นต้องเป็น 1 วัน ไม่ใช่ 30 วัน')
+
+    def test_hsts_days_env_can_extend_it(self):
+        """ยืนยันว่ากลไกขยายใช้งานได้จริง ไม่ใช่แค่ค่าตาย"""
+        rc, out, err = self._prod(HSTS_DAYS='7')
+        self.assertEqual(rc, 0, f'{err}')
+        self.assertEqual(_value(out, 'HSTS'), str(7 * 86400))
+
+    def test_invalid_hsts_days_falls_back_to_one_day(self):
+        """ค่าผิดพลาดต้อง fallback ไปค่าปลอดภัย ไม่ใช่พังหรือใช้ค่าใหญ่"""
+        rc, out, err = self._prod(HSTS_DAYS='ไม่ใช่ตัวเลข')
+        self.assertEqual(rc, 0, f'ค่าผิดต้องไม่ควรทำให้เว็บพัง:\n{err}')
+        self.assertEqual(_value(out, 'HSTS'), str(86400))
+
+
+class ProductionCsrfOriginTest(TestCase):
+    """ต้องมี CSRF_TRUSTED_ORIGINS ครอบคลุมโดเมนจริง
+
+    เว็บอยู่หลัง proxy ของ PythonAnywhere ถ้า origin ไม่ตรง Django จะตอบ
+    "CSRF verification failed" โดยผู้ใช้ไม่มีทางแก้ = ส่งฟอร์มไม่ได้เลย
+    (โดยเฉพาะการสั่งซื้อ / login / เปลี่ยนรหัสผ่าน)
+    """
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        _make_clean_settings(self.tmp)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _prod(self, **extra):
+        env = {'DJANGO_DEBUG': '0', 'DJANGO_SECRET_KEY': 'd' * 50, **extra}
+        return _boot_settings(env, self.tmp)
+
+    def test_origin_derived_from_allowed_hosts(self):
+        rc, out, err = self._prod()
+        self.assertEqual(rc, 0, f'{err}')
+        origins = _value(out, 'CSRF_ORIGINS')
+        self.assertIn('tammatat.pythonanywhere.com', origins,
+                      f'ต้องครอบคลุมโดเมนจริง ได้ "{origins}"')
+
+    def test_localhost_and_ip_are_excluded(self):
+        """127.0.0.1/localhost ไม่มีความหมายในเว็บจริง — ไม่ควรอยู่ในรายการ"""
+        rc, out, err = self._prod()
+        self.assertEqual(rc, 0, f'{err}')
+        origins = _value(out, 'CSRF_ORIGINS')
+        self.assertNotIn('127.0.0.1', origins)
+        self.assertNotIn('localhost', origins)
+
+    def test_env_override_wins(self):
+        """deployer ต้อง override ได้เมื่อเว็บอยู่โดเมนอื่น (เช่น www)"""
+        rc, out, err = self._prod(
+            CSRF_TRUSTED_ORIGINS='https://www.example.com,https://example.com')
+        self.assertEqual(rc, 0, f'{err}')
+        origins = _value(out, 'CSRF_ORIGINS')
+        self.assertIn('www.example.com', origins)
+        self.assertNotIn('tammatat', origins)
+
+    def test_referrer_policy_set(self):
+        """ป้องกัน path ของหน้าหลุดไปกับ referrer ไปยังเว็บอื่น"""
+        rc, out, err = self._prod()
+        self.assertEqual(rc, 0, f'{err}')
+        self.assertEqual(_value(out, 'REFERER'), 'same-origin')
+
+
+class ProductionEmailConfigTest(TestCase):
+    """EMAIL_URL ต้องเปิด SMTP จริงเมื่อตั้งค่า (ไม่ใช่แค่ผ่านฉาก)"""
+
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+        _make_clean_settings(self.tmp)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def _prod(self, **extra):
+        env = {'DJANGO_DEBUG': '0', 'DJANGO_SECRET_KEY': 'e' * 50, **extra}
+        return _boot_settings(env, self.tmp)
+
+    def test_email_unconfigured_by_default(self):
+        rc, out, err = self._prod()
+        self.assertEqual(rc, 0, f'{err}')
+        self.assertIn('EMAIL_CONFIGURED=False', out,
+                      'ไม่มี EMAIL_URL ต้องรายงานว่ายังไม่ได้ตั้ง (ไม่ใช่ค่าเริ่มต้นที่โกหก)')
+
+    def test_email_url_enables_backend(self):
+        rc, out, err = self._prod(
+            EMAIL_URL='smtp://user:pass@smtp.example.com:587/?starttls=1')
+        self.assertEqual(rc, 0, f'{err}')
+        self.assertIn('EMAIL_CONFIGURED=True', out,
+                      'ตั้ง EMAIL_URL แล้วต้องรายงานว่าเปิดใช้งาน')
 
 
 class NoHardcodedSecretInSourceTest(TestCase):

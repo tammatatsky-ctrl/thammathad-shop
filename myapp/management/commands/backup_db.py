@@ -42,7 +42,9 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
-        db_name = settings.DATABASES['default']['NAME']
+        # settings ใช้ Path (BASE_DIR / 'db.sqlite3') ไม่ใช่ str — ต้องแปลงก่อน
+        # เทียบสตริง ไม่งั้น WindowsPath ไม่มี .startswith() (เคยพังตรงนี้)
+        db_name = str(settings.DATABASES['default']['NAME'])
         src_path = Path(db_name)
 
         # ตรวจไฟล์ก่อนแตะ connection — ถ้าเปิด connection ก่อน Django จะ
