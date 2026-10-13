@@ -20,7 +20,7 @@ from django.contrib.auth.models import User
 from django.test import TestCase, override_settings
 from django.urls import reverse
 
-from myapp.models import Order, OrderItem, Product
+from myapp.models import Order, OrderItem, Payment, Product
 from myapp.services import ProductDescription
 
 
@@ -61,6 +61,20 @@ class EveryFeatureIsReachableTest(TestCase):
                               f'{url} ไม่มีช่องแจ้งยอดโอนเอง')
                 self.assertIn('name="amount"', html)
                 self.assertIn('name="transfer_date"', html)
+
+    def test_pay_buttons_show_on_a_fresh_order_with_no_payment_history(self):
+        """ออเดอร์ใหม่ = ยังไม่มี Payment เลย → ต้องเห็นปุ่มชำระ
+
+        กันบั๊กเดิม: บล็อกชำระทั้งหมดเคยอยู่ใน `{% if payments %}`
+        ซึ่งแปลว่า 'ยังไม่เคยจ่าย' ซึ่งเป็นสถานะเริ่มต้นของออเดอร์ทุกใบ
+        จะไม่มีทางจ่ายได้เลย — ตรงกันข้ามกับที่ควรเป็น
+        """
+        self.assertFalse(Payment.objects.filter(order=self.order).exists())
+        html = self.client.get(
+            f"/order/tracking/?order={self.order.id}&phone={self.order.phone}"
+        ).content.decode('utf-8')
+        self.assertIn(reverse('payment_quick'), html, 'ไม่มีปุ่มแจ้งชำระ 1 คลิก')
+        self.assertIn(reverse('payment_manual'), html, 'ไม่มีช่องกรอกยอดเอง')
 
     def test_manual_payment_records_through_the_single_intake(self):
         """ต้องเดินผ่าน PaymentService เหมือนทุกช่องทาง (รวมจ่ายบางส่วน)"""
