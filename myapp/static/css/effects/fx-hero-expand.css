@@ -44,7 +44,8 @@
 /* ---- Split Headline Typography ---- */
 .expand-title-wrap {
   position: absolute;
-  top: clamp(14%, 18vh, 22%);
+  /* เผื่อระยะหายใจจากขอบบนการ์ด — เดิม 18vh ทำให้หัวเรื่องชนขอบการ์ดพอดี */
+  top: clamp(12%, 15vh, 20%);
   left: 0;
   width: 100%;
   transform: translateY(-50%);
@@ -91,7 +92,7 @@ html[data-theme="dark"] .expand-title-part {
   position: relative;
   z-index: 10;
   border-radius: clamp(20px, calc(44px - var(--expand-progress, 0) * 20px), 44px);
-  width: clamp(320px, calc(340px + var(--expand-progress, 0) * 800px), 94vw);
+  width: clamp(320px, calc(380px + var(--expand-progress, 0) * 760px), 94vw);
   height: clamp(420px, calc(440px + var(--expand-progress, 0) * 220px), 82vh);
   margin-top: clamp(2rem, 4.5vh, 3.5rem);
   max-width: 95vw;
@@ -215,13 +216,18 @@ html[data-theme="dark"] .expand-media-card {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 1rem;
+  gap: 0.6rem;
+  /* การ์ดแคบ (340px) ที่ progress 0 รองรับสองป้ายไม่ได้
+     → ให้ป้ายราคาลงบรรทัดถัดไปแทนการถูกบีบจนตัวอักษรตัดบรรทัด */
+  flex-wrap: wrap;
 }
 
 .expand-edition-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  /* ห้ามตัดบรรทัด (เคยพั่วเป็น 3 บรรทัดในการ์ดแคบ) */
+  white-space: nowrap;
   padding: 6px 14px;
   border-radius: 980px;
   font-size: 0.8rem;
@@ -243,6 +249,8 @@ html[data-theme="dark"] .expand-media-card {
   border-radius: 980px;
   font-size: 0.9rem;
   font-weight: 700;
+  /* สัญญาณเงินต้องอยู่บรรทัดเดียวเสมอ — ห้ามให้ "฿" ลอยไปบรรทัดบน */
+  white-space: nowrap;
   background: rgba(0, 113, 227, 0.85);
   color: #ffffff;
   box-shadow: 0 4px 12px rgba(0, 113, 227, 0.4);
