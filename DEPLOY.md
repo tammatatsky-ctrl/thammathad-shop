@@ -1,71 +1,124 @@
-# คู่มือ Deploy ขึ้น PythonAnyhere (Workshop 4)
+# คู่มือ Deploy ขึ้น PythonAnywhere
 
 เตรียมโดย: ธรรมธัช รูปไธสง | เว็บหลัง deploy: **https://tammatat.pythonanywhere.com**
 
 ---
 
-## สิ่งที่เตรียมให้แล้ว (ฝั่งโปรเจกต์)
+## สิ่งที่ต้องรู้ก่อน (อ่านให้จบ)
 
-- `requirements.txt` — Django 6.0.6 + Pillow 12.3.0
-- `db.sqlite3` — มีข้อมูล seed (พนักงาน 12 คน, สินค้า 3 รายการ) + บัญชี admin พร้อมใช้
-- `media/` — รูป avatar พนักงานทั้งหมด
-- `staticfiles/` — ผลลัพธ์ collectstatic (ไม่ต้องรันซ้ำบน server)
-- `ALLOWED_HOSTS` มี `tammatat.pythonanywhere.com` อยู่แล้ว
-
-**บัญชี Admin ส่งอาจารย์:** user = `teacher` / password = `Shop2026!`
+1. **ZIP ชื่อ `pa_update.zip`** (ไม่ใช่ `my_django_app_deploy.zip`)
+   ต้องมี `myproject/` อยู่ในนั้นด้วย — ถ้าไม่มี `settings.py` บน server จะเป็นตัวเก่า
+   แล้วเว็บรันด้วย config เก่าโดย**ไม่มีอาการผิดปกติให้เห็น** (เคยพลาดมาแล้ว)
+2. **ZIP ไม่รวม `db.sqlite3`** — ตั้งใจ ฐานข้อมูลบนเซิร์ฟคือข้อมูลจริง
+   ถ้าอัปโหลดทับทิ้ง ออเดอร์/เงิน/ลูกค้าทั้งหมดหาย
+3. **ZIP ไม่รวม `media/`** — รูป avatar พนักงานจึงไม่ติดไปด้วย
+   (หน้าเว็บมีภาพสำรองให้อยู่แล้ว จึงไม่พัง แต่ถ้าต้องการรูปจริงให้อัปโหลด
+   `media/` แยกทีหลัง)
+4. `staticfiles/` **รวมอยู่ใน ZIP แล้ว** จึงไม่ต้องรัน `collectstatic` บน server
+   (รันซ้ำก็ไม่เสียหาย)
 
 ---
 
-## ขั้นตอนบน PythonAnywhere (ทำบนเว็บ ~10 นาที)
+## สิ่งที่ต้องตั้งก่อนแตะเซิร์ฟ (fail-closed)
 
-### 1) อัปโหลด ZIP
-1. Login https://www.pythonanywhere.com → แท็บ **Files**
-2. กด **Upload a file** → อัปโหลด `my_django_app_deploy.zip` ไปที่ `/home/tammatat/`
+`settings.py` ตั้งใจให้ **error ตอน boot** ถ้า env ไม่ครบ ดีกว่ารันแล้วรั่ว
+ตั้งในแท็บ **Web → Environment variables**
 
-### 2) แตกไฟล์ (Bash console)
-เปิดแท็บ **Consoles** → **Bash** แล้วพิมพ์:
+| ตัวแปร | ค่า | ถ้าไม่ตั้ง |
+|---|---|---|
+| `DJANGO_DEBUG` | `0` | หน้า error สีเหลืองชอว์ settings ทั้งหมดรวม API key |
+| `DJANGO_SECRET_KEY` | ค่าสุ่มใหม่ | เว็บไม่ขึ้นเลย (`RuntimeError`) |
+| `HSTS_DAYS` | `1` | ค่าเริ่มต้นคือ 1 อยู่แล้ว (ตั้งเฉพาะกรณีอยากเปลี่ยน) |
+| `EMAIL_URL` | เว้นว่างได้ | ระบบจะไม่ลอกว่าส่งแล้ว แต่ "ลืมรหัสผ่าน" ใช้กับลูกค้าจริงไม่ได้ |
+| `GEMINI_API_KEY` / `SLIPOK_API_KEY` | เว้นว่างได้ | ฟีเจอร์นั้นถูกซ่อน (ตั้งใจ ไม่ใช่ของพัง) |
+
+สร้าง secret key:
 
 ```bash
-cd ~
-unzip -o my_django_app_deploy.zip -d my_django_app_tmp
-mkdir -p ~/my_django_app
-cp -r ~/my_django_app_tmp/my_django_app/* ~/my_django_app/
-rm -rf ~/my_django_app_tmp my_django_app_deploy.zip
-ls ~/my_django_app   # ต้องเห็น manage.py myproject myapp db.sqlite3 ...
+python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
 ```
 
-### 3) สร้าง Virtualenv + ติดตั้ง packages
+> ไม่มี `.env` บน PythonAnywhere (ถูก gitignore และไม่ควรอยู่บน server)
+> ทุกค่ามาจาก Environment variables ในแท็บ Web เท่านั้น
+
+---
+
+## ขั้นตอนบน PythonAnywhere (ครั้งแรก ~15 นาที)
+
+### 1) อัปโหลด ZIP
+
+แท็บ **Files** → **Upload a file** → อัปโหลด `pa_update.zip` ไปที่ `/home/tammatat/`
+
+### 2) แตกไฟล์ (Bash console)
+
+```bash
+cd ~/my_django_app 2>/dev/null || mkdir -p ~/my_django_app
+cd ~/my_django_app
+unzip -o ~/pa_update.zip
+rm ~/pa_update.zip
+ls   # ต้องเห็น manage.py  myproject/  myapp/  staticfiles/
+```
+
+> คำสั่งนี้ทับไฟล์ที่มีอยู่ **แต่ไม่ลบ** ไฟล์ที่ไม่ได้อยู่ใน ZIP
+> ถ้าต้องการเริ่มใหม่สะอาด: `mv ~/my_django_app ~/my_django_app.bak` ก่อนแล้วค่อยแตกใหม่
+> (ทำเฉพาะครั้งแรกเท่านั้น — หลังจากนั้น `db.sqlite3` อยู่ในโฟลเดอร์นั้น)
+
+### 3) Virtualenv + packages
 
 ```bash
 mkvirtualenv django-shop --python=$(ls /usr/bin/python3.* | sort -V | tail -1)
 pip install -r ~/my_django_app/requirements.txt
 ```
 
-> ⚠️ Django 6 ต้องใช้ **Python 3.12+** ถ้า PythonAnywhere ให้เลือกได้ไม่ถึง 3.12
-> ให้แก้ไฟล์ `~/my_django_app/requirements.txt` เป็น `Django==5.1.10` แล้ว pip install ใหม่
-> (โค้ดเขียนแบบรองรับทั้ง 5/6 ใช้ได้เหมือนกัน)
+> ⚠️ Django 6 ต้องใช้ **Python 3.12+**
+>
+> `requirements.txt` มีทั้งไลบรารีเว็บและไลบรารีสร้างเอกสารรายงาน
+> (reportlab / python-docx / rlPyCairo) ซึ่งไม่จำเป็นต่อการรันเว็บ
+> แต่ติดตั้งไว้เลย จะได้รัน `manage.py build_report` บน server ได้
 
-จด path ของ virtualenv ไว้: `/home/tammatat/.virtualenvs/django-shop`
+### 4) เตรียมฐานข้อมูล (**ต้องเรียงตามลำดับ**)
 
-### 4) สร้าง Web App
-แท็บ **Web** → **Add a new web app** → Next (domain `tammatat.pythonanywhere.com`)
-→ **Manual configuration** → เลือก **Python เวอร์ชันเดียวกับ virtualenv**
+```bash
+workon django-shop
+cd ~/my_django_app
+python manage.py migrate            # ครั้งแรก DB ว่าง
+python manage.py seed_catalog      # สินค้า 12 ชิ้น 4 หมวด — ต้องทำก่อนข้อ 3
+python manage.py seed_demo_data    # พนักงาน 13 · ลูกค้า 6 · ออเดอร์ 10 · ปัญหา 4
+```
 
-### 5) ตั้งค่าในแท็บ Web (สำคัญ!)
-| ช่อง | ค่าที่กรอก |
-|---|---|
-| Source code (Working directory) | `/home/tammatat/my_django_app` |
-| Virtualenv | `/home/tammatat/.virtualenvs/django-shop` |
+> `seed_demo_data` จะ**ล้ม** พร้อมบอกว่า "ต้องมีสินค้าอย่างน้อย 12 ชิ้น"
+> ถ้าเห็นข้อความนั้น แปลว่าลืมรันข้อ 2 — ไม่ใช่ระบบพัง
+>
+> ถ้าบน server มีข้อมูลจริงอยู่แล้ว **ไม่ต้องรัน seed** — seed จะไปแตะข้อมูลที่มีอยู่
 
-**Static files mapping** (ส่วนล่างของแท็บ Web):
+### 5) ตรวจความพร้อม (บน server)
+
+```bash
+python manage.py preflight
+```
+
+ต้องขึ้น `ระบบพร้อมใช้งาน` · ถ้าขึ้น FAIL ให้แก้ตามที่มันบอกแล้วรันซ้ำ
+(ตรวจ 10 อย่าง: DEBUG/SECRET_KEY · ALLOWED_HOSTS · CSRF · HSTS · อีเมล ·
+staticfiles ตรงกับ source · migration · ฐานข้อมูล · เขียน log · ไฟล์สำรอง)
+
+### 6) ตั้ง Web App
+
+แท็บ **Web**:
+
+- **Source code**: `/home/tammatat/my_django_app`
+- **Virtualenv**: `/home/tammatat/.virtualenvs/django-shop`
+- **Environment variables**: ใส่ค่าจากหัวข้อ "fail-closed" ข้างบน
+
+**Static files mapping**:
+
 | URL | Directory |
 |---|---|
 | `/static/` | `/home/tammatat/my_django_app/staticfiles` |
 | `/media/` | `/home/tammatat/my_django_app/media` |
 
-### 6) แก้ไฟล์ WSGI
-ในแท็บ Web กดลิงก์ **WSGI configuration file** (`/var/www/tammatat_pythonanywhere_com_wsgi.py`)
-**ลบเนื้อหาเดิมทั้งหมด** แล้ววาง:
+### 7) WSGI
+
+ในแท็บ Web กด **WSGI configuration file** → **ลบเนื้อหาเดิมทั้งหมด** → วาง:
 
 ```python
 import os
@@ -81,92 +134,97 @@ from django.core.wsgi import get_wsgi_application
 application = get_wsgi_application()
 ```
 
-กด **Save** แล้วกดปุ่มสีเขียว **Reload** บนแท็บ Web
+### 8) Reload
 
-### 7) ทดสอบ
-- Login ผู้ดูแล: https://tammatat.pythonanywhere.com/staff/login/
-- ระบบพนักงาน (หลัง Login): https://tammatat.pythonanywhere.com/employees/
-- Admin: https://tammatat.pythonanywhere.com/admin/ (teacher / Shop2026!)
+กดปุ่มเขียว **Reload** → เปิด https://tammatat.pythonanywhere.com
 
 ---
 
-## Checklist ส่งอาจารย์
+## อัปเดตครั้งถัดไป (ไม่ต้องทำข้อ 3/4/6 ซ้ำ)
 
-- [ ] URL เว็บไซต์: `https://tammatat.pythonanywhere.com`
-- [ ] ระบบจัดการพนักงาน: `/employees/`
-- [ ] Backend Admin: `/admin/` → user `teacher` / pass `Shop2026!`
-
----
-
-## ✅ ตรวจก่อน/หลัง deploy: `manage.py preflight`
-
-รันบน **เครื่องตัวเอง** ก่อนอัปโิลด์ ZIP และรันบน **server** หลังแตกไฟล์เสร็จ
+1. สร้าง zip ใหม่บนเครื่องตัวเอง (ดูคำสั่งด้านล่าง)
+2. อัปโหลด `pa_update.zip` → Files
+3. Bash:
 
 ```bash
+cd ~/my_django_app
+unzip -o ~/pa_update.zip && rm ~/pa_update.zip
+workon django-shop
+python manage.py migrate
+python manage.py collectstatic --noinput   # ถ้ามีไฟล์ static ใหม่
 python manage.py preflight
 ```
 
-ผ่านหมดจะขึ้น `ระบบพร้อมใช้งาน` · ถ้าขึ้น `ยัง deploy ไม่ควร` ให้แก้ตามข้อความที่ระบุ
-(ระบบจะบอกคำสั่งที่ต้องรันให้ในแต่ละบรรทัด) · exit code 1 = มี FAIL
+4. แท็บ Web → **Reload**
 
-ตรวจ 10 อย่าง: DEBUG/SECRET_KEY · ALLOWED_HOSTS · CSRF_TRUSTED_ORIGINS ·
-HSTS · อีเมล · staticfiles ตรงกับ source · migration · ฐานข้อมูล ·
-เขียนไฟล์ log ได้ · ไฟล์สำรอง
+> ⚠️ **`staticfiles/` ใน ZIP จะเก่ากว่า `myapp/static/` ถ้าไม่รัน `collectstatic`
+> บนเครื่องก่อนสร้าง zip** ผู้ใช้จะเห็น CSS/JS เก่าโดยไม่มีอาการผิดปกติ
+> `preflight` จะเตือนเรื่องนี้ แต่บน server ตรวจจาก staticfiles ซึ่งเป็นตัวที่สเกรฟชี้อยู่
+> จึงต้องรัน `collectstatic` บนเครื่องตัวเองก่อนเสมอ
 
----
+### สร้าง ZIP บนเครื่องตัวเอง (PowerShell)
 
-## แก้ไขโค้ดภายหลัง (Update)
-
-แก้ไฟล์บนแท็บ Files ของ PythonAnywhere โดยตรง แล้วกด **Reload** ในแท็บ Web
-ถ้าแก้ models อย่าลืมใน Bash console:
-
-```bash
-workon django-shop
-cd ~/my_django_app
-python manage.py makemigrations && python manage.py migrate
+```powershell
+cd D:\django_project\my_django_app
+.venv\Scripts\python.exe manage.py collectstatic --noinput
+tar.exe -a -c -f pa_update.zip --exclude=__pycache__ --exclude=.venv --exclude=db.sqlite3 --exclude=pa_update.zip --exclude=media --exclude=test --exclude=backups --exclude=logs myapp myproject staticfiles requirements.txt DEPLOY.md SUBMISSION.md AGENTS.md DEMO.md
+tar.exe -tf pa_update.zip | Select-String 'myproject/settings.py'   # ต้องเจอ
 ```
 
 ---
 
-## ⚠️ Environment variables (ต้องตั้ง — ไม่งั้นเว็บจะไม่ขึ้น)
+## บัญชีทดสอบ
 
-`settings.py` เป็น **fail-closed**: production ที่ตั้ง env ไม่ครบจะ **error ตอน boot**
-โดยเจตนา (ดีกว่ารันแล้วรั่ว) ตั้งในแท็บ **Web → Environment variables**:
-
-| ตัวแปร | ค่า | หมายเหตุ |
+| บัญชี | รหัสผ่าน | หมายเหตุ |
 |---|---|---|
-| `DJANGO_DEBUG` | `0` | ถ้าเป็นอย่างอื่น = หน้า error สีเหลืองโชว์ settings ทั้งหมดรวม API keys |
-| `DJANGO_SECRET_KEY` | ค่าสุ่ม | สร้างด้วย `python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"` |
-| `GEMINI_API_KEY` | key ของ production | ว่างได้ = ฟีเจอร์ช่วยเขียนคำอธิบายสินค้าจะถูกซ่อน |
-| `SLIPOK_API_KEY` | key ของ production | ว่างได้ = ฟีเจอร์ OCR สลิปจะถูกซ่อน |
+| `teacher` | `Shop2026!` | superuser — เข้าได้ทุกทาง · **เปลี่ยนก่อนส่งจริง** |
+| `ohm` | ตั้งเอง | superuser · บัญชีตัวอย่างของเจ้าของระบบ |
+| `wichai.s` … `anon.d` | `Demo2026!` | ลูกค้าตัวอย่าง (มีออเดอร์/ที่อยู่/ปัญหาครบ) |
 
-> ⚠️ ไม่มี `.env` บน PythonAnywhere (ไฟล์นั้นถูก gitignore และไม่ควรอยู่บน server)
-> ค่าทั้งหมดต้องมาจาก Environment variables ในแท็บ Web เท่านั้น
+> ถ้าล็อกอินบัญชีตัวอย่างไม่ได้ แปลว่าเคยเปลี่ยนรหัสไปแล้ว
+> (`seed_demo_data` ตั้งรหัสเฉพาะบัญชีที่ยังไม่มีรหัส โดยตั้งใจไม่ทับของเดิม)
+>
+> แก้ด้วย `python manage.py reset_demo_password wichai.s pornchai.k ...`
+> — คำสั่งนี้**ต้องระบุชื่อทีละราย** ห้ามกวาดทั้งระบบ
+> (การทับรหัสบัญชีจริงที่ชื่อคล้ายคืออุบัติเหตุที่แย่กว่าบั๊กที่มันแก้)
 
 ---
 
 ## สำรองฐานข้อมูล (ทำทันทีหลัง setup เสร็จ)
 
-ระบบใช้ SQLite ไฟล์เดียว = ข้อมูลออเดอร์/ยอดเงิน/ลูกค้าทั้งหมดอยู่ไฟล์เดียว
-ถ้าไฟล์เสีย = กู้ไม่ได้ ตั้ง cron สำรองทุกคืน:
+SQLite ไฟล์เดียว = ข้อมูลออเดอร์/ยอดเงิน/ลูกค้าทั้งหมดอยู่ไฟล์เดียว ถ้าเสียกู้ไม่ได้
 
 ```bash
-workon django-shop
-cd ~/my_django_app
-python manage.py backup_db --verify     # ทดสอบว่ารันได้ก่อน
+workon django-shop && cd ~/my_django_app
+python manage.py backup_db --verify     # ทดสอบก่อน
 ```
 
-แล้วตั้ง cron ในแท็บ **Tasks** (หรือ cron ของ PythonAnywhere):
+ตั้ง cron ในแท็บ **Tasks**:
 
 ```
 0 2 * * *   /home/tammatat/.virtualenvs/django-shop/bin/python /home/tammatat/my_django_app/manage.py backup_db >> /home/tammatat/my_django_app/backups/cron.log 2>&1
 ```
 
-**กู้คืน** เมื่อเกิดปัญหา:
+**กู้คืน**:
 
 ```bash
 cd ~/my_django_app
-cp backups/db-YYYYmmdd-HHMMSS.sqlite3 db.sqlite3    # ไฟล์เดิมทับทิ้งได้เลย
+cp db.sqlite3 db.broken.sqlite3
+cp backups/db-YYYYmmdd-HHMMSS.sqlite3 db.sqlite3
 ```
 
 > ไฟล์สำรองเก็บที่ `~/my_django_app/backups/` เก็บล่าสุด 7 ไฟล์ (ลบเก่าอัตโนมัติ)
+
+---
+
+## เอกสารคู่มือที่ส่งอาจารย์
+
+| ไฟล์ | อยู่ที่ไหน |
+|---|---|
+| `รายงาน-THAMMATHAD-SHOP.pdf` / `.docx` | `docs/รายงาน/` — สร้างด้วย `python manage.py build_report` |
+| `SUBMISSION.md` | คู่มือสำหรับผู้ตรวจงาน |
+| `DEMO.md` | สคริปต์ไล่โชโชร์ทุกฟีเจอร์พร้อมคลิกเป๊ะตัว |
+
+> `docs/รายงาน/` ไม่ได้อยู่ใน ZIP (สร้างบนเครื่องแล้วส่งแยกเป็นไฟล์ PDF/Word)
+> ถ้าต้องการให้อาจารย์ได้เอกสารจากเว็บ ให้รัน `build_report` บน server
+> แล้วอัปโหลดไฟล์ขึ้น Files เพื่อดาวน์โหลด
