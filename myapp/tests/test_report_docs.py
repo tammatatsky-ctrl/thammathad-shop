@@ -200,6 +200,82 @@ class ReportTextLayoutTest(TestCase):
         self.assertEqual(esc('a & b < c > d'), 'a &amp; b &lt; c &gt; d')
 
 
+class RequirementsSplitTest(TestCase):
+    """`requirements.txt` ต้องติดตั้งได้บน PythonAnywhere บัญชีฟรีเสมอ
+
+    ทำไมต้องมี
+        ครั้งหนึ่ง `pycairo` (ต้องคอมไพล์ต่อกับ C library ชื่อ `cairo`) อยู่ใน
+        `requirements.txt` ทำให้ `pip install` ล้มกลางทางบน PythonAnywhere
+        และเพราะ pip หยุดที่แพ็กเกจที่ล้มก่อน **Django ก็ไม่ถูกติดตั้งตามไปด้วย**
+        เหลือแต่เว็บที่รันไม่ขึ้น โดยข้อความ error ไม่ได้บอกว่าเพราะอะไร
+
+        ไลบรารีที่คอมไพล์ C library ทำให้ทั้งระบบล้ม แต่ "แก้ทีเดียวจบ" ไม่ได้
+        เพราะคนไม่ได้เพิ่มอะไรเข้ามาเอง → ต้องมีเทสต์คุมไว้
+    """
+
+    #: ไลบรารีที่ต้องคอมไพล์ C library — ติดตั้งไม่ผ่านบน PA บัญชีฟรี
+    #: (ชื่อตามที่เขียนใน requirements ไม่ใช่ชื่อโมดูลตอน import)
+    NATIVE_PACKAGES = ('pycairo', 'rlpycairo')
+
+    @staticmethod
+    def _req(name: str) -> list[str]:
+        from pathlib import Path
+
+        import myapp
+
+        path = Path(myapp.__file__).parent.parent / name
+        if not path.exists():
+            raise AssertionError(f'ไม่พบไฟล์ {name}')
+        lines = []
+        for raw in path.read_text(encoding='utf-8').splitlines():
+            line = raw.split('#')[0].strip()
+            if line:
+                lines.append(line.lower())
+        return lines
+
+    def test_requirements_txt_has_no_native_packages(self):
+        for line in self._req('requirements.txt'):
+            for bad in self.NATIVE_PACKAGES:
+                self.assertNotIn(
+                    bad, line,
+                    f'requirements.txt ต้องไม่มี {bad} — pip จะล้มกลางทาง '
+                    'และ Django จะไม่ถูกติดตั้งตามไปด้วย')
+
+    def test_requirements_txt_still_has_the_web_stack(self):
+        """การแยกไฟล์ต้องไม่ทำให้ไลบรารีเว็บหายไป (แยกผิดจนเว็บรันไม่ได้)"""
+        text = ' '.join(self._req('requirements.txt'))
+        for needed in ('django', 'djangorestframework', 'pillow',
+                       'drf-spectacular'):
+            self.assertIn(needed, text, f'requirements.txt ต้องมี {needed}')
+
+    def test_docs_requirements_includes_the_web_stack(self):
+        """`requirements-docs.txt` ต้อง `-r requirements.txt` เพื่อไม่ให้พลาด"""
+        self.assertTrue(
+            any(line.startswith('-r ') and 'requirements.txt' in line
+                for line in self._req('requirements-docs.txt')),
+            'requirements-docs.txt ต้องอ้าง -r requirements.txt')
+
+    def test_docs_requirements_keeps_the_native_packages(self):
+        """ถ้าย้ายออกแล้วลืมใส่กลับ คำสั่ง build_report จะใช้ไม่ได้"""
+        text = ' '.join(self._req('requirements-docs.txt'))
+        for needed in ('reportlab', 'python-docx', *self.NATIVE_PACKAGES):
+            self.assertIn(needed, text,
+                          f'requirements-docs.txt ต้องมี {needed}')
+
+    def test_build_report_names_the_right_file_when_deps_missing(self):
+        """ข้อความ error ต้องชี้ไปที่ไฟล์ที่ใช้แก้จริง
+
+        ถ้าชี้ผิดไฟล์ คนจะไปแก้ requirements.txt (ที่ติดตั้งไม่ได้บน PA)
+        แล้วเจอปัญหาเดิมซ้ำอีก
+        """
+        import inspect
+
+        from myapp.management.commands.build_report import Command
+
+        source = inspect.getsource(Command._check_dependencies)
+        self.assertIn('requirements-docs.txt', source)
+
+
 class ReportBuildTest(TestCase):
     """คำสั่ง build_report ต้องสร้างไฟล์ได้ครบและอ่านออก"""
 

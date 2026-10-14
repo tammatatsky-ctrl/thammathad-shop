@@ -72,9 +72,18 @@ pip install -r ~/my_django_app/requirements.txt
 
 > ⚠️ Django 6 ต้องใช้ **Python 3.12+**
 >
-> `requirements.txt` มีทั้งไลบรารีเว็บและไลบรารีสร้างเอกสารรายงาน
-> (reportlab / python-docx / rlPyCairo) ซึ่งไม่จำเป็นต่อการรันเว็บ
-> แต่ติดตั้งไว้เลย จะได้รัน `manage.py build_report` บน server ได้
+> **อย่าติดตั้ง `requirements-docs.txt` บน server** — ไฟล์นั้นมี `pycairo`
+> ซึ่งต้องคอมไพล์ต่อกับ C library ชื่อ `cairo` ที่ PythonAnywhere บัญชีฟรีไม่มี
+> ถ้าติดตั้งแล้วล้ม **Django จะไม่ถูกติดตั้งตามไปด้วย** เพราะ pip หยุดที่แพ็กเกจ
+> ที่ล้มก่อน — เหลือแต่เว็บที่รันไม่ขึ้น โดยข้อความ error ไม่ได้บอกว่า
+> เพราะติดตั้งอะไร เป็นการเสียเวลาไปตามหาสาเหตุผิดทาง
+>
+> `requirements-docs.txt` (reportlab / python-docx / pycairo / rlPyCairo)
+> ต้องการเฉพาะตอนสร้างเอกสารรายงานบนเครื่องนักพัฒนาเท่านั้น
+> ถ้าอยากรัน `build_report` บน server ให้ติดตั้งแยกทีหลัง:
+> `pip install reportlab python-docx` (สองตัวนี้ล้วน wheel สำเร็จรูป ติดตั้งได้)
+> — แต่ `build_report` จะยังบอกว่าขาด `rlPyCairo` (ใช้ฝังภาพลง Word)
+> ส่วน **PDF สร้างได้ปกติ** เพราะเป็น vector ไม่ต้องใช้ PNG
 
 ### 4) เตรียมฐานข้อมูล (**ต้องเรียงตามลำดับ**)
 

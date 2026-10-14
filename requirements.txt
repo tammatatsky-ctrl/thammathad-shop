@@ -1,3 +1,14 @@
+# ไลบรารีที่ต้องมีเพื่อ **รันเว็บ**
+#
+# ⚠️ ไฟล์นี้ต้องติดตั้งได้บน PythonAnywhere ทุกบัญชี (รวมบัญชีฟรี)
+# จึงห้ามใส่ไลบรารีที่ต้องคอมไพล์ C library เด็ดขาด
+# เช่น pycairo / rlPyCairo ซึ่งต้องมี `libcairo2-dev` — ถ้าใส่มา
+# `pip install -r requirements.txt` จะล้มกลางทาง แล้ว **Django ก็ไม่ถูกติดตั้ง**
+# เหลือแต่เว็บที่รันไม่ขึ้น โดยไม่มีอาการบอกว่าเป็นเพราะไลบรารีตัวไหน
+#
+# ต้องการสร้างเอกสารรายงาน (PDF/Word) → ติดตั้งเพิ่ม:
+#     pip install -r requirements-docs.txt
+
 Django==6.0.6
 djangorestframework==3.18.0
 drf-spectacular==0.30.0
@@ -5,9 +16,3 @@ Pillow==12.3.0
 promptpay-qr==0.1.2
 python-dotenv==1.2.2
 qrcode==8.2
-
-# สร้างเอกสารส่งอาจารย์ (`manage.py build_report`) — ไม่จำเป็นต่อการรันเว็บ
-python-docx==1.2.0        # เอกสาร Word (.docx)
-reportlab==5.0.1          # เอกสาร PDF + วาดไดอะแกรม
-pycairo==1.29.2           # ต้นแบบของ rlPyCairo (แปลงกราฟเป็น PNG)
-rlPyCairo==0.4.0          # backend แปลงกราฟเป็น PNG

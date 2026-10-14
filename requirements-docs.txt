@@ -1,0 +1,23 @@
+# ไลบรารีสำหรับสร้างเอกสารรายงานส่งอาจารย์ — `manage.py build_report`
+#
+# ⚠️ ติดตั้งบนเครื่องนักพัฒนาเท่านั้น อย่าติดตั้งบน PythonAnywhere
+#
+#   `pycairo` ต้องคอมไพล์ต่อกับ C library ชื่อ `cairo` (libcairo2-dev)
+#   ซึ่ง PythonAnywhere บัญชีฟรีไม่มี → ติดตั้งไม่ผ่าน
+#   และถ้ามันอยู่ใน requirements.txt จะทำให้ **ทั้งชุดติดตั้งล้ม**
+#   รวมถึง Django ด้วย (pip หยุดที่แพ็กเกจที่ล้มก่อน) — คนจะไปหาปัญหาที่ผิดที่
+#
+# วิธีติดตั้ง (บนเครื่องตัวเอง):
+#     pip install -r requirements-docs.txt
+#
+# ถ้าติดตั้งไม่ผ่านเพราะไม่มี cairo (Linux/macOS):
+#     sudo apt install libcairo2-dev          # Debian/Ubuntu
+#     brew install cairo                       # macOS
+#     บน Windows ไม่ต้องทำอะไร — มี wheel สำเร็จรูป
+
+-r requirements.txt
+
+python-docx==1.2.0        # เอกสาร Word (.docx)
+reportlab==5.0.1          # เอกสาร PDF + วาดไดอะแกรม
+pycairo==1.29.2           # ต้นแบบของ rlPyCairo (แปลงกราฟเป็น PNG)
+rlPyCairo==0.4.0          # backend แปลงกราฟเป็น PNG

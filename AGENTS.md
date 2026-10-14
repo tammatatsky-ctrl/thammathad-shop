@@ -560,6 +560,10 @@ python manage.py backup_db --keep 7    # ลบไฟล์เก่าเกิ
 
 - `/api/docs/` + `/api/schema/` = **IsAdminUser** (เคย AllowAny = เปิดโครงสร้าง API ทั้งระบบให้คนนอกดู)
 - **Secrets via env vars**: `DJANGO_SECRET_KEY`, `GEMINI_API_KEY`, `SLIPOK_API_KEY` — loaded via `os.environ.get()` + python-dotenv `.env` file.
+- **requirements แยกสองไฟล์ (ห้ามรวม)**: `requirements.txt` = เว็บเท่านั้น ติดตั้งได้ทุกที่รวม PythonAnywhere บัญชีฟรี · `requirements-docs.txt` = ไลบรารีสร้างเอกสารรายงาน (`-r requirements.txt` + reportlab/python-docx/pycairo/rlPyCairo) ติดตั้งบนเครื่องนักพัฒนาเท่านั้น
+  - ⚠️ **`pycairo` ต้องคอมไพล์ต่อกับ C library ชื่อ `cairo`** — ถ้าเอาไปไว้ใน `requirements.txt` แล้ว `pip install` จะล้มกลางทาง **ทำให้ Django ไม่ถูกติดตั้งตามไปด้วย** (pip หยุดที่แพ็กเกจที่ล้มก่อน) เหลือแต่เว็บที่รันไม่ขึ้น โดย error ไม่ได้บอกว่าเพราะไลบรารีตัวไหน → คนจะไปหาปัญหาที่ผิดทาง (เคยเกิดจริงตอน deploy)
+  - `build_report` ต้องเช็ค dependency เองก่อนลงมือ (`_check_dependencies`) และบอกคำสั่งติดตั้งที่ถูก แทนที่จะปล่อยให้เจอ `ModuleNotFoundError` ที่บอกไม่ได้ว่าต้องทำอะไร
+  - `myapp.docs.diagrams` / `docx_builder` **ห้าม import ระดับโมดูลในไฟล์ที่ Django โหลดตอนแตกลิสต์คำสั่ง** — ไม่งั้นทุกคำสั่งอื่นจะพังตามเมื่อยังไม่ได้ติดตั้งไลบรารีชุดนี้
 - **Production hardening** in settings.py: `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE`, `SECURE_HSTS_SECONDS` — activates when `DEBUG=False`.
 - **Cart/logout POST-only**: GET requests to `/cart/add/`, `/cart/remove/`, `/cart/update/`, `/staff/logout/`, `/account/logout/` return 405 Method Not Allowed.
 - **Admin credentials**: user `teacher` / pass `Shop2026!` (Django admin at `/admin/`).

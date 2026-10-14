@@ -19,7 +19,12 @@ from pathlib import Path
 from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
-from myapp.docs import content, diagrams, facts
+from myapp.docs import content, facts
+
+# หมายเหตุ: `myapp.docs.diagrams` (reportlab) / `docx_builder` (python-docx)
+# **ไม่ได้** import ที่ระดับโมดูล เพราะเป็นไลบรารีที่ติดตั้งแยก
+# (requirements-docs.txt) และถ้า import ที่บน ผู้ที่ยังไม่ติดตั้งจะเจอ
+# ModuleNotFoundError ตอน Django แค่โหลดคำสั่ง ซึ่งทำให้ทุกคำสั่งอื่นพังด้วย
 
 
 #: ข้อมูลส่วนปก — เว้นว่างไว้ให้ผู้เรียนกรอก
@@ -73,6 +78,13 @@ class Command(BaseCommand):
             help='เปิดไฟล์ที่สร้างให้ทันทีหลังเสร็จ (Windows เท่านั้น)')
 
     def handle(self, *args, **options):
+        self._check_dependencies()
+
+        # นำเข้าหลังตรวจ dependency — `myapp.docs.diagrams` import `reportlab`
+        # ระดับโมดูล ถ้านำเข้าที่ไฟล์บน จะไม่เห็นข้อความแนะนำของ
+        # `_check_dependencies()` แต่จะเห็นแค่ ModuleNotFoundError
+        from myapp.docs import diagrams
+
         # รับทั้งพาธสัมพัทธ์ (สร้างใต้โปรเจกต์) และพาธสมบูรณ์
         # — การบังคับต่อ BASE_DIR เสมอ ทำให้เทสต์เขียนไฟล์ทิ้งไว้
         # ในโฟลเดอร์โปรเจกต์แทนโฟลเดอร์ชั่วคราว
@@ -164,6 +176,36 @@ class Command(BaseCommand):
                 except (AttributeError, OSError) as exc:
                     self.stdout.write(
                         self.style.ERROR(f'เปิดไฟล์ไม่ได้: {exc}'))
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _check_dependencies():
+        """ตรวจไลบรารีสร้างเอกสารก่อนลงมือ แล้วบอกวิธีติดตั้งที่ถูก
+
+        ไลบรารีชุดนี้**ไม่อยู่ใน requirements.txt** โดยตั้งใจ เพราะ `pycairo`
+        ต้องคอมไพล์ต่อกับ C library ชื่อ `cairo` ซึ่ง PythonAnywhere บัญชีฟรีไม่มี
+        (ถ้าใส่ใน requirements.txt ตอน deploy จะไปติดตั้ง Django ไม่ได้ด้วย)
+
+        คนที่รันคำสั่งนี้บน server จะเจอ `ModuleNotFoundError` ซึ่งบอกไม่ได้
+        ว่าต้องไปติดตั้งอะไร → ต้องบอกให้ชัดตรง ๆ
+        """
+        missing = []
+        for module, package in (('reportlab', 'reportlab'),
+                                ('docx', 'python-docx'),
+                                ('rlPyCairo', 'rlPyCairo')):
+            try:
+                __import__(module)
+            except ImportError:
+                missing.append(package)
+
+        if missing:
+            raise CommandError(
+                'ยังติดตั้งไลบรารีสำหรับสร้างเอกสารไม่ครบ: '
+                + ', '.join(missing)
+                + '\n\n  ติดตั้งด้วย:  pip install -r requirements-docs.txt'
+                + '\n  (แยกจาก requirements.txt โดยตั้งใจ เพราะ pycairo'
+                  ' ต้องคอมไพล์ C library ซึ่ง PythonAnywhere บัญชีฟรีไม่มี —'
+                  ' ถ้ารวมไว้ จะทำให้ตอน deploy ติดตั้ง Django ไม่ได้ด้วย)')
 
     # ------------------------------------------------------------------
     def _appendix_blocks(self, models, services, routes, loc, tests) -> list:
