@@ -10,9 +10,9 @@
 {% endcomment %}
 <td class="fw-bold font-mono" data-label="#">{{ i.pk }}</td>
 <td class="text-start" data-label="ผู้แจ้ง">
-    {{ i.name }}
-    <small class="d-block text-muted-apple font-mono">{{ i.phone }}</small>
-    <small class="d-block text-muted-apple">{{ i.created_at|date:"d/m H:i" }}</small>
+    <span class="issue-reporter-name">{{ i.name }}</span>
+    <small class="d-block text-muted-apple font-mono text-nowrap">{{ i.phone }}</small>
+    <small class="d-block text-muted-apple text-nowrap">{{ i.created_at|date:"d/m H:i" }}</small>
 </td>
 <td class="text-start" data-label="ปัญหา">
     <strong>{{ i.subject }}</strong>

@@ -115,7 +115,9 @@ python manage.py collectstatic       # Collect to staticfiles/
 - `DEFAULT_PERMISSION_CLASSES = IsAuthenticated` (fail-safe ใน settings.py) — view ใหม่ที่ลืมระบุ permission จะถูกล็อกก่อน; view สาธารณะ (products/categories/api root) ระบุ `AllowAny` เองอยู่แล้ว
 - `/api/orders/` prefetch `items__product` — กัน N+1 จาก `product_name` (`source='product.name'`); วัดได้ 4 queries คงที่ต่อหน้า (COUNT + orders + items + products)
 - เทสต์ API: `myapp/tests/test_api.py` + `test_ratelimit.py` + `test_ajax_convention.py` + `test_external_apis.py` — ระวัง gotcha ของ Django 6.0 test client (Bug Recipe #10)
-- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron) · `seed_catalog.py` (ชุดสินค้าตัวอย่าง 12 ชิ้น/4 หมวด — upsert ตาม id รันซ้ำได้ ไม่ลบอะไรทิ้ง) · `seed_demo_issues.py` (การแจ้งปัญหาตัวอย่าง 3 เรื่อง — `get_or_create` ตาม (order, subject) รันซ้ำได้; ฟีเจอร์ที่คิวว่างพิสูจน์ตัวเองไม่ได้ อาจารย์จะสรุปว่าระบบไม่ทำงาน)
+- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron) · `seed_catalog.py` (สินค้าตัวอย่าง 12 ชิ้น/4 หมวด — upsert ตาม id รันซ้ำได้ ไม่ลบอะไรทิ้ง) · `seed_demo_data.py` (**ล้างข้อมูลทดสอบ → ใส่ข้อมูลตัวอย่างจริง**: พนักงาน 13 · ลูกค้า 6 · ออเดอร์ 10 · แจ้งปัญหา 4; มี `--dry-run` / `--keep-junk`)
+  - **กฎการลบข้อมูลทดสอบ**: ระบุชื่อที่จะลบเป็นรายการชัดเจนเสมอ ห้ามใช้ regex กวาด (เช่น `username__contains='probe'`) — ถ้าภายหลังมีบัญชีคนจริงที่ชื่อคล้ายจะถูกลบเงียบ ๆ
+  - **`auto_now_add` ทับค่าที่ส่งเข้า `create()` เสมอ** — การย้อน `created_at` ต้องทำด้วย `.filter(pk=...).update(created_at=...)` หลังสร้าง ถ้าใช้เป็นคีย์ idempotency ด้วย (ให้ lookup หาเจอรอบถัดไป) การส่งเข้า `create()` จะได้ผลคนละเรื่องกับที่อ่านออกมา
 
 ### External Integrations (services.py)
 
@@ -364,6 +366,33 @@ python manage.py test myapp
   เปลี่ยน `STATUS_CHOICES` แล้วต้องไล่ดูทุกที่ที่เขียน `{% if status == %}` แยกเอง
   เพราะเทมเพลตหลายหน้าแยกกันเขียนป้ายเอง (ซึ่งก็คือแหล่งที่เกิดบั๊กซ้ำ)
 - **กันไว้แล้ว**: `test_order_issue.AccountOrderHistoryTest.test_status_label_is_not_misleading`
+
+### 15. `auto_now_add` ทับค่าที่ส่งเข้า `create()` — ข้อมูล seed วันที่ผิด + รันซ้ำแล้วซ้ำ
+- **สาเหตุ**: `Order.created_at` เป็น `auto_now_add` → Django **ทับค่าที่ส่งเข้า**
+  เขียน `Order.objects.create(..., created_at=วันที่ที่อยากได้)` แล้วได้วันวันนี้เสมอ
+- **อาการที่เห็น**: ออเดอร์ตัวอย่าง 10 ใบมีวันที่เดียวกันหมด (วันที่รันคำสั่ง)
+  → กราฟรายงานเป็นแท่งเดียว ซึ่งพิสูจน์ "รายงานแบ่งตามเดือน" ไม่ได้เลย
+- **ซ้ำซ้อน**: ถ้าใช้ `created_at` เป็นคีย์หา idempotency
+  (`Order.objects.filter(created_at=ordered).first()`) การที่ค่าไม่ถูกตั้ง
+  ก็แปลว่า**รอบถัดไปหาไม่เจอ → สร้างซ้ำอีก 10 ใบ** ทุกครั้งที่รันคำสั่ง
+- **กฎ**:
+  1. ย้อนเวลาด้วย `.filter(pk=obj.pk).update(created_at=...)` **หลัง** `create()`
+  2. ถ้าใช้เป็นคีย์ idempotency ต้อง `refresh_from_db()` หลัง update
+  3. บันทึกข้อความกันเองใน docstring เพราะรูปแบบเรียก `create()` ที่ "ดูถูก"
+     แต่ไม่มีผลจริง คือรูปแบบที่คนจะเขียนซ้ำ
+- **กันไว้แล้ว**: `test_demo_data_seed.SeedIsIdempotentTest.test_running_twice_changes_nothing`
+  + `SeedDataIsCoherentTest.test_orders_are_spread_over_several_months`
+
+### 16. อย่าเดาว่าข้อมูลของใครเป็นของใคร — ระบุความสัมพันธ์ในสเปกให้ตรง
+- **สาเหตุ**: `seed_demo_data` เดิมเลือกออเดอร์ของเรื่องแจ้งปัญหาด้วยการเดาว่า
+  "ออเดอร์ล่าสุดของลูกค้าคนนี้" → เรื่อง *"ส่งคีย์บอร์ดผิดรุ่น"* ไปติดกับออเดอร์
+  **พาวเวอร์แบงก์** เพราะลูกค้าคนนั้นสั่งหลายใบ
+- **อาการ**: ข้อมูลทุกอย่างถูกต้องแยกส่วน แต่**ความสัมพันธ์ผิด** ซึ่งแย่กว่า
+  ไม่มีข้อมูล เพราะอาจารย์เปิดหน้าออเดอร์แล้วเห็นความไม่สอดคล้องทันที
+- **กฎ**: ข้อมูลตัวอย่างที่มีความสัมพันธ์กัน (เรื่อง→ออเดอร์, ออเดอร์→ลูกค้า,
+  บิล→ยอด) ให้**ระบุคีย์ตรง ๆ ในสเปก** อย่าให้โค้ดเดา แม้จะดูสุภาพกว่า
+  และเพิ่มเทสต์ที่ยืนยันความสัมพันธ์ (`test_issue_belongs_to_the_customers_own_order`)
+- **กันไว้แล้ว**: `test_demo_data_seed.SeedDataIsCoherentTest` ทั้งคลาส
 
 ## Conventions
 

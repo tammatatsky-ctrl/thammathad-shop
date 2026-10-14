@@ -23,8 +23,13 @@
 |---|---|---|
 | หน้าร้าน | `https://tammatat.pythonanywhere.com` | — |
 | หลังบ้าน | `/staff/login/` | `teacher` / `Shop2026!` |
+| บัญชีลูกค้า (มีออเดอร์อยู่แล้ว) | `/account/login/` | `wichai.s` / `Demo2026!` |
 | Django Admin | `/admin/` | `teacher` / `Shop2026!` |
 | API เอกสาร | `/api/docs/` | ต้องเป็น staff |
+
+> ข้อมูลในระบบเป็น **ข้อมูลตัวอย่างที่สร้างขึ้น** (พนักงาน 13 คน · ลูกค้า 6 คน ·
+> ออเดอร์ 10 ใบ · การแจ้งปัญหา 4 เรื่อง) ครอบคลุมทุกสถานะและทุกช่องทางชำระ
+> สร้างด้วย `python manage.py seed_demo_data` (รันซ้ำได้ ไม่ทำข้อมูลเสีย)
 
 ---
 
@@ -63,7 +68,7 @@
 > - แจ้งได้โดยไม่มีออเดอร์ก็ได้ (หน้า `/contact/`) แต่ต้องใส่เบอร์ที่ติดต่อได้
 > - บันทึก audit ทุกครั้งที่แจ้งและทุกครั้งที่เปลี่ยนสถานะ
 
-ข้อมูลตัวอย่าง: `python manage.py seed_demo_issues` (3 เรื่อง — 2 ค้าง + 1 แก้แล้วให้ดูผล)
+ข้อมูลตัวอย่าง: `python manage.py seed_demo_data` (4 เรื่อง — 2 ค้าง · 1 กำลังดำเนินการ · 1 แก้แล้วพร้อมผล)
 
 ### 2.4 สคริปต์เดโมที่ไม่ต้องโอนเงินจริง (ทำตามนี้เพื่อโชว์วงจรชีวิตออเดอร์ครบ)
 
@@ -200,7 +205,7 @@ myapp/models.py         9 โมเดล + QuerySet/Manager ของแต่�
 myapp/services.py       15 service — business logic อยู่ที่นี่ ไม่ใช่ใน view
 myapp/views.py          CBV ทั้งหมด + mixin ควบคุมสิทธิ์
 myapp/api.py            REST API (DRF)
-myapp/management/       คำสั่ง: preflight · backup_db · setup_roles · seed_catalog · seed_demo_issues
+myapp/management/       คำสั่ง: preflight · backup_db · setup_roles · seed_catalog · seed_demo_data
 myapp/tests/            เทสต์อัตโนมัติทั้งหมด (ดูจำนวนจากผล `manage.py test`)
 ```
 
