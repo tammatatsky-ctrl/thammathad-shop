@@ -22,24 +22,54 @@
 ## สิ่งที่ต้องตั้งก่อนแตะเซิร์ฟ (fail-closed)
 
 `settings.py` ตั้งใจให้ **error ตอน boot** ถ้า env ไม่ครบ ดีกว่ารันแล้วรั่ว
-ตั้งในแท็บ **Web → Environment variables**
+
+> ⚠️ **อ่านข้อนี้ก่อน** — เป็นกับดักที่ทำให้คนเสียเวลามากที่สุดตอน deploy
+>
+> **Environment variables ที่ตั้งในแท็บ Web มีผลกับเฉพาะ process ของเว็บ**
+> คำสั่ง `manage.py` ที่รันใน **Bash console จะไม่เห็นค่าเหล่านั้น**
+> ผลคือเว็บขึ้นปกติ แต่ `python manage.py migrate` / `seed_catalog` /
+> `seed_demo_data` / `preflight` จะ error ทั้งหมดว่า
+> `ต้องตั้ง env DJANGO_SECRET_KEY` — ทั้งที่เพิ่งตั้งไปแล้วในแท็บ Web
+>
+> วิธีที่ถูกคือใช้ **ไฟล์ `.env`** ซึ่ง `settings.py` เรียก `load_dotenv()` อยู่แล้ว
+> จึงมีผลกับทั้งเว็บและ console ใช้ค่าเดียวกันได้ ไม่มีทางหลุดแยกกัน
+
+### สร้าง `.env` (ทำครั้งเดียว)
+
+```bash
+cd ~/my_django_app
+python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
+# คัดลอกค่าที่ได้ไปใส่ในขั้นถัดไป
+
+cat > .env <<'EOF'
+DJANGO_DEBUG=0
+DJANGO_SECRET_KEY=<วางค่าที่ได้>
+EMAIL_URL=
+EOF
+
+chmod 600 .env     # เฉพาะเจ้าของอ่านได้
+```
+
+ตรวจว่าได้ผล:
+```bash
+python manage.py check          # ต้องขึ้น System check identified no issues
+```
+
+> `.env` ไม่ถูกรวมใน `pa_update.zip` และอยู่ใน `.gitignore` ของโปรเจกต์
+> จึงไม่หลุดไปกับ git ทั้งที่ยังตั้งค่าได้ตามต้องการ
+
+### ตัวแปรที่ตั้งได้
 
 | ตัวแปร | ค่า | ถ้าไม่ตั้ง |
 |---|---|---|
 | `DJANGO_DEBUG` | `0` | หน้า error สีเหลืองชอว์ settings ทั้งหมดรวม API key |
-| `DJANGO_SECRET_KEY` | ค่าสุ่มใหม่ | เว็บไม่ขึ้นเลย (`RuntimeError`) |
-| `HSTS_DAYS` | `1` | ค่าเริ่มต้นคือ 1 อยู่แล้ว (ตั้งเฉพาะกรณีอยากเปลี่ยน) |
+| `DJANGO_SECRET_KEY` | ค่าสุ่มใหม่ | **เว็บไม่ขึ้นเลย** (`RuntimeError`) |
 | `EMAIL_URL` | เว้นว่างได้ | ระบบจะไม่ลอกว่าส่งแล้ว แต่ "ลืมรหัสผ่าน" ใช้กับลูกค้าจริงไม่ได้ |
 | `GEMINI_API_KEY` / `SLIPOK_API_KEY` | เว้นว่างได้ | ฟีเจอร์นั้นถูกซ่อน (ตั้งใจ ไม่ใช่ของพัง) |
 
-สร้าง secret key:
-
-```bash
-python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
-```
-
-> ไม่มี `.env` บน PythonAnywhere (ถูก gitignore และไม่ควรอยู่บน server)
-> ทุกค่ามาจาก Environment variables ในแท็บ Web เท่านั้น
+> ถ้าตั้งค่าเดียวกันไว้ทั้งใน `.env` **และ** แท็บ Web ค่าในแท็บ Web จะชนะเสมอ
+> (`load_dotenv()` ไม่เขียนทับตัวแปรที่มีอยู่แล้ว) — ถ้าตั้งทั้งสองที่
+> **ต้องใส่ค่าเดียวกัน** ไม่งั้น session ที่สร้างจาก console จะใช้กับเว็บไม่ได้
 
 ---
 
@@ -116,7 +146,6 @@ staticfiles ตรงกับ source · migration · ฐานข้อมู�
 
 - **Source code**: `/home/tammatat/my_django_app`
 - **Virtualenv**: `/home/tammatat/.virtualenvs/django-shop`
-- **Environment variables**: ใส่ค่าจากหัวข้อ "fail-closed" ข้างบน
 
 **Static files mapping**:
 
