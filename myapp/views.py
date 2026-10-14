@@ -1447,7 +1447,44 @@ class IssueReportView(TemplateView):
                 OrderIssue.objects.for_customer(self.request.user)
                 .select_related('order')[:10]
             )
+            # ให้ลูกค้าเลือกออเดอร์จากรายการของตัวเองแทนการพิมพ์เลขเอง
+            ctx['my_orders'] = _issue_order_choices(self.request.user)
         return ctx
+
+
+#: จำนวนออเดอร์สูงสุดที่เสนอให้เลือกในหน้า /issue/
+ISSUE_ORDER_CHOICE_LIMIT = 30
+
+
+def _issue_order_choices(user):
+    """รายการออเดอร์ของผู้ใช้ สำหรับให้เลือกตอนแจ้งปัญหา
+
+    คืน [{'id', 'label', 'phone'}, ...] เรียงใหม่สุดก่อน
+
+    ข้อควรระวังเรื่องความเป็นส่วนตัว
+        รายการนี้มีได้**เฉพาะผู้ที่ล็อกอินแล้ว** เพราะเป็นการเปิดเผยว่า
+        "ออเดอร์ไหนเป็นของใคร" ถ้าทำให้คนที่ยังไม่ล็อกอินเห็นรายการนี้ได้
+        จะเป็นการรั่วข้อมูลของลูกค้าทุกคนในร้าน (และเบอร์โทรในแต่ละออเดอร์ด้วย)
+        ผู้ที่ยังไม่ล็อกอินต้องพิมพ์ "เลขออเดอร์ + เบอร์โทร" เอง
+        ซึ่ง `_authed_order` ตรวจสอบอีกชั้นตอน POST
+
+    ทำไมยังต้องส่ง `phone` ไปด้วย
+        ตอน POST `_authed_order` ยังตรวจ "เบอร์ที่ส่งมาตรงกับเบอร์ในออเดอร์ไหม"
+        แม้ผู้ใช้ผูกกับออเดอร์นั้นอยู่แล้วก็ตาม — กติกาเดียวกับทุกช่องทาง
+        ของลูกค้า ถ้าผ่อนตรงนี้ เส้นทางอื่นที่ใช้ `_authed_order` จะอ่อนกว่านี้
+    """
+    from django.utils.formats import number_format
+
+    choices = []
+    for order in user.orders.order_by('-created_at')[:ISSUE_ORDER_CHOICE_LIMIT]:
+        choices.append({
+            'id': order.id,
+            'label': (f'#{order.id} · {order.created_at:%d/%m/%Y} · '
+                      f'฿{number_format(order.total)} · '
+                      f'{order.get_status_display()}'),
+            'phone': order.phone,
+        })
+    return choices
 
 
 # ==================== Base: ตารางค้นหาเรียลไทม์ (Template Method Pattern) ====================
@@ -2211,6 +2248,21 @@ class OrderIssueCreateView(View):
             order, err = _authed_order(request, order_id, request.POST.get('phone'))
             if err:
                 messages.error(request, err)
+                return redirect(back)
+            # เบอร์โทรผ่านแล้ว แต่ถ้าออเดอร์นี้มีเจ้าของเป็นสมาชิกคนอื่น
+            # ผู้ใช้ที่ล็อกอินอยู่ห้ามผูกเรื่องเข้ากับออเดอร์นั้นได้ ไม่ว่าจะรู้เบอร์
+            # โทรถูกต้องแค่ไหน — เพราะเรื่องที่แจ้งจะไปโผล่ในหน้าบัญชีของเจ้าของ
+            # ออเดอร์นั้น เป็นการเขียนข้อมูลของคนอื่นโดยไม่ได้รับอนุญาต
+            # (ออเดอร์ของ guest ที่ `user is None` ยังผูกได้ตามปกติ เพราะยืนยัน
+            #  ตัวตนด้วยเบอร์โทรรายตัว ซึ่งเป็นกติกาเดียวกับทุกช่องทางของลูกค้า)
+            if (order and order.user_id
+                    and request.user.is_authenticated
+                    and order.user_id != request.user.id):
+                messages.error(
+                    request,
+                    f'ออเดอร์ #{order.id} ไม่ใช่ของบัญชีนี้ — '
+                    'กรุณาเลือกจากรายการออเดอร์ของคุณ หรือแจ้งเป็นเรื่องทั่วไป',
+                )
                 return redirect(back)
 
         subject = (request.POST.get('subject') or '').strip()

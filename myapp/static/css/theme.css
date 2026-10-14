@@ -433,6 +433,14 @@ html[data-theme="dark"] .product-detail-media--3d {
 .form-hint i {
   font-size: 0.875rem;
 }
+/* Bootstrap ใช้สีของตัวเองให้ `.form-text` ซึ่งเข้ากับธีมสว่างอยู่แล้ว
+   แต่ในโหมดมืดสีนั้นจืดจนอ่านไม่ออก (ต่ำกว่า 4.5:1 ตาม WCAG 2.2 AA)
+   ข้อความใต้ช่องกรอกคือคำอธิบายกติกา เช่น "ต้องตรงกับเบอร์โทรที่สั่งซื้อ"
+   ถ้าอ่านไม่ออกผู้ใช้จะทำผิดกติกาโดยไม่รู้ตัว → ต้องผ่านเกณฑ์ความอ่านง่าย */
+.form-text {
+  color: var(--ink-soft);
+  opacity: 0.85;
+}
 label.req::after {
   content: " *";
   color: var(--apple-red);

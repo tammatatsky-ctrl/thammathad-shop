@@ -8,7 +8,21 @@
       2. เข้าหน้า `/issue/` โดยตรง → กรอกเลขออเดอร์ (ถ้ามี) คู่กับเบอร์โทรที่สั่งซื้อ
          ระบบจะตรวจ `_authed_order` ตอน POST จึงแจ้งแทนออเดอร์คนอื่นไม่ได้
 
-    คาดหวัง context: order (ไม่บังคับ), back_url, kinds
+    คาดหวัง context: order (ไม่บังคับ), my_orders (รายการออเดอร์ของผู้ล็อกอิน),
+                    back_url, kinds
+
+    การเลือกออเดอร์ — 3 กรณี (เรียงตามความสามารถของผู้ใช้)
+        1. `order` มาแล้ว (กดจากหน้าออเดอร์) → ซ่อน order_id/phone ไว้เลย
+        2. ล็อกอิน + มีออเดอร์ → **ให้เลือกจาก dropdown รายการของตัวเอง**
+           (เรียงใหม่→เก่า พร้อมวันที่ ยอด และสถานะ) ไม่ต้องจำเลขออเดอร์แล้ว
+        3. ยังไม่ล็อกอิน → ต้องพิมพ์ "เลขออเดอร์ + เบอร์โทรที่สั่งซื้อ" เอง
+           เพราะถ้าแสดงรายการออเดอร์ให้คนที่ยังไม่ล็อกอิน จะเป็นการเปิดเผย
+           ออเดอร์ (และเบอร์โทร) ของลูกค้าทุกคนในร้าน
+
+    หมายเหตุเรื่อง JS: dropdown ชื่อ `order_id` ตรง ๆ ไม่ใช้ hidden input
+        ตอน POST จึงได้เลขออเดอร์ถูกต้องแม้ปิด JS ไว้ ส่วน JS มีหน้าที่เดียวคือ
+        เติมเบอร์โทรให้ตรงกับออเดอร์ที่เลือก (ตอน POST `_authed_order` ยังตรวจ
+        เบอร์ตรงกันเสมอ แม้เลือกจาก dropdown มาก็ไม่ได้ข้าม)
 {% endcomment %}
 <div class="card panel-card--large" data-motion="reveal">
     <h2 class="h5 mb-1"><i class="bi bi-exclamation-triangle me-2 text-primary"></i>ฟอร์มแจ้งปัญหา</h2>
@@ -25,7 +39,11 @@
             <span class="fw-medium">{{ order.customer_name }}</span>
             <span class="text-muted-apple small ms-2">· ฿{{ order.total|floatformat:2 }} ({{ order.get_status_display }})</span>
         </div>
+        {% if my_orders %}
+        <span class="small text-muted-apple">เลือกออเดอร์อื่นได้ด้านล่าง</span>
+        {% else %}
         <a href="{% url 'issue_report' %}" class="small text-decoration-none">เปลี่ยน / แจ้งเรื่องทั่วไป</a>
+        {% endif %}
     </div>
     {% endif %}
 
@@ -33,7 +51,7 @@
           class="row g-3">
         {% csrf_token %}
         <input type="hidden" name="back" value="{{ back_url|default:request.get_full_path }}">
-        {% if order %}
+        {% if order and not my_orders %}
         <input type="hidden" name="order_id" value="{{ order.id }}">
         <input type="hidden" name="phone" value="{{ order.phone }}">
         {% endif %}
@@ -60,7 +78,43 @@
                       placeholder="อธิบายว่าเกิดอะไรขึ้น วันที่/เวลาที่สั่งซื้อ หรืออาการที่พบ"></textarea>
         </div>
 
-        {% if not order %}
+        {% if my_orders %}
+        {# ---------- ล็อกอินแล้ว: เลือกออเดอร์จากรายการของตัวเอง ---------- #}
+        <div class="col-12">
+            <label class="form-label" for="issueOrderPick">
+                ออเดอร์ที่ต้องการแจ้งปัญหา
+            </label>
+            <select name="order_id" id="issueOrderPick" class="form-select font-mono"
+                    data-issue-order-picker>
+                <option value="">ไม่ระบุ — แจ้งปัญหาทั่วไป (ไม่เกี่ยวกับออเดอร์)</option>
+                {% for o in my_orders %}
+                <option value="{{ o.id }}" data-phone="{{ o.phone }}"{% if order and order.id == o.id %} selected{% endif %}>{{ o.label }}</option>
+                {% endfor %}
+            </select>
+            <div class="form-text">
+                ระบบจะเชื่อมเรื่องนี้เข้ากับออเดอร์ที่เลือกให้อัตโนมัติ
+                (เลือกได้ {{ my_orders|length }} ออเดอร์ล่าสุดของคุณ)
+            </div>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="issuePhone">เบอร์โทรที่ติดต่อได้</label>
+            <input type="tel" name="phone" id="issuePhone" maxlength="20" required
+                   class="form-control" placeholder="0812345678" inputmode="numeric"
+                   value="{% if order %}{{ order.phone }}{% else %}{{ user.customer_profile.phone|default:'' }}{% endif %}">
+            <div class="form-text" data-issue-phone-hint>
+                {% if order %}ใส่ไว้จากออเดอร์ #{{ order.id }} — เปลี่ยนได้ถ้าติดต่อคนอื่นได้{% endif %}
+            </div>
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="issueEmail">
+                อีเมล <span class="text-muted-apple small">(ไม่บังคับ)</span>
+            </label>
+            <input type="email" name="email" id="issueEmail"
+                   class="form-control" value="{{ user.email|default:'' }}">
+        </div>
+
+        {% elif not order %}
+        {# ---------- ยังไม่ล็อกอิน: พิมพ์เลขออเดอร์ + เบอร์โทรเอง ---------- #}
         <div class="col-md-6">
             <label class="form-label" for="issueName">ชื่อผู้แจ้ง</label>
             <input type="text" name="name" id="issueName" maxlength="150" required

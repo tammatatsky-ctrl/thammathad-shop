@@ -76,3 +76,55 @@
     </div>
 </section>
 {% endblock %}
+
+{% block extra_js %}
+{% if my_orders %}
+{% comment %}
+    เติมเบอร์โทรให้ตรงกับออเดอร์ที่เลือกจาก dropdown
+
+    ทำไมต้องมี
+        ตอน POST `_authed_order` ตรวจว่า "เบอร์ที่ส่งมาตรงกับเบอร์ในออเดอร์ไหม"
+        ถ้าผู้ใช้เลือกออเดอร์จากรายการแล้วเบอร์ไม่ตรง ระบบจะปฏิเสธว่า
+        "เบอร์โทรไม่ตรงกับออเดอร์ #N" ทั้งที่ผู้ใช้แค่กดเลือกจากรายการของตัวเอง
+        — เป็นความยุ่งยากที่ไม่ควรเกิด การเติมให้อัตโนมัติจึงเป็นการแก้ที่ต้นเหตุ
+
+    ทำไม `<select>` ชื่อ `order_id` ตรง ๆ (ไม่ใช้ hidden input คู่)
+        เพื่อให้ปิด JavaScript แล้วเลขออเดอร์ที่เลือกยังถูกส่งไปถูกต้อง
+        JS มีหน้าที่เดียวคือเติมเบอร์โทร ไม่ใช่การสร้างค่าที่จำเป็น
+
+    ทำไมห่อด้วย `{% if my_orders %}`
+        คนที่ยังไม่ล็อกอินไม่มี dropdown ให้ใช้ การส่งสคริปต์ไปให้เป็นการส่ง
+        โค้ดที่ไม่มีทางทำงาน — เป็นตัวอย่างชัด ๆ ของ progressive enhancement
+{% endcomment %}
+<script>
+(function () {
+    'use strict';
+    var picker = document.querySelector('[data-issue-order-picker]');
+    if (!picker) return;                       // ไม่ได้ล็อกอิน — ไม่มี dropdown
+
+    var phone = document.getElementById('issuePhone');
+    var hint = document.querySelector('[data-issue-phone-hint]');
+    var fallbackPhone = phone ? phone.value : '';
+
+    function sync() {
+        var opt = picker.options[picker.selectedIndex];
+        var fromOrder = opt && opt.dataset.phone;
+        if (!phone) return;
+        if (fromOrder) {
+            phone.value = fromOrder;
+            if (hint) {
+                hint.textContent = 'ใส่ไว้จากออเดอร์ #' +
+                    opt.value + ' — เปลี่ยนได้ถ้าติดต่อคนอื่นได้';
+            }
+        } else {
+            phone.value = fallbackPhone;         // เลือก "ไม่ระบุ" → กลับค่าเดิม
+            if (hint) hint.textContent = '';
+        }
+    }
+
+    picker.addEventListener('change', sync);
+    sync();                                     // ทำงานครั้งแรกด้วย (มีออเดอร์ preselected)
+})();
+</script>
+{% endif %}
+{% endblock %}

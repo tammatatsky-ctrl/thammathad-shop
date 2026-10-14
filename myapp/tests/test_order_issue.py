@@ -39,6 +39,159 @@ def make_order(pk_owner=None, phone='0812345678', total='1290.00', status='paid'
     return order
 
 
+class IssueOrderPickerTest(TestCase):
+    """หน้า /issue/ ให้ผู้ใช้**เลือก**ออเดอร์จากรายการของตัวเอง ไม่ต้องพิมพ์เลขเอง
+
+    เหตุผลที่ต้องเป็นเงื่อนไข
+        การให้เลือกจากรายการมีความเสี่ยงที่ต้องกันไว้เป็นพิเศษ:
+        ถ้ารายการนี้หลุดไปแสดงกับคนที่ยังไม่ล็อกอิน จะเป็นการเปิดเผย
+        ออเดอร์ + เบอร์โทรของลูกค้าทุกคนในร้าน (ร้านมีข้อมูลส่วนตัวของคนอื่น)
+    """
+
+    def setUp(self):
+        self.me = User.objects.create_user(
+            username='wichai', password='pw', first_name='วิชัย')
+        self.other = User.objects.create_user(
+            username='pornchai', password='pw', first_name='พรชัย')
+        # `make_order` ใช้ชื่อพารามิเตอร์ `pk_owner` (ชื่อฟิลด์คือ `user`)
+        self.mine_old = make_order(
+            self.me, phone='0812345678', total='500.00')
+        self.mine_new = make_order(
+            self.me, phone='0812345678', total='1290.00')
+        self.theirs = make_order(
+            self.other, phone='0899999999', total='9999.00')
+
+    def _page(self):
+        self.client.force_login(self.me)
+        return self.client.get(reverse('issue_report')).content.decode('utf-8')
+
+    def test_logged_in_customer_sees_a_picker_listing_their_orders(self):
+        html = self._page()
+        self.assertIn('data-issue-order-picker', html,
+                      'ลูกค้าที่ล็อกอินต้องมี dropdown ให้เลือกออเดอร์')
+        self.assertIn(f'value="{self.mine_new.id}"', html)
+        self.assertIn(f'value="{self.mine_old.id}"', html)
+
+    def test_never_shows_another_customers_order(self):
+        """รายการออเดอร์ต้องเป็นของผู้ใช้คนนั้นเท่านั้น"""
+        html = self._page()
+        self.assertNotIn(f'value="{self.theirs.id}"', html,
+                         'รายการออเดอร์รั่วไปหาออเดอร์ของลูกค้าคนอื่น')
+        self.assertNotIn('0899999999', html,
+                         'เบอร์โทรในออเดอร์ของคนอื่นต้องไม่หลุดมาด้วย')
+
+    def test_guest_gets_a_blank_number_field_not_a_dropdown(self):
+        """ยังไม่ล็อกอิน → พิมพ์เลขออเดอร์เอง (ไม่มีรายการให้เลือก)"""
+        html = self.client.get(
+            reverse('issue_report')).content.decode('utf-8')
+        self.assertNotIn('data-issue-order-picker', html,
+                         'ห้ามแสดงรายการออเดอร์ให้คนที่ยังไม่ล็อกอิน')
+        self.assertIn('id="issueOrderId"', html)
+        for o in (self.mine_new, self.theirs):
+            self.assertNotIn(f'value="{o.id}"', html)
+
+    def test_option_carries_the_phone_used_for_verification(self):
+        """`data-phone` ต้องตรงกับเบอร์ในออเดอร์ ไม่ใช่เบอร์อื่น
+
+        ตอน POST `_authed_order` ตรวจเบอร์เทียบกับออเดอร์ ถ้าค่านี้ผิด
+        ผู้ใช้ที่เลือกจากรายการของตัวเองจะถูกปฏิเสธโดยไม่มีเหตุผลที่เข้าใจได้
+        """
+        html = self._page()
+        self.assertIn(f'data-phone="{self.mine_new.phone}"', html)
+
+    def test_newest_order_comes_first(self):
+        html = self._page()
+        first = html.index(f'value="{self.mine_new.id}"')
+        second = html.index(f'value="{self.mine_old.id}"')
+        self.assertLess(first, second, 'ออเดอร์ใหม่ต้องมาก่อน')
+
+    def test_order_arriving_by_query_string_is_preselected(self):
+        """กดมาจากหน้าออเดอร์ → ออเดอร์นั้นต้องถูกเลือกไว้แล้ว"""
+        self.client.force_login(self.me)
+        html = self.client.get(
+            reverse('issue_report'),
+            {'order': self.mine_old.id, 'phone': self.mine_old.phone},
+        ).content.decode('utf-8')
+        self.assertIn(
+            f'value="{self.mine_old.id}" data-phone='
+            f'"{self.mine_old.phone}" selected', html,
+            'ออเดอร์ที่มาจาก query string ต้องถูก preselect ใน dropdown')
+
+    def test_picking_from_the_list_creates_a_linked_issue(self):
+        """รอบจริง: เลือกออเดอร์จากรายการ → POST → เรื่องผูกกับออเดอร์นั้น"""
+        self.client.force_login(self.me)
+        self.client.post(reverse('order_issue', args=[0]), {
+            'order_id': self.mine_new.id,
+            'phone': self.mine_new.phone,     # ค่าที่ JS เติมให้
+            'kind': 'damaged',
+            'subject': 'จอมีรอยถลอก',
+            'detail': 'แตกตรงมุมล่างซ้ายตอนแกะกล่อง',
+        }, follow=True)
+
+        from myapp.models import OrderIssue
+        issue = OrderIssue.objects.get()
+        self.assertEqual(issue.order_id, self.mine_new.id)
+        self.assertEqual(issue.user_id, self.me.id)
+
+    def test_logged_in_user_cannot_file_against_another_customers_order(self):
+        """แม้รู้เบอร์โทรถูกต้องของออเดอร์คนอื่น ก็ผูกเรื่องเข้าไปไม่ได้
+
+        เพราะเรื่องที่แจ้งจะไปโผล่ในหน้าบัญชีของเจ้าของออเดอร์นั้น
+        ถ้าผูกได้ แปลว่าเขียนข้อความลงบัญชีของคนอื่นได้
+        """
+        self.client.force_login(self.me)
+        r = self.client.post(reverse('order_issue', args=[0]), {
+            'order_id': self.theirs.id,
+            'phone': self.theirs.phone,       # รู้เบอร์ถูกต้องของคนอื่นแล้ว
+            'kind': 'other',
+            'subject': 'แจ้งแทน',
+            'detail': 'ทดสอบว่าจะผ่านไหม',
+        }, follow=True)
+
+        from myapp.models import OrderIssue
+        self.assertEqual(OrderIssue.objects.count(), 0,
+                         'ห้ามผูกเรื่องกับออเดอร์ที่มีเจ้าของคนอื่น')
+        msgs = [str(m) for m in r.context['messages']]
+        self.assertTrue(any('ไม่ใช่ของบัญชีนี้' in m for m in msgs), msgs)
+
+    def test_can_still_report_on_a_guest_order_with_matching_phone(self):
+        """ออเดอร์ของคนที่สั่งแบบไม่ได้สมัครสมาชิก (`user is None`) ยังผูกได้
+
+        กติกาคือ "เลขออเดอร์ + เบอร์โทรที่ใช้สั่งซื้อ" สำหรับออเดอร์ที่ไม่มีเจ้าของ
+        เป็นบัญชี — ถ้าปิดไปด้วย ลูกค้าที่มีออเดอร์เก่าแบบ guest
+        จะแจ้งปัญหาไม่ได้เลยแม้รู้เลขออเดอร์และเบอร์ของตัวเอง
+        """
+        guest_order = make_order(phone='0855555555', total='750.00')
+        self.assertIsNone(guest_order.user_id)
+
+        self.client.force_login(self.me)
+        self.client.post(reverse('order_issue', args=[0]), {
+            'order_id': guest_order.id,
+            'phone': guest_order.phone,
+            'kind': 'late',
+            'subject': 'ของยังไม่มา',
+            'detail': 'สั่งไปหกวันแล้วยังไม่ได้ของ',
+        }, follow=True)
+
+        from myapp.models import OrderIssue
+        issue = OrderIssue.objects.get()
+        self.assertEqual(issue.order_id, guest_order.id)
+
+    def test_choosing_no_order_still_allows_a_general_issue(self):
+        self.client.force_login(self.me)
+        self.client.post(reverse('order_issue', args=[0]), {
+            'order_id': '',
+            'phone': '0812345678',
+            'kind': 'other',
+            'subject': 'อยากถามเรื่องสินค้า',
+            'detail': 'มีคีย์บอร์ดไรเกอร์สำหรับเล่นเกมไหม',
+        }, follow=True)
+
+        from myapp.models import OrderIssue
+        issue = OrderIssue.objects.get()
+        self.assertIsNone(issue.order_id)
+
+
 class CustomerReportsIssueTest(TestCase):
     """ลูกค้าแจ้งปัญหาได้ — ผูกกับออเดอร์หรือไม่ก็ได้"""
 

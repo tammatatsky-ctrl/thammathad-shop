@@ -38,6 +38,34 @@ from django.utils import timezone
 #: บัญชีที่ "ห้ามแตะ" เด็ดขาด — superuser/เจ้าของงาน
 KEEP_USERS = {'admin', 'ohm', 'teacher'}
 
+#: รหัสผ่านของบัญชีลูกค้าตัวอย่างที่เอกสารระบุไว้
+#: ต้องตรงกับ `DEMO.md` เสมอ — ถ้าต่างกัน เอกสารจะโกหกโดยไม่มีใครสังเกต
+DEMO_PASSWORD = 'Demo2026!'
+
+
+def _password_missing(user) -> bool:
+    """บัญชีนี้ยังไม่มีรหัสผ่านที่ใช้ล็อกอินได้จริงหรือไม่
+
+    ⚠ ห้ามใช้ `has_usable_password()` อย่างเดียว
+        Django ถือว่ารหัสผ่านที่เป็น **สตริงว่าง** คือ "ใช้ได้" เพราะ
+        `is_password_usable('')` คืนค่า True (มันเช็คแค่ว่าไม่ได้ขึ้นต้นด้วย
+        เครื่องหมายที่ Django ใช้ทำเครื่องหมาย "รหัสใช้ไม่ได้")
+
+        ผลคือบัญชีที่ `get_or_create` เพิ่งสร้างใหม่ (ยังไม่เคยตั้งรหัสเลย)
+        จะผ่านเงื่อนไข "ยังไม่มีรหัส" ออกมาเป็น False → **ไม่เคยตั้งรหัสให้**
+        และล็อกอินไม่ได้ แต่ไม่มี error ให้เห็น
+
+        เคยเกิดจริง: บัญชีลูกค้าตัวอย่างทั้ง 6 รายไม่มีรหัสผ่านที่ใช้ได้
+        ทั้งที่เอกสารระบุว่าเข้าด้วย `Demo2026!`
+
+    ชื่อฟังก์ชันตั้งใจให้เป็น**บวก** (`if _password_missing(user):`)
+        เพราะครั้งหนึ่งเขียนผิดเป็น `if not _needs_password(...)` ซึ่งแปลว่า
+        "ถ้ามีรหัสแล้วจึงทับด้วยรหัสตัวอย่าง" — ผลคือบัญชีใหม่ไม่เคยได้รหัสเลย
+        และบัญชีเก่าที่ตั้งรหัสไว้จะถูกทับ ซึ่งตรงข้ามกับเจตนาของโค้ดทั้งดุ้น
+    """
+    return not user.password or not user.has_usable_password()
+
+
 #: บัญชีทดสอบที่สร้างจากการรันเทสต์/กดส่วนประกอบตอนพัฒนา — ลบได้
 JUNK_USERNAMES = [
     'debug@test.com',      # ทดสอบ staff login
@@ -289,6 +317,46 @@ class Command(BaseCommand):
         self.stdout.write(
             'ลูกค้าตัวอย่าง (รหัสผ่าน Demo2026!): ' +
             ', '.join(c['username'] for c in CUSTOMERS))
+        self._warn_password_mismatch()
+
+    # ------------------------------------------------------------------
+    def _warn_password_mismatch(self):
+        """เตือนเมื่อบัญชีลูกค้าตัวอย่างเข้าด้วยรหัสที่เอกสารบอกไม่ได้
+
+        ทำไมต้องเตือน ไม่ใช่ตั้งรหัสใหม่ทับ
+            คำสั่งนี้ตั้งรหัสให้เฉพาะบัญชีที่ "ยังไม่มีรหัส" โดยตั้งใจไม่ทับรหัส
+            ที่คนไปเปลี่ยนเอง — ถ้าทับทุกครั้งที่รันคำสั่ง บัญชีจริงจะถูกปรับ
+            กลับไปใช้รหัสตัวอย่างซ้ำ ๆ โดยไม่มีใครสังเกต
+
+            แต่ผลคือ `DEMO.md` ยังบอกว่าเข้าด้วย `Demo2026!` ซึ่ง**ไม่จริง**
+            สำหรับบัญชีที่เปลี่ยนรหัสไปแล้ว คนที่ทำตามเอกสารจะล็อกอินไม่ได้
+            โดยไม่รู้ว่าเพราะอะไร → ต้องบอกให้ชัด ไม่ใช่ปล่อยให้เงียบ
+
+            เจอกรณีนี้จริงแล้ว: บัญชีลูกค้าตัวอย่างทั้ง 6 รายเข้าไม่ได้
+            ขณะที่เอกสารยังระบุรหัสว่าใช้ได้
+        """
+        from django.contrib.auth.models import User
+
+        mismatched = []
+        for spec in CUSTOMERS:
+            user = User.objects.filter(username=spec['username']).first()
+            if user and not user.check_password(DEMO_PASSWORD):
+                mismatched.append(spec['username'])
+        if not mismatched:
+            return
+
+        self.stdout.write('')
+        self.stdout.write(self.style.WARNING(
+            f'⚠ บัญชีลูกค้าตัวอย่าง {len(mismatched)} รายการ '
+            f'เข้าด้วยรหัสผ่าน "{DEMO_PASSWORD}" ไม่ได้: '
+            + ', '.join(mismatched)))
+        self.stdout.write(
+            '  คำสั่งนี้จะไม่ทับรหัสที่ตั้งไว้ (เคยเปลี่ยนผ่านหน้าเว็บไว้)')
+        self.stdout.write(
+            '  ถ้าต้องการให้กลับมาเป็นรหัสตัวอย่าง ให้รันกับชื่อที่เจาะจงเท่านั้น:')
+        self.stdout.write(
+            '    python manage.py reset_demo_password ' +
+            ' '.join(mismatched))
 
     # ------------------------------------------------------------------
     def _purge_junk(self, dry_run):
@@ -391,8 +459,8 @@ class Command(BaseCommand):
                 if getattr(user, field) != value:
                     setattr(user, field, value)
                     changed.append(field)
-            if not user.has_usable_password():
-                user.set_password('Demo2026!')
+            if _password_missing(user):
+                user.set_password(DEMO_PASSWORD)
                 changed.append('password')
             if changed and not dry_run:
                 user.save(update_fields=changed)
