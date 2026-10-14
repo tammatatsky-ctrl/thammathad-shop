@@ -79,7 +79,7 @@ class StaffPaymentVerifyTest(TestCase):
             source='test')
         self.order.refresh_from_db()
         self.assertEqual(self.order.status, 'pending')
-        self.assertEqual(self.order.reported_total(), Decimal('600.00'))
+        self.assertEqual(self.order.reported_total, Decimal('600.00'))
 
         r = self._post_verify()
         self.order.refresh_from_db()

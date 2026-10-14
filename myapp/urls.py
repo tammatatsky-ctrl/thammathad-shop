@@ -86,6 +86,8 @@ urlpatterns = [
          name='password_change_done'),
 
     path('contact/', views.ContactView.as_view(), name='contact'),
+    path('order/<int:order_id>/issue/', views.OrderIssueCreateView.as_view(),
+         name='order_issue'),
     path('staff/login/', views.StaffLoginView.as_view(), name='staff_login'),
     path('staff/logout/', views.StaffLogoutView.as_view(), name='staff_logout'),
     path('employees/', views.EmployeeListView.as_view(), name='employee_list'),
@@ -96,6 +98,9 @@ urlpatterns = [
 
     path('orders/', views.OrderManageView.as_view(), name='order_manage'),
     path('orders/export/', views.OrderExportCsvView.as_view(), name='order_export'),
+    path('orders/issues/', views.OrderIssueListView.as_view(), name='issue_list'),
+    path('orders/issues/<int:issue_id>/', views.OrderIssueUpdateView.as_view(),
+         name='issue_update'),
     path('orders/<int:order_id>/', views.OrderDetailView.as_view(), name='order_detail'),
     path('orders/<int:order_id>/status/', views.OrderStatusView.as_view(), name='order_status'),
     path('orders/<int:order_id>/invoice/', views.OrderInvoiceView.as_view(), name='order_invoice'),

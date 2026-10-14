@@ -1,0 +1,59 @@
+{% comment %}
+    issue_row.html — แถวการแจ้งปัญหา 1 เรื่อง (ใช้ซ้ำ 2 ที่: ตารางจริง + ตารางซ่อนสำหรับ live search)
+
+    แยกเป็นไฟล์เดียวเพราะ `issue_rows.html` ต้องเรนเดอร์แถวเดียวกันสองครั้ง
+    (ครั้งแรกใน <tbody> จริง / ครั้งที่สองใน <table style="display:none"> ที่ JS
+    ดึง `data-slot="rows"` ไปแทนที่) — ถ้าเขียนซ้ำสองที่แก้จุดเดียวแล้วลืมอีกจุด
+    ผลคือตารางที่ค้นหาเจอกับตารางตอนโหลดเต็มไม่เหมือนกัน
+
+    คาดหวัง context: i = OrderIssue
+{% endcomment %}
+<td class="fw-bold font-mono" data-label="#">{{ i.pk }}</td>
+<td class="text-start" data-label="ผู้แจ้ง">
+    {{ i.name }}
+    <small class="d-block text-muted-apple font-mono">{{ i.phone }}</small>
+    <small class="d-block text-muted-apple">{{ i.created_at|date:"d/m H:i" }}</small>
+</td>
+<td class="text-start" data-label="ปัญหา">
+    <strong>{{ i.subject }}</strong>
+    <small class="d-block issue-detail">{{ i.detail|truncatechars:160 }}</small>
+    <small class="d-block text-muted-apple">{{ i.get_kind_display }}</small>
+</td>
+<td data-label="ออเดอร์">
+    {% if i.order_id %}
+        <a href="{% url 'order_detail' i.order_id %}">#{{ i.order_id }}</a>
+    {% else %}
+        <span class="text-muted-apple">ไม่ระบุ</span>
+    {% endif %}
+</td>
+<td data-label="สถานะ">
+    <span class="emp-status issue-status-{{ i.status }}">{{ i.get_status_display }}</span>
+    {% if i.resolution %}
+    <small class="d-block text-muted-apple issue-detail">{{ i.resolution|truncatechars:60 }}</small>
+    {% endif %}
+</td>
+<td class="text-end" data-label="จัดการ">
+    {% comment %}
+        ปิดเรื่องต้องเขียน "ผลการดำเนินการ" — บังคับที่ OrderIssue.mark() ฝั่ง
+        เซิร์ฟเวอร์ (ไม่ใช่แค่ HTML5 required) เพราะมีคนยิง POST ตรง ๆ ได้
+        ปิดเรื่องโดยไม่บอกว่าทำอะไร = ลูกค้าต้องโทรมาถามซ้ำ
+    {% endcomment %}
+    {% if i.status == 'open' or i.status == 'in_progress' %}
+    <form method="POST" action="{% url 'issue_update' i.pk %}" class="issue-resolve-form">
+        {% csrf_token %}
+        <input type="hidden" name="status" value="resolved">
+        <input type="text" name="resolution" required
+               placeholder="ผลการดำเนินการ..."
+               class="form-control form-control-sm issue-resolve-input">
+        <button type="submit" class="btn btn-sm btn-primary"
+                data-confirm="ปิดเรื่องนี้เลยหรือไม่? ลูกค้าจะเห็นผลที่กรอกไว้ในหน้าบัญชีของเขา"
+                data-confirm-title="ยืนยันการปิดเรื่อง"
+                data-confirm-ok="ปิดเรื่อง"
+                data-confirm-icon="bi-check2-circle">
+            <i class="bi bi-check2 me-1"></i>แก้แล้ว
+        </button>
+    </form>
+    {% else %}
+    <span class="text-muted-apple small">{{ i.handled_by|default:"—"|truncatechars:18 }}</span>
+    {% endif %}
+</td>

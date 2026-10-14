@@ -1192,7 +1192,7 @@ class PaymentService:
                               f'(ตอนนี้คือ "{locked.get_status_display()}") '
                               f'— ไม่สามารถบันทึกยอดเพิ่มได้',
                     'payment': None,
-                    'reported': locked.reported_total(),
+                    'reported': locked.reported_total,
                     'remaining': Decimal('0'),
                     'just_paid': False,
                     'paid': locked.status != 'pending',
@@ -1202,7 +1202,7 @@ class PaymentService:
                 order=locked, name=name, phone=phone,
                 amount=amount, transfer_date=transfer_date, note=note,
             )
-            reported = locked.reported_total()
+            reported = locked.reported_total
             just_paid = False
             if reported >= locked.total:
                 just_paid = OrderStatusService.auto_move(
@@ -1286,7 +1286,7 @@ class PaymentService:
                               f'(ตอนนี้คือ "{locked.get_status_display()}")',
                     'payment': None,
                 }
-            outstanding = max(locked.total - locked.reported_total(), Decimal('0'))
+            outstanding = max(locked.total - locked.reported_total, Decimal('0'))
             if outstanding <= 0:
                 return {
                     'ok': False,

@@ -400,7 +400,7 @@ class Order(models.Model):
     สถานะเป็นบันไดขั้นเดียว (pending → paid → shipped → delivered):
     - ขั้น 'paid' ขึ้นอัตโนมัติเมื่อจ่ายครบผ่าน PaymentService (เจ้าหน้าที่ตั้งไม่ได้)
     - ห้ามข้ามขั้น/ถอยหลัง (บังคับใน OrderStatusService.move)
-    total = snapshot ยอดตอนสั่ง; reported_total() = ยอดที่จ่ายสะสม →
+    total = snapshot ยอดตอนสั่ง; reported_total = ยอดที่จ่ายสะสม →
     เอามาเทียบกันเพื่อบอก "จ่ายครบยัง" (จ่ายบางส่วนหลายครั้งได้).
     """
     PAYMENT_METHODS = [
@@ -408,8 +408,13 @@ class Order(models.Model):
         ('bank', 'โอนผ่านธนาคาร'),
         ('cod', 'เก็บเงินปลายทาง'),
     ]
+    #: ป้าย `pending` เดิมคือ "รอดำเนินการ" ซึ่งหลอกทั้งสองฝั่ง —
+    #:   ลูกค้าอ่านแล้วเข้าใจว่าร้านกำลังดำเนินการอยู่ (ทั้งที่รอเขาจ่ายเงิน)
+    #:   เจ้าหน้าที่อ่านแล้วเข้าใจว่าต้องรอตรวจสอบอะไร (แต่ขั้น 'ชำระเงินแล้ว'
+    #:   ขึ้นอัตโนมัติทันทีที่ยอดครบ จึงไม่มีอะไรให้ตรวจ)
+    #: ความจริงคือ `pending` = ยังชำระไม่ครบ เพราะนั่นคือเงื่อนไขเดียวที่ทำให้ยัง pending
     STATUS_CHOICES = [
-        ('pending', 'รอดำเนินการ'),
+        ('pending', 'รอชำระเงิน'),
         ('paid', 'ชำระเงินแล้ว'),
         ('shipped', 'จัดส่งแล้ว'),
         ('delivered', 'ได้รับสินค้าแล้ว'),
@@ -434,14 +439,36 @@ class Order(models.Model):
     def __str__(self):
         return f"Order #{self.id} - {self.customer_name}"
 
+    @property
     def reported_total(self):
-        """ยอดที่ลูกค้าแจ้งโอนมาแล้ว (รวมทุกครั้ง — โอนแบ่งหลายครั้งก็นับรวม)"""
+        """ยอดที่ลูกค้าแจ้งโอนมาแล้ว (รวมทุกครั้ง — โอนแบ่งหลายครั้งก็นับรวม)
+
+        เป็น **property** (ไม่ใช่ method) โดยตั้งใจ เพราะใช้ในเทมเพลตด้วย:
+        `{{ order.reported_total }}` ถ้าเป็น method Django จะเรนเดอร์เป็น
+        `<bound method ...>` และเงื่อนไข `{% if order.reported_total > 0 %}`
+        จะได้ False ทุกครั้ง (เทียบ method กับตัวเลข = TypeError)
+        → กล่อง "แจ้งมาแล้ว ฿... เหลืออีก ฿..." จะหายไปเฉย ๆ
+        ในออเดอร์ที่จ่ายบางส่วน ซึ่งเป็นกรณีที่ลูกค้าต้องการข้อมูลนี้ที่สุด
+        """
         return self.payments.aggregate(s=Sum('amount'))['s'] or Decimal('0')
 
     @property
     def remaining(self):
         """ยอดที่ยังขาด (ยอดเต็ม − เงินที่แจ้งแล้ว) — ไม่ติดลบ"""
-        return max(self.total - self.reported_total(), Decimal('0'))
+        return max(self.total - self.reported_total, Decimal('0'))
+
+    @property
+    def paid_percent(self):
+        """ความคืบหน้าการชำระเป็นเปอร์เซ็นต์ (0–100) สำหรับแถบในหน้าลูกค้า
+
+        ทำเป็น property แทน `{% widthratio %}` ในเทมเพลตเพราะ:
+          - ออเดอร์ยอด 0 (ส่งฟรี/ใช้ส่วนลดเต็ม) แล้ว `widthratio` คืนค่าว่าง
+            → `style="width: %"` = CSS พัง แถบกลายเป็นความกว้างแปลก ๆ
+          - ชำระเกินยอดได้ (โอนเผลอเกิน) → ต้อง clamp ไว้ที่ 100 ไม่ให้ล้นแถบ
+        """
+        if not self.total:
+            return 100
+        return min(int(self.reported_total / self.total * 100), 100)
 
 
 class OrderItem(models.Model):
@@ -697,6 +724,165 @@ class ActivityLog(models.Model):
     def __str__(self):
         who = self.actor_name or self.actor.username if self.actor_id else 'ระบบ'
         return f'[{self.get_action_display()}] {who}: {self.summary}'
+
+
+class OrderIssueQuerySet(models.QuerySet):
+    """ตัวช่วยอ่านรายการแจ้งปัญหา — คิวของเจ้าหน้าที่ + ประวัติของลูกค้าคนเดียว
+
+    `search()` / `sorted_by()` ต้องมีครบ เพราะ `LiveSearchListView`
+    เรียกใช้ตะไบนั้นทุกหน้า (ถ้าไม่มีจะ AttributeError ตอนเปิดหน้าเท่านั้น
+    ไม่ใช่ตอนรันเทสต์ที่ไม่ได้แตะ)
+    """
+
+    #: คีย์เรียงที่อนุญาต — ป้องกันคีย์แปลกปลอมจาก query string
+    SORT_MAP = {
+        'newest': '-created_at',
+        'oldest': 'created_at',
+        'status': 'status',
+    }
+    DEFAULT_SORT = '-created_at'
+
+    def open_ones(self):
+        """เฉพาะที่ยังไม่ปิดการแจ้ง (กดจัดการก่อน)"""
+        return self.exclude(status__in=['resolved', 'closed'])
+
+    def for_customer(self, user):
+        """รายการแจ้งปัญหาของลูกค้าคนนั้น (ใช้หน้าบัญชี)"""
+        return self.filter(user=user)
+
+    def for_order(self, order):
+        """รายการแจ้งปัญหาที่ผูกกับออเดอร์หนึ่งใบ"""
+        return self.filter(order=order)
+
+    def search(self, term):
+        """ค้นหาจากหัวข้อ / รายละเอียด / ชื่อผู้แจ้ง / เบอร์ / หมายเลขออเดอร์
+
+        ค้นด้วยหมายเลขออเดอร์ด้วย เพราะเจ้าหน้าที่ที่รับเรื่องโทรศัพท์มา
+        มีแต่เลขออเดอร์ในมือ ไม่ได้จำชื่อลูกค้า
+
+        Args:
+            term: คำค้น (ว่าง = คืนทั้งหมด)
+
+        Returns:
+            OrderIssueQuerySet (chain ต่อได้)
+        """
+        if not term:
+            return self
+        term = term.strip()
+        # ค้นด้วยตัวเลขทั้งเลข: `0812345678` ในช่องค้นหาเข้าใจว่า "หาเบอร์"
+        # ถ้า strip ทิ้งจะเหลือ "815345678" ซึ่งแมตช์ไม่พบเลย
+        clauses = (Q(subject__icontains=term) | Q(detail__icontains=term)
+                   | Q(name__icontains=term) | Q(phone__icontains=term))
+        if term.isdigit():
+            clauses |= (Q(order_id=term) | Q(phone__icontains=term.lstrip('0')))
+        return self.filter(clauses)
+
+    def sorted_by(self, key):
+        """เรียงผลตามคีย์ที่กำหนด (ป้องกันคีย์แปลกปลอมจาก query string)
+
+        Args:
+            key: คีย์ใน SORT_MAP
+
+        Returns:
+            QuerySet
+        """
+        return self.order_by(self.SORT_MAP.get(key or '', self.DEFAULT_SORT))
+
+
+class OrderIssue(models.Model):
+    """การแจ้งปัญหาจากลูกค้า — ผูกกับออเดอร์ (ถ้ามี) เพื่อให้ตามรอยได้
+
+    ทำไมต้องมี
+        หน้า `/contact/` เดิมมีแต่ข้อมูลติดต่อ ไม่มีทางให้ลูกค้าแจ้งอะไรได้เลย
+        พอมีปัญหาจริง (ของเสียหาย / ส่งผิด / ยอดชำระไม่ตรง) ลูกค้ามีทางเดียวคือ
+        "ไม่รู้จะบอกใคร" และเจ้าหน้าที่ไม่มีคิวงานที่จะเห็น
+
+        ผูกกับ `Order` เพื่อให้ตอบคำถามได้ว่า "เรื่องนี้เกี่ยวกับออเดอร์ไหน
+        และแก้ไปแล้วหรือยัง" โดยไม่ต้องเดา
+
+    หมายเหตุเรื่องสิทธิ์
+        ลูกค้าแจ้งได้เฉพาะออเดอร์ของตัวเอง (เช็คใน view) — ไม่ใช่แค่เชื่อ `user`
+        เพราะออเดอร์เก่าอาจเป็นของ guest ที่ยังไม่มีบัญชีผูกไว้
+    """
+
+    KIND_CHOICES = [
+        ('damaged', 'ของเสียหาย / ชำรุด'),
+        ('wrong_item', 'ส่งสินค้าผิดชิ้น'),
+        ('missing', 'ของไม่ครบ / ไม่ได้รับ'),
+        ('payment', 'ยอดชำระไม่ตรง'),
+        ('late', 'ส่งล่าช้า'),
+        ('other', 'เรื่องอื่น ๆ'),
+    ]
+    STATUS_CHOICES = [
+        ('open', 'รอเจ้าหน้าที่ดำเนินการ'),
+        ('in_progress', 'กำลังดำเนินการ'),
+        ('resolved', 'แก้ไขแล้ว'),
+        ('closed', 'ปิดเรื่อง'),
+    ]
+
+    order = models.ForeignKey(
+        Order, on_delete=models.CASCADE, related_name='issues',
+        null=True, blank=True, verbose_name='ออเดอร์ที่เกี่ยวข้อง',
+    )
+    user = models.ForeignKey(
+        dj_settings.AUTH_USER_MODEL, on_delete=models.CASCADE,
+        related_name='order_issues', null=True, blank=True,
+        verbose_name='ผู้แจ้ง',
+    )
+    name = models.CharField(max_length=150, verbose_name='ชื่อผู้แจ้ง')
+    phone = models.CharField(max_length=20, verbose_name='เบอร์โทรที่ติดต่อ')
+    email = models.EmailField(blank=True, verbose_name='อีเมล (ถ้ามี)')
+    kind = models.CharField(max_length=20, choices=KIND_CHOICES, default='other',
+                            verbose_name='ประเภทปัญหา')
+    subject = models.CharField(max_length=200, verbose_name='หัวข้อ')
+    detail = models.TextField(verbose_name='รายละเอียด')
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES,
+                              default='open', db_index=True, verbose_name='สถานะ')
+    resolution = models.TextField(blank=True, verbose_name='ผลการดำเนินการ')
+    handled_by = models.ForeignKey(
+        dj_settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
+        related_name='handled_issues', null=True, blank=True,
+        verbose_name='ผู้ดำเนินการ',
+    )
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True,
+                                      verbose_name='เวลาที่แจ้ง')
+    resolved_at = models.DateTimeField(null=True, blank=True,
+                                       verbose_name='เวลาที่แก้ไข')
+
+    objects = OrderIssueQuerySet.as_manager()
+
+    class Meta:
+        verbose_name = 'การแจ้งปัญหา'
+        verbose_name_plural = 'การแจ้งปัญหา'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'[{self.get_kind_display()}] #{self.pk} {self.subject}'
+
+    def mark(self, status, staff, resolution=''):
+        """เจ้าหน้าที่อัปเดตสถานะ + บันทึกว่าใคร/เมื่อไรทำ
+
+        Args:
+            status: สถานะใหม่จาก STATUS_CHOICES
+            staff: User ผู้ดำเนินการ
+            resolution: ผลการดำเนินการ (บังคับเมื่อปิดเรื่อง)
+
+        Returns:
+            bool — True = อัปเดตสำเร็จ, False = ปฏิเสธพร้อมเหตุผล
+        """
+        if status not in dict(self.STATUS_CHOICES):
+            return False
+        if status in ('resolved', 'closed') and not (resolution or '').strip():
+            # ปิดเรื่องโดยไม่บอกว่าทำอะไร = ลูกค้าต้องถามซ้ำ
+            return False
+        self.status = status
+        self.handled_by = staff
+        self.resolution = (resolution or self.resolution).strip()
+        self.resolved_at = (timezone.now()
+                            if status in ('resolved', 'closed') else None)
+        self.save(update_fields=['status', 'handled_by', 'resolution',
+                                 'resolved_at'])
+        return True
 
 
 # ==================== Signals: ล้างแคชแคตตาล็อกเมื่อสินค้าเปลี่ยน ====================

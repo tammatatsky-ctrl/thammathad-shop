@@ -124,7 +124,7 @@ class DemoJourneyTest(TestCase):
         self._quickpay()
         self.order.refresh_from_db()
         self.assertEqual(Payment.objects.filter(order=self.order).count(), 1)
-        self.assertEqual(self.order.reported_total(), Decimal('1290.00'))
+        self.assertEqual(self.order.reported_total, Decimal('1290.00'))
 
     def test_customer_sees_pay_button_on_success_page(self):
         """หน้าสำเร็จต้องมีปุ่ม 1 คลิกให้ลูกค้าเห็น — ไม่งั้นเดโมจะต้องพึ่งลิงก์ตรงๆ

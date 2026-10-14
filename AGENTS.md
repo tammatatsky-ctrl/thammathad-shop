@@ -27,8 +27,9 @@ myproject/          Django config (settings, urls, wsgi)
   urls.py           Delegates all routes to myapp/urls.py
 
 myapp/
-  models.py         7 models: Employee, Product, Order, OrderItem, Payment,
-                    CustomerProfile, CustomerAddress + custom QuerySets/Managers
+  models.py         9 models: Employee, Product, Order, OrderItem, Payment,
+                    CustomerProfile, CustomerAddress, ActivityLog, OrderIssue
+                    + custom QuerySets/Managers
   views.py          ~1400 lines, all CBV (50+ classes), StaffRequiredMixin for auth
   urls.py           70 lines, all .as_view() routes
   services.py       14 service classes: Cart, Catalog, RateLimit, LoginThrottle,
@@ -76,6 +77,8 @@ python manage.py collectstatic       # Collect to staticfiles/
 - **Managers from QuerySets**: `EmployeeManager = models.Manager.from_queryset(EmployeeQuerySet)` — gives `Employee.objects.next_code()`, `.stats()`, etc.
 - **Service layer** (`services.py`): Cart (session-based), Catalog, RateLimit, ThaiCalendar, ExchangeRate (open.er-api.com), GeoIP (ipwho.is), Translate (MyMemory), PromptPay QR, SlipOK OCR, GeminiAI, Validators, OrderStatusService, PaymentService — no business logic in views.
 - **Order status lifecycle** (`OrderStatusService`): บันไดขั้นเดียว รอ → ชำระเงินแล้ว → จัดส่ง → ถึงมือ — ห้ามข้าม/ถอยหลัง; ขั้น "ชำระเงินแล้ว" ขึ้นอัตโนมัติ (เจ้าหน้าที่ตั้งด้วยมือไม่ได้).
+  - **ขั้นสุดท้าย "ถึงมือแล้ว" ให้ลูกค้ายืนยันเองเป็นหลัก** (`OrderConfirmReceivedView` → `POST /order/<id>/confirm-received/`, ยืนยันตัวตนด้วยเลขออเดอร์+เบอร์) — ของถึงมือก็ต่อเมื่อผู้รับบอกว่าได้รับแล้ว ไม่ใช่ผู้ส่งกดว่าส่งแล้ว. เจ้าหน้าที่ยังกดได้สำหรับกรณีติดต่อลูกค้าไม่ได้ (เก็บเงินปลายทาง) โดยป้ายบอกว่าเป็นทางสำรอง (`OrderDetailView._status_options`) — ถ้าตัดออกเฉย ๆ ออเดอร์ COD จะค้างที่ "จัดส่งแล้ว" ถาวร
+- **การแจ้งปัญหา** (`OrderIssue`): ลูกค้าแจ้งได้จาก `/contact/` หรือจากหน้าติดตามออเดอร์ → เจ้าหน้าที่ปิดเรื่องที่ `/orders/issues/`. กฎที่ห้ามละเมิด: (ก) ผูกกับออเดอร์ต้องผ่าน `_authed_order` (เลขออเดอร์+เบอร์) (ข) **ปิดเรื่องโดยไม่เขียน `resolution` ไม่ได้** — บังคับที่ `OrderIssue.mark()` ไม่ใช่ HTML `required`
 - **Superuser override** (`PaymentService.override_mark_paid()`): ทางออกสำหรับกรณีเงินมาผิดทาง (สดหน้าร้าน/โอนผิดบัญชี) — **เฉพาะ `is_superuser`** ต้องใส่เหตุผล, สร้าง `Payment` ให้รายได้กับประวัติเงินตรงกัน, บันทึก audit ทุกครั้ง. **ยังห้ามข้ามบันได** — override ข้ามแค่ "ขั้นอัตโนมัติ" ไม่ใช่บันได. ดูสิทธิ์ก่อนด้วย `OrderStatusService.can_override(order, user)`
 - **PaymentService.record_payment()**: จุดรับเงินจุดเดียวของทุกช่องทาง (สลิป OCR / ปุ่มโอน 1 คลิก) — เมื่อยอดแจ้งสะสมครบยอดรวม → สถานะเป็น paid อัตโนมัติ + บันทึก `ActivityLog` action=`payment` ทุกครั้งที่มียอดเข้า (รวมจ่ายบางส่วน).
 
@@ -112,7 +115,7 @@ python manage.py collectstatic       # Collect to staticfiles/
 - `DEFAULT_PERMISSION_CLASSES = IsAuthenticated` (fail-safe ใน settings.py) — view ใหม่ที่ลืมระบุ permission จะถูกล็อกก่อน; view สาธารณะ (products/categories/api root) ระบุ `AllowAny` เองอยู่แล้ว
 - `/api/orders/` prefetch `items__product` — กัน N+1 จาก `product_name` (`source='product.name'`); วัดได้ 4 queries คงที่ต่อหน้า (COUNT + orders + items + products)
 - เทสต์ API: `myapp/tests/test_api.py` + `test_ratelimit.py` + `test_ajax_convention.py` + `test_external_apis.py` — ระวัง gotcha ของ Django 6.0 test client (Bug Recipe #10)
-- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron) · `seed_catalog.py` (ชุดสินค้าตัวอย่าง 12 ชิ้น/4 หมวด — upsert ตาม id รันซ้ำได้ ไม่ลบอะไรทิ้ง)
+- `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron) · `seed_catalog.py` (ชุดสินค้าตัวอย่าง 12 ชิ้น/4 หมวด — upsert ตาม id รันซ้ำได้ ไม่ลบอะไรทิ้ง) · `seed_demo_issues.py` (การแจ้งปัญหาตัวอย่าง 3 เรื่อง — `get_or_create` ตาม (order, subject) รันซ้ำได้; ฟีเจอร์ที่คิวว่างพิสูจน์ตัวเองไม่ได้ อาจารย์จะสรุปว่าระบบไม่ทำงาน)
 
 ### External Integrations (services.py)
 
@@ -330,6 +333,38 @@ python manage.py test myapp
   `FX_CSS_BASE`/`FX_JS_BASE` ไม่มี `?` และ `FX_STATIC_V` ไม่ว่าง
   (ยืนยันแล้วว่าจับได้จริง: แก้กลับเป็น `{% static %}` → เทสต์แดง)
 
+### 13. method ที่ไม่มี `@property` → `{% if x > 0 %}` เป็น False เงียบ ๆ กล่องข้อมูลหายไปเลย
+- **สาเหตุ**: `Order.reported_total` เคยเป็น **method** ธรรมดา (ไม่มี `@property`)
+  แต่เทมเพลตเขียน `{% if order.remaining and order.reported_total > 0 %}`
+  Django เทียบด้วย `smartif` ซึ่ง **กลืน TypeError แล้วคืน False**
+  (เทียบ `<bound method>` กับตัวเลข = TypeError) → เงื่อนไขเป็น False **ทุกครั้ง**
+  → กล่อง "แจ้งมาแล้ว ฿600 เหลืออีก ฿690" **ไม่เคยโผล่** แม้ลูกค้าจ่ายบางส่วนแล้ว
+  ซึ่งเป็นกรณีที่ลูกค้าต้องการข้อมูลนี้มากที่สุด — และไม่มี error ให้เห็น
+- **อาการ**: หน้าเว็บไม่พัง ไม่มี traceback แต่ข้อมูลสำคัญหายไปทั้งก้อน
+- **กฎ**: ค่าที่จะถูกอ่านในเทมเพลต **ต้องเป็น `@property` เสมอ** (เทียบกับ
+  `remaining` / `line_total` / `paid_percent` ที่เป็น property อยู่แล้วในโมเดลเดียวกัน)
+  ถ้าเปลี่ยนจาก method เป็น property ต้องไล่แก้ทุก call site `x.foo()` → `x.foo`
+  (Python จะพังทันทีตอนรัน ไม่ใช่เงียบ ๆ)
+- **วิธีตรวจจับ**: grep เทมเพลตหา `{{ *.ตัวแปร|ฟิลเตอร์ }}` แล้วเช็คว่า
+  ตัวแปรนั้นเป็น property จริง — `{% if order.reported_total > 0 %}` ที่ไม่มี
+  `@property` = บั๊กแน่นอน · เรนเดอร์ด้วย test client แล้ว assert ว่า
+  **ข้อความในเงื่อนไขนั้นโผล่จริง** (เพราะ assert แค่ "หน้าไม่ error" ไม่จับได้)
+- **กันไว้แล้ว**: `test_order_issue.AccountOrderHistoryTest.test_shows_how_much_is_still_due`
+  — สร้างออเดอร์ที่จ่ายบางส่วนแล้ว assert ว่าเห็นยอดที่จ่ายแล้วและยอดที่ขาด
+
+### 14. ป้ายสถานะที่หลอกผู้ใช้ — `pending` เคยขึ้นว่า "รอดำเนินการ"
+- **สาเหตุ**: ขั้น `pending` ของออเดอร์แปลว่า **ยังชำระไม่ครบ** เท่านั้น
+  เพราะขั้น `paid` ขึ้นอัตโนมัติทันทีที่ยอดแจ้งครบ (`PaymentService`)
+  แต่ป้ายเดิมเขียนว่า "รอดำเนินการ" → ลูกค้าอ่านแล้วคิดว่าร้านกำลังดำเนินการอยู่
+  (ทั้งที่รอ**เขา**จ่ายเงิน) และเจ้าหน้าที่อ่านแล้วคิดว่ารอตรวจสอบอะไร
+  (แต่ไม่มีอะไรให้ตรวจ — มันคือยอดที่ยังไม่ครบ)
+- **ผล**: หน้าบัญชีลูกค้าเคยขึ้น "รอตรวจ" สำหรับ `pending` และ "สำเร็จ" สำหรับ
+  `delivered` — ทั้งคู่ผิดความหมาย (ผิดทั้งฝั่งลูกค้าและฝั่งร้าน)
+- **กฎ**: ป้ายสถานะต้องเป็น**ความจริงของระบบ** ไม่ใช่คำที่ฟังดูสุภาพ
+  เปลี่ยน `STATUS_CHOICES` แล้วต้องไล่ดูทุกที่ที่เขียน `{% if status == %}` แยกเอง
+  เพราะเทมเพลตหลายหน้าแยกกันเขียนป้ายเอง (ซึ่งก็คือแหล่งที่เกิดบั๊กซ้ำ)
+- **กันไว้แล้ว**: `test_order_issue.AccountOrderHistoryTest.test_status_label_is_not_misleading`
+
 ## Conventions
 
 - **Thai language** for ALL user-facing text (labels, messages, template content, model verbose_name).
@@ -501,11 +536,20 @@ basetemplate.html          Public base (navbar, footer, toast, theme switch, len
   adminbase.html           Staff base (admin navbar with dropdowns, staff badge)
     dashboard.html, employee_list.html, product_manage.html, order_manage.html,
     customer_list.html, reports.html, payment_list.html, order_detail.html,
-    customer_detail.html, product_form.html, employee_form.html
+    customer_detail.html, product_form.html, employee_form.html,
+    issue_list.html        คิวการแจ้งปัญหา (รายงาน → การแจ้งปัญหา)
 
   index.html, product.html, product_detail.html, cart.html, checkout.html,
   order_tracking.html, order_success.html, contact.html, account.html,
   account_login.html, account_register.html, slip_upload.html, address_form.html
+
+Partial ที่ include ซ้ำหลายหน้า (partials — ต้องแก้ที่เดียว ใช้ได้ทุกที่):
+  order_confirm_received.html  ปุ่ม "ยืนยันว่าได้รับสินค้าแล้ว" (สำเร็จ + ติดตาม)
+  payment_manual_form.html     ช่อง "แจ้งยอดโอนเอง" (สำเร็จ + ติดตาม)
+  issue_form.html              ฟอร์มแจ้งปัญหา (contact + ผูกกับ order ได้)
+  *_rows.html                  แถวตารางหลังบ้านสำหรับ live search
+                               (สล็อต data-slot="rows"/"count"/"pagination"
+                                — JS ในหน้า list สลับตามชื่อนี้)
 ```
 
 ## Test Commands

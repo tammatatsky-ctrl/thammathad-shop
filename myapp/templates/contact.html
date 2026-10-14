@@ -32,6 +32,10 @@
                     </div>
                 </div>
 
+                <div class="mt-4">
+                    {% include 'issue_form.html' with kinds=kinds %}
+                </div>
+
                 <div class="card panel-card--large mt-4 map-card" data-motion="reveal" data-dir="zoom">
                     <iframe class="map-frame"
                             src="https://maps.google.com/maps?q=Kamphaeng%20Phet%20Rajabhat%20University&z=15&output=embed"

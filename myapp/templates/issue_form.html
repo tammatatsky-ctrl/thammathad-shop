@@ -1,0 +1,74 @@
+{% comment %}
+    issue_form.html — ฟอร์ม "แจ้งปัญหา" ของลูกค้า
+
+    ใช้เมื่อ: มีปัญหากับออเดอร์หรือสินค้า (ของเสียหาย / ส่งผิด / ยอดไม่ตรง / ส่งล่า)
+    ผูกกับออเดอร์ได้ — ถ้ามี `order_id` ใน context ระบบจะยืนยันตัวตนด้วยเบอร์โทร
+    จึงแจ้งแทนออเดอร์คนอื่นไม่ได้
+
+    คาดหวัง context: order (ไม่บังคับ), back_url, kinds
+{% endcomment %}
+<div class="card panel-card--large" data-motion="reveal">
+    <h2 class="h5 mb-1"><i class="bi bi-exclamation-triangle me-2 text-primary"></i>แจ้งปัญหา</h2>
+    <p class="text-muted-apple small mb-4">
+        พบปัญหากับสินค้าหรือออเดอร์ของคุณ? แจ้งไว้ที่นี่ เจ้าหน้าที่จะตรวจสอบ
+        และติดต่อกลับทางเบอร์โทรที่ให้ไว้
+    </p>
+
+    <form method="POST" action="{% url 'order_issue' order.id|default:0 %}"
+          class="row g-3">
+        {% csrf_token %}
+        <input type="hidden" name="back" value="{{ back_url|default:request.get_full_path }}">
+        {% if order %}
+        <input type="hidden" name="order_id" value="{{ order.id }}">
+        <input type="hidden" name="phone" value="{{ order.phone }}">
+        {% endif %}
+
+        <div class="col-12">
+            <label class="form-label" for="issueKind">ปัญหาเกี่ยวกับอะไร</label>
+            <select name="kind" id="issueKind" class="form-select">
+                {% for value, label in kinds %}
+                <option value="{{ value }}">{{ label }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="col-12">
+            <label class="form-label" for="issueSubject">หัวข้อ</label>
+            <input type="text" name="subject" id="issueSubject" maxlength="200" required
+                   class="form-control" placeholder="เช่น เมาส์ที่ได้รับชำรุด">
+        </div>
+
+        <div class="col-12">
+            <label class="form-label" for="issueDetail">รายละเอียด</label>
+            <textarea name="detail" id="issueDetail" rows="4" required maxlength="2000"
+                      class="form-control"
+                      placeholder="อธิบายว่าเกิดอะไรขึ้น วันที่/เวลาที่สั่งซื้อ หรือหมายเลขออเดอร์"></textarea>
+        </div>
+
+        {% if not order %}
+        <div class="col-md-6">
+            <label class="form-label" for="issueName">ชื่อผู้แจ้ง</label>
+            <input type="text" name="name" id="issueName" maxlength="150" required
+                   class="form-control" value="{{ user.get_full_name|default:'' }}">
+        </div>
+        <div class="col-md-6">
+            <label class="form-label" for="issuePhone">เบอร์โทรที่ติดต่อได้</label>
+            <input type="tel" name="phone" id="issuePhone" maxlength="20" required
+                   class="form-control" placeholder="0812345678" inputmode="numeric">
+        </div>
+        <div class="col-12">
+            <label class="form-label" for="issueEmail">
+                อีเมล <span class="text-muted-apple small">(ไม่บังคับ)</span>
+            </label>
+            <input type="email" name="email" id="issueEmail"
+                   class="form-control" value="{{ user.email|default:'' }}">
+        </div>
+        {% endif %}
+
+        <div class="col-12">
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-send me-1"></i>ส่งการแจ้งปัญหา
+            </button>
+        </div>
+    </form>
+</div>

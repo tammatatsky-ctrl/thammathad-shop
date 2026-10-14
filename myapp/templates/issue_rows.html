@@ -1,0 +1,87 @@
+{% comment %}
+    issue_rows.html — partial การแจ้งปัญหา (AJAX live search)
+
+    โครงสร้างสล็อต count/rows/pagination ต้องตรงกับ JS ใน issue_list.html
+    ซึ่งสลับเฉพาะส่วนเหล่านี้ — ถ้าเปลี่ยนชื่อ data-slot ต้องแก้ JS ด้วย
+
+    เรนเดอร์แถวเดียวกันสองครั้งโดยตั้งใจ:
+      1. <tbody id="issueTableBody">  = ตารางจริงที่คนใช้เห็นตอนโหลดหน้า
+      2. <table style="display:none"><tbody data-slot="rows"> = ต้นแบบที่ JS
+         ดึง `rows.innerHTML` ไปแทนที่ข้อ 1 ตอนค้นหา
+    ทั้งสองชุด include 'issue_row.html' เดียวกัน จึงไม่มีทาง drift
+
+    คาดหวัง context: issues, page_obj, total, query, has_filter, selected_status
+{% endcomment %}
+
+<div data-slot="count" class="mb-3 text-muted-apple small">
+    {% if has_filter %}
+        พบ <strong class="result-count">{{ total }}</strong> เรื่อง{% if query %} ที่ตรงกับ "{{ query }}"{% endif %}
+    {% else %}
+        การแจ้งปัญหาทั้งหมด <strong class="result-count">{{ total }}</strong> เรื่อง
+        {% if open_count %} · ค้างอยู่ <strong>{{ open_count }}</strong> เรื่อง{% endif %}
+    {% endif %}
+</div>
+
+{% comment %} ===== 1. ตารางจริง ===== {% endcomment %}
+<div class="table-responsive">
+    <table class="table align-middle mb-0 table-cardify table-sticky-head issue-table">
+        <thead>
+            <tr>
+                <th scope="col">#</th>
+                <th scope="col">ผู้แจ้ง</th>
+                <th scope="col">ปัญหา</th>
+                <th scope="col">ออเดอร์</th>
+                <th scope="col">สถานะ</th>
+                <th scope="col" class="text-end">จัดการ</th>
+            </tr>
+        </thead>
+        <tbody id="issueTableBody" data-motion="stagger" class="in">
+            {% for i in issues %}
+            <tr>{% include 'issue_row.html' with i=i %}</tr>
+            {% empty %}
+            <tr>
+                <td colspan="6" class="text-center py-5 text-muted-apple">
+                    <i class="bi bi-check2-circle empty-state-icon d-block mb-2"></i>
+                    ไม่มีการแจ้งปัญหา{% if query or selected_status %} ตามเงื่อนไขที่ค้นหา{% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+{% comment %} ===== 2. ต้นแบบสำหรับ live search (ซ่อนไว้) ===== {% endcomment %}
+<table style="display:none"><tbody data-slot="rows">
+    {% for i in issues %}
+    <tr>{% include 'issue_row.html' with i=i %}</tr>
+    {% empty %}
+    <tr>
+        <td colspan="6" class="text-center py-5 text-muted-apple">
+            <i class="bi bi-check2-circle empty-state-icon d-block mb-2"></i>
+            ไม่มีการแจ้งปัญหา{% if query or selected_status %} ตามเงื่อนไขที่ค้นหา{% endif %}
+        </td>
+    </tr>
+    {% endfor %}
+</tbody></table>
+
+{% if page_obj.paginator.num_pages > 1 %}
+<nav data-slot="pagination" class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}&amp;q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}">&laquo;</a>
+        </li>
+        {% endif %}
+        {% for p in page_obj.paginator.page_range %}
+        <li class="page-item {% if p == page_obj.number %}active{% endif %}">
+            <a class="page-link" href="?page={{ p }}&amp;q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}">{{ p }}</a>
+        </li>
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}&amp;q={{ query|urlencode }}&amp;status={{ selected_status|urlencode }}">&raquo;</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}

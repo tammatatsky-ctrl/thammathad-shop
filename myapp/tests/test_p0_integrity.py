@@ -65,7 +65,7 @@ class PaymentIntegrityTest(TestCase):
             amount=Decimal('9999.00'), transfer_date='2026-10-13', source='slip',
         )
         self.assertEqual(
-            order.reported_total(), Decimal('0'),
+            order.reported_total, Decimal('0'),
             'ยอดแจ้งสะสมต้องยังเป็น 0 — ไม่ใช่ยอดเกิน')
 
     def test_partial_payments_accumulate_then_paid(self):
@@ -86,7 +86,7 @@ class PaymentIntegrityTest(TestCase):
 
         order.refresh_from_db()
         self.assertEqual(order.status, 'paid')
-        self.assertEqual(order.reported_total(), Decimal('1000.00'))
+        self.assertEqual(order.reported_total, Decimal('1000.00'))
 
     def test_record_payment_returns_ok_contract(self):
         """ผู้เรียกต้องพึ่งพา key 'ok'/'error' ได้ — กัน view ที่ยังไม่อัปเดตพังเงียบ"""

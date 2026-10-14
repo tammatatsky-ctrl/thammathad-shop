@@ -1,6 +1,12 @@
 {% extends 'basetemplate.html' %}
 {# ===== account.html: ลูกค้า — ประวัติออเดอร์ (สถานะตามบันได) + สมุดที่อยู่ + ออกจากระบบ (POST) ===== #}
-{% load shop_extras %}
+{% comment %}
+    account.html: ลูกค้า — ประวัติออเดอร์ (แบบการ์ด: สินค้า/ยอดที่จ่ายแล้ว/ปุ่มที่กดต่อได้)
+    + การแจ้งปัญหาที่เคยแจ้ง + สมุดที่อยู่ + ออกจากระบบ (POST)
+
+    `load static` จำเป็นเพราะการ์ดออเดอร์โชว์รูปสินค้าจาก `item.product.image`
+{% endcomment %}
+{% load static shop_extras %}
 
 {% block content %}
 <section class="page-section">
@@ -87,7 +93,7 @@
                     <i class="bi bi-hourglass-split"></i>
                 </div>
                 <div>
-                    <div class="summary-ribbon-label">รอการตรวจสอบ</div>
+                    <div class="summary-ribbon-label">รอชำระเงิน</div>
                     <div class="summary-ribbon-val tabular-nums {% if orders_pending %}text-warning{% endif %}">{{ orders_pending|default:0 }} <span class="small text-muted fw-normal">รายการ</span></div>
                 </div>
             </div>
@@ -100,35 +106,109 @@
                         <h5 class="mb-0"><i class="bi bi-receipt me-2 text-primary"></i>ออเดอร์ของฉัน</h5>
                         <a href="{% url 'order_tracking' %}" class="small text-decoration-none"><i class="bi bi-box-seam me-1"></i>ติดตามสินค้า</a>
                     </div>
-                    <div class="table-responsive mt-3">
-                        <table class="table align-middle text-center mb-0 table-cardify table-dense">
-                            <thead><tr><th scope="col">#</th><th scope="col">วันที่</th><th scope="col">ยอดรวม</th><th scope="col">ชำระแบบ</th><th scope="col">สถานะ</th><th scope="col"></th></tr></thead>
-                            <tbody data-motion="stagger">
-                                {% for o in orders %}
-                                <tr>
-                                    <td class="fw-bold font-mono" data-label="#">#{{ o.id }}</td>
-                                    <td data-label="วันที่">{{ o.created_at|date:"d/m/Y" }}</td>
-                                    <td class="fw-bold tabular-nums" data-label="ยอดรวม">฿ {{ o.total|floatformat:2 }}</td>
-                                    <td data-label="ชำระแบบ">{{ o.get_payment_method_display }}</td>
-                                    <td data-label="สถานะ">
-                                        {% if o.status == 'pending' %}<span class="emp-status status-leave">รอตรวจ</span>
-                                        {% elif o.status == 'paid' %}<span class="emp-status status-active">ชำระแล้ว</span>
-                                        {% elif o.status == 'shipped' %}<span class="emp-status status-active">จัดส่งแล้ว</span>
-                                        {% else %}<span class="emp-status status-active">สำเร็จ</span>{% endif %}
-                                    </td>
-                                    <td data-label="ดู">
-                                        <a href="{% url 'order_tracking' %}?order={{ o.id }}&phone={{ o.phone|urlencode }}"
-                                           class="btn btn-sm btn-light">ดู</a>
-                                    </td>
-                                </tr>
-                                {% empty %}
-                                <tr><td colspan="6" class="text-center py-5 text-muted-apple">
-                                    <i class="bi bi-bag empty-state-icon d-block mb-2"></i>
-                                    ยังไม่มีออเดอร์ — <a href="{% url 'product' %}" class="link-arrow">ไปเลือกสินค้า</a>
-                                </td></tr>
+                    {% comment %}
+                        ประวัติการสั่งซื้อ — เดิมเป็นตาราง 6 คอลัมน์ที่บอกแค่ "สถานะ"
+                        ซึ่งไม่บอกว่าลูกค้าต้องทำอะไรต่อ และป้ายสถานะก็ผิดความหมาย
+                        (pending เขียนว่า "รอตรวจ" ทั้งที่จริงคือยังไม่ได้ชำระ)
+                        เปลี่ยนเป็นการ์ดต่อออเดอร์: เห็นสินค้าที่ซื้อ · ยอดที่จ่ายแล้ว/ขาด ·
+                        และปุ่มที่กดต่อได้จริงทั้ง 3 ทาง
+                    {% endcomment %}
+                    <div class="px-4 pt-3" data-motion="stagger">
+                        {% for o in orders %}
+                        <article class="account-order">
+                            <header class="account-order-head">
+                                <div class="d-flex align-items-baseline gap-2 flex-wrap">
+                                    <span class="account-order-no font-mono">#{{ o.id }}</span>
+                                    <span class="text-muted-apple small">
+                                        {{ o.created_at|date:"d/m/Y H:i" }}
+                                    </span>
+                                </div>
+                                <span class="account-order-status status-{{ o.status }}">
+                                    {{ o.get_status_display }}
+                                </span>
+                            </header>
+
+                            <div class="account-order-items">
+                                {% for item in o.items.all %}
+                                <span class="account-order-thumb">
+                                    <img src="{% static item.product.image %}"
+                                         alt="{{ item.product.name }}"
+                                         width="56" height="56" loading="lazy">
+                                </span>
                                 {% endfor %}
-                            </tbody>
-                        </table>
+                                <span class="account-order-summary">
+                                    <strong class="d-block">
+                                        {% if o.items.count == 1 %}
+                                            {{ o.items.first.product.name }}
+                                        {% else %}
+                                            {{ o.items.count }} รายการ
+                                        {% endif %}
+                                    </strong>
+                                    <span class="text-muted-apple small">
+                                        ชำระ{{ o.get_payment_method_display }} ·
+                                        ฿{{ o.total|floatformat:2 }}
+                                    </span>
+                                </span>
+                            </div>
+
+                            {% comment %}
+                                แถบความคืบหน้ายอดชำระ — ตอนนี้จ่ายบางส่วนได้
+                                ลูกค้าจึงต้องเห็นว่ายังขาดอีกเท่าไร ไม่ใช่แค่ "รอชำระ"
+                            {% endcomment %}
+                            <div class="account-order-progress">
+                                <div class="d-flex justify-content-between small mb-1">
+                                    <span class="text-muted-apple">
+                                        ชำระแล้ว ฿{{ o.reported_total|floatformat:2 }}
+                                    </span>
+                                    {% if o.remaining > 0 %}
+                                    <span class="text-warning fw-semibold">
+                                        ขาดอีก ฿{{ o.remaining|floatformat:2 }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-success fw-semibold">ชำระครบแล้ว</span>
+                                    {% endif %}
+                                </div>
+                                <div class="account-order-bar">
+                                    <span style="width: {{ o.paid_percent }}%"></span>
+                                </div>
+                            </div>
+
+                            {% comment %}
+                                รายการที่ลูกค้าเคยแจ้งไว้กับออเดอร์นี้ (`my_issues`
+                                เตรียมจาก AccountView._issues_by_order ไม่ใช่ query ในลูป)
+                            {% endcomment %}
+                            {% if o.my_issues %}
+                            <div class="account-order-issues">
+                                <i class="bi bi-chat-left-text me-1"></i>
+                                {% for i in o.my_issues %}
+                                <span class="account-order-issue issue-{{ i.status }}">
+                                    {{ i.subject }} — {{ i.get_status_display }}
+                                </span>
+                                {% endfor %}
+                            </div>
+                            {% endif %}
+
+                            <div class="account-order-actions">
+                                <a href="{% url 'order_tracking' %}?order={{ o.id }}&amp;phone={{ o.phone|urlencode }}"
+                                   class="btn btn-sm btn-light">
+                                    <i class="bi bi-box-seam me-1"></i>ดูรายละเอียด
+                                </a>
+                                <a href="{% url 'order_invoice' o.id %}" target="_blank"
+                                   rel="noopener" class="btn btn-sm btn-light">
+                                    <i class="bi bi-printer me-1"></i>ใบเสร็จ
+                                </a>
+                                <a href="{% url 'contact' %}?order={{ o.id }}&amp;phone={{ o.phone|urlencode }}"
+                                   class="btn btn-sm btn-light">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>แจ้งปัญหา
+                                </a>
+                            </div>
+                        </article>
+                        {% empty %}
+                        <div class="text-center py-5 text-muted-apple">
+                            <i class="bi bi-bag empty-state-icon d-block mb-2"></i>
+                            ยังไม่มีออเดอร์ — <a href="{% url 'product' %}" class="link-arrow">ไปเลือกสินค้า</a>
+                        </div>
+                        {% endfor %}
                     </div>
                 </div>
             </div>

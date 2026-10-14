@@ -47,7 +47,7 @@ from .forms import (
     UserRoleChangeForm,
 )
 from .models import (ActivityLog, CustomerAddress, CustomerProfile, Employee, Order,
-                    OrderItem, Payment, Product)
+                    OrderIssue, OrderItem, Payment, Product)
 from .services import (Audit, Cart, Catalog, GeoIP, GeminiAI, LoginThrottle,
                       OrderStatusService, PaymentService, ProductDescription,
                       PromptPay, QrCode, RateLimit,
@@ -354,6 +354,10 @@ class AccountView(CustomerRequiredMixin, TemplateView):
             'display_name': (self.request.user.get_full_name()
                              or self.request.user.username),
             'orders': orders,
+            # ปัญหาที่ลูกค้าเคยแจ้ง ผูกไว้กับออเดอร์แต่ละใบเป็น `my_issues`
+            # (Django template ดึง dict ด้วยคีย์ตัวแปรไม่ได้ และถ้าไล่ query
+            #  ใน `{% for %}` จะกลายเป็น N+1 — เตรียมมาให้เลยตรงจุดเดียว)
+            'issues_by_order': self._issues_by_order(self.request.user, orders),
             'addresses': self.request.user.addresses.all(),
             'orders_count': orders.count(),
             'orders_total': total_spent,
@@ -362,6 +366,34 @@ class AccountView(CustomerRequiredMixin, TemplateView):
             'last_login': self.request.user.last_login,
         })
         return ctx
+
+    @staticmethod
+    def _issues_by_order(user, orders):
+        """ผูกรายการแจ้งปัญหาของลูกค้าไว้กับออเดอร์แต่ละใบ (`order.my_issues`)
+
+        ทำเป็น dict แล้วใช้ฟิลเตอร์ในเทมเพลตแทนไม่ได้ 2 เหตุผล:
+          1. Django template ดึงค่า dict ด้วยคีย์ที่เป็นตัวแปรไม่ได้
+             (ต้องเขียน `{{ d|get_item:key }}` = ฟิลเตอร์ใหม่ที่ไม่คุ้ม)
+          2. ถ้าไล่ `order.issues.all` ใน `{% for %}` = N+1 query
+             ยิ่งลูกค้ามีออเดอร์เยอะ หน้าบัญชียิ่งช้าลงเงียบ ๆ
+
+        Args:
+            user: ลูกค้าคนนี้
+            orders: QuerySet ออเดอร์ของเขา (ถูก iterate ไปแล้วใน get_context_data
+                จึงเป็น object เดิม — ตั้ง attribute แล้วเทมเพลตเห็นค่าเดียวกัน)
+
+        Returns:
+            dict[int, list[OrderIssue]] — คีย์คือ order_id (เก็บไว้เผื่อจุดอื่นใช้)
+        """
+        order_ids = [o.id for o in orders]
+        grouped = {}
+        if order_ids:
+            for issue in OrderIssue.objects.for_customer(user).filter(
+                    order_id__in=order_ids):
+                grouped.setdefault(issue.order_id, []).append(issue)
+        for order in orders:
+            order.my_issues = grouped.get(order.id, [])
+        return grouped
 
 
 class ProfileEditView(CustomerRequiredMixin, View):
@@ -1096,7 +1128,7 @@ class OrderTrackingView(View):
         order = Order.objects.filter(id=oid, phone__in=candidates).first()
         ctx = {'order': order}
         if order:
-            reported = order.reported_total()
+            reported = order.reported_total
             ctx['payments'] = order.payments.order_by('-created_at')
             ctx['reported'] = reported
             ctx['remaining'] = order.remaining
@@ -1373,8 +1405,25 @@ class SlipVerifyView(View):
 
 
 class ContactView(TemplateView):
-    """หน้าติดต่อ (เนื้อหาสถิต)."""
+    """หน้าติดต่อ — ข้อมูลร้าน + ฟอร์มแจ้งปัญหา (เดิมมีแต่ข้อความนิ่ง)
+
+    เพิ่มฟอร์มแจ้งปัญหาเพราะหน้านี้คือจุดที่ลูกค้ามองหาหาทางแก้ปัญหาอยู่แล้ว
+    แต่เดิมกดอะไรไม่ได้เลย — ถ้ามีปัญหาจริงเข้าใจว่า "ต้องไปโทรหาอะไร" ทั้งที่มีช่องทางอยู่ตรงนั้น
+    """
+
     template_name = 'contact.html'
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['kinds'] = OrderIssue.KIND_CHOICES
+        # มาจากปุ่ม "พบปัญหากับออเดอร์นี้" → ?order=&phone=
+        # ยืนยันตัวตนเหมือนทุกช่องทางอื่นก่อนผูกฟอร์มเข้ากับออเดอร์นั้น
+        if self.request.GET.get('order'):
+            order, _ = _authed_order(self.request,
+                                      self.request.GET.get('order'),
+                                      self.request.GET.get('phone'))
+            ctx['order'] = order
+        return ctx
 
 
 # ==================== Base: ตารางค้นหาเรียลไทม์ (Template Method Pattern) ====================
@@ -1461,7 +1510,7 @@ class DashboardView(StaffRequiredMixin, TemplateView):
     @staticmethod
     def _pending_reports():
         """คิวตรวจการแจ้งชำระ: รายการล่าสุดของออเดอร์ที่ยัง pending.
-        (Perf A1) เคยวน p.order.reported_total() + p.order.remaining (= เรียก reported_total
+        (Perf A1) เคยวน p.order.reported_total + p.order.remaining (= เรียก reported_total
         ซ้ำ) ต่อแถว = ~2 aggregate query/แถว → ~20 query/หน้า. แก้: annotate ยอดสะสมต่อ
         order ครั้งเดียวแล้วคำนวณ remaining ใน Python = รวม 2 query เสมอ."""
         rows = []
@@ -1512,7 +1561,7 @@ class PaymentVerifyView(StaffRequiredMixin, View):
         payment = get_object_or_404(Payment.objects.select_related('order'), id=kwargs['payment_id'])
         order = payment.order
         if order.status == 'pending':
-            reported = order.reported_total()
+            reported = order.reported_total
             if reported < order.total:
                 messages.error(request,
                                f'ยังยืนยันไม่ได้ — ออเดอร์ #{order.id} แจ้งมา {reported} บาท '
@@ -1952,7 +2001,7 @@ class OrderDetailView(StaffRequiredMixin, TemplateView):
         ctx = super().get_context_data(**kwargs)
         oid = int(self.kwargs['order_id'])
         order = get_object_or_404(Order.objects.select_related('user').prefetch_related('items__product'), id=oid)
-        reported = order.reported_total()
+        reported = order.reported_total
         ctx.update({
             'order': order,
             'items': order.items.select_related('product').all(),
@@ -2101,6 +2150,119 @@ class OrderExportCsvView(CsvSafeMixin, StaffRequiredMixin, View):
         return response
 
 
+class OrderIssueCreateView(View):
+    """POST /order/<id>/issue/ (หรือ /issue/) — ลูกค้าแจ้งปัญหา
+
+    กติกาความปลอดภัย
+        - แนบออเดอร์ได้ → เช็คด้วย `_authed_order` (เลขออเดอร์ + เบอร์โทร)
+          จึงแจ้งแทนออเดอร์คนอื่นไม่ได้ แม้เดาเลขออเดอร์ถูก
+        - ล็อกอินแล้ว → ผูก `user` เพื่อให้เห็นในหน้าบัญชี
+        - guest → เก็บเฉพาะชื่อ/เบอร์/อีเมล ไม่มีบัญชีผูก
+    """
+
+    #: เดินจากหน้าสำเร็จ/ติดตาม → กลับที่มาหลังแจ้งเสร็จ
+    def post(self, request, *args, **kwargs):
+        back = request.POST.get('back') or reverse('contact')
+        if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
+            back = reverse('contact')
+
+        order = None
+        order_id = request.POST.get('order_id', '').strip()
+        if order_id:
+            order, err = _authed_order(request, order_id, request.POST.get('phone'))
+            if err:
+                messages.error(request, err)
+                return redirect(back)
+
+        subject = (request.POST.get('subject') or '').strip()
+        detail = (request.POST.get('detail') or '').strip()
+        if not subject or not detail:
+            messages.error(request, 'กรอกหัวข้อและรายละเอียดปัญหาให้ครบ')
+            return redirect(back)
+        if len(detail) > 2000:
+            detail = detail[:2000]
+
+        name = (request.POST.get('name') or '').strip() or getattr(
+            request.user, 'get_full_name', lambda: '')() or getattr(
+            request.user, 'username', '') or 'ไม่ระบุ'
+        phone = (request.POST.get('phone') or '').strip() or (
+            order.phone if order else '')
+        if not Validators.valid_phone(Validators.normalize_phone(phone or '')):
+            messages.error(request, 'ต้องระบุเบอร์โทรที่ติดต่อได้ (เช่น 0812345678)')
+            return redirect(back)
+
+        issue = OrderIssue.objects.create(
+            order=order,
+            user=request.user if request.user.is_authenticated else None,
+            name=name[:150],
+            phone=(order.phone if order else phone)[:20],
+            email=(request.POST.get('email') or '').strip()[:254],
+            kind=request.POST.get('kind', 'other'),
+            subject=subject[:200],
+            detail=detail,
+        )
+        Audit.record(
+            request.user, 'order',
+            summary=(f'ลูกค้าแจ้งปัญหา: {issue.subject} (#{issue.pk})'
+                     + (f' — ออเดอร์ #{order.id}' if order else '')),
+            target=issue, request=request,
+        )
+        messages.success(
+            request,
+            f'รับเรื่องแล้วครับ (เลขที่ #{issue.pk}) เจ้าหน้าที่จะติดต่อกลับทางเบอร์โทร'
+        )
+        return redirect(back)
+
+
+class OrderIssueListView(LiveSearchListView):
+    """หลังบ้าน: คิวการแจ้งปัญหาทั้งหมด — ค้นหา/กรองตามสถานะ"""
+
+    model = OrderIssue
+    template_name = 'issue_list.html'
+    partial_template_name = 'issue_rows.html'
+    context_object_name = 'issues'
+    paginate_by = 15
+    filter_params = ('status',)
+
+    def filter_queryset(self, queryset):
+        status = self.request.GET.get('status', '').strip()
+        return queryset.filter(status=status) if status else queryset
+
+    def get_context_data(self, **kwargs):
+        ctx = super().get_context_data(**kwargs)
+        ctx['status_choices'] = [('', 'ทั้งหมด')] + list(
+            OrderIssue.STATUS_CHOICES)
+        ctx['selected_status'] = self.request.GET.get('status', '').strip()
+        ctx['open_count'] = OrderIssue.objects.open_ones().count()
+        return ctx
+
+
+class OrderIssueUpdateView(StaffRequiredMixin, View):
+    """POST /orders/issues/<id>/ — เจ้าหน้าที่อัปเดตสถานะ + ผลการแก้ไข"""
+
+    def post(self, request, *args, **kwargs):
+        issue = get_object_or_404(OrderIssue, pk=kwargs['issue_id'])
+        status = request.POST.get('status', '').strip()
+        resolution = (request.POST.get('resolution') or '').strip()
+        old = issue.status
+
+        if not issue.mark(status, request.user, resolution):
+            reason = ('สถานะไม่ถูกต้อง' if status not in dict(OrderIssue.STATUS_CHOICES)
+                      else 'ต้องเขียนผลการดำเนินการก่อนปิดเรื่อง')
+            messages.error(request, reason)
+            return redirect(reverse('issue_list'))
+
+        Audit.record(
+            request.user, 'order',
+            summary=(f'แจ้งปัญหา #{issue.pk}: {dict(OrderIssue.STATUS_CHOICES)[old]}'
+                     f' → {dict(OrderIssue.STATUS_CHOICES)[status]}'),
+            target=issue, before={'status': old}, after={'status': status},
+            request=request,
+        )
+        messages.success(request, f'อัปเดตการแจ้งปัญหา #{issue.pk} แล้ว')
+        return redirect(reverse('issue_list'))
+
+
 class OrderInvoiceView(View):
     """หน้าพิมพ์ใบเสร็จ/ใบกำกับภาษีอย่างย่อ (A4 Print-Ready):
     เข้าถึงได้โดย:
@@ -2127,7 +2289,7 @@ class OrderInvoiceView(View):
                 return redirect(f"{reverse('account_login')}?next={request.path}")
             raise Http404("ไม่พบคำสั่งซื้อ หรือคุณไม่มีสิทธิ์เข้าถึงเอกสารนี้")
 
-        reported = order.reported_total()
+        reported = order.reported_total
         remaining = max(order.total - reported, Decimal('0'))
         is_paid = order.status in ('paid', 'shipped', 'delivered')
 

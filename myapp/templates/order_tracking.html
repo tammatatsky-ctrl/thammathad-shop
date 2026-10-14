@@ -202,6 +202,14 @@
                     </form>
                     {% endif %}
                     {% include 'order_confirm_received.html' with back_url=request.get_full_path %}
+
+                    <div class="mb-4">
+                        <a href="{% url 'contact' %}{% if order %}?order={{ order.id }}&phone={{ order.phone|urlencode }}{% endif %}"
+                           class="text-decoration-none">
+                            <i class="bi bi-exclamation-triangle me-1 text-warning"></i>
+                            <span class="link-arrow">พบปัญหากับออเดอร์นี้? แจ้งให้เราทราบ</span>
+                        </a>
+                    </div>
                     {% include 'payment_manual_form.html' with back_url=request.get_full_path %}
 
                     <div class="mt-4">

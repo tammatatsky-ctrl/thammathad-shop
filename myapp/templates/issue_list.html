@@ -1,0 +1,132 @@
+{% extends "adminbase.html" %}
+{% comment %}
+    issue_list.html — หลังบ้าน: คิวการแจ้งปัญหาจากลูกค้า
+
+    ทำไมต้องมีหน้านี้
+        การแจ้งปัญหาถ้าแค่บันทึกลงฐานข้อมูลแต่ไม่มีคิว แปลว่า "เก็บไว้ดูดำ ๆ"
+        เจ้าหน้าที่จะไม่รู้ว่ามีเรื่องค้างอยู่ เหมือนไม่มีระบบแจ้งปัญหาเลย
+        หน้านี้จึงต้องกดจัดการให้จบในหน้าเดียว ไม่ใช่แค่ดู
+
+    กติกาที่บังคับในโค้ด (OrderIssue.mark)
+        - ปิดเรื่องโดยไม่เขียน "ผลการดำเนินการ" ไม่ได้
+          เพราะลูกค้าจะต้องถามซ้ำว่าแก้ยังไง (ดู OrderIssueUpdateView)
+{% endcomment %}
+{% load static %}
+
+{% block content %}
+<section class="page-section">
+    <div class="container">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-4">
+            <div>
+                <p class="eyebrow mb-1"><i class="bi bi-chat-left-text"></i> บริการลูกค้า</p>
+                <h2 class="page-title mb-0" data-motion="reveal">การแจ้งปัญหา</h2>
+            </div>
+            <div class="d-flex gap-2 align-items-center">
+                {% if open_count %}
+                <span class="badge bg-warning text-dark">
+                    ค้าง {{ open_count }} เรื่อง
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card panel-card--wide mb-4" data-motion="reveal">
+            <form method="GET" id="issueSearchForm" class="row g-2 align-items-end">
+                <div class="col-md-7">
+                    <label class="form-label small" for="issueQ">ค้นหา</label>
+                    <input type="search" name="q" id="issueQ" class="form-control"
+                           placeholder="ชื่อลูกค้า / เบอร์ / หัวข้อ / เลขออเดอร์..."
+                           value="{{ query }}">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label small" for="issueStatus">สถานะ</label>
+                    <select name="status" id="issueStatus" class="form-select">
+                        {% for value, label in status_choices %}
+                        <option value="{{ value }}" {% if value == selected_status %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-md-2 d-grid">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-search me-1"></i>ค้นหา
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        {% comment %}
+            พื้นที่ว่างที่ JS จะสลับ — ต้องครอบทั้ง count, ตาราง และ pagination
+            จึงใส่ไว้นอก .card เพื่อให้ innerHTML ของ partial หน้าเต็มกลายเป็น
+            เนื้อหาพอดี (ถ้า swap แค่ tbody ตัว count/pagination จะค้างค่าเก่า)
+        {% endcomment %}
+        <div id="issueTableArea">
+            {% include "issue_rows.html" %}
+        </div>
+    </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+{% comment %}
+    Live search + ตัวกรองสถานะ (ตามรูปแบบเดียวกับ employee_list.html)
+
+    ไม่ต้องผูก data-confirm ใหม่หลังสลับ DOM เพราะ motion-core ใช้ delegated
+    listener ระดับ `document` (จับ submit ตอนเกิด) — innerHTML ที่โหลดใหม่จึง
+    ทำงานได้ทันทีโดยไม่ต้อง bind ซ้ำ (ถ้าเปลี่ยนไปผูกราย element ต้องระวังตรงนี้)
+{% endcomment %}
+<script>
+(function () {
+    'use strict';
+    var form = document.getElementById('issueSearchForm');
+    if (!form || !window.fetch) return;
+
+    var input = document.getElementById('issueQ');
+    var statusSel = document.getElementById('issueStatus');
+    var area = document.getElementById('issueTableArea');
+    var timer = null, seq = 0;
+
+    function currentQS(page) {
+        var p = new URLSearchParams();
+        if (input.value.trim()) p.set('q', input.value.trim());
+        if (statusSel.value) p.set('status', statusSel.value);
+        if (page && page > 1) p.set('page', page);
+        return p.toString();
+    }
+    function run(page) {
+        var my = ++seq;
+        var qs = currentQS(page);
+        form.classList.add('is-searching');
+        fetch(location.pathname + (qs ? '?' + qs : ''),
+              { headers: { 'X-Requested-With': 'fetch' } })
+            .then(function (r) {
+                if (!r.ok) throw new Error(r.status);
+                return r.text();
+            })
+            .then(function (html) {
+                if (my !== seq) return; /* ตอบกลับมาช้า คำค้นเก่ากว่า = ทิ้ง */
+                area.innerHTML = html;
+                form.classList.remove('is-searching');
+                history.replaceState(null, '',
+                    location.pathname + (qs ? '?' + qs : ''));
+            })
+            .catch(function () { form.classList.remove('is-searching'); });
+    }
+
+    input.addEventListener('input', function () {
+        clearTimeout(timer);
+        timer = setTimeout(function () { run(1); }, 250);
+    });
+    statusSel.addEventListener('change', function () { run(1); });
+    area.addEventListener('click', function (e) {
+        var a = e.target.closest ? e.target.closest('a.page-link') : null;
+        if (!a || a.parentElement.classList.contains('disabled')) return;
+        e.preventDefault();
+        var page = new URL(a.getAttribute('href'), location.href)
+            .searchParams.get('page');
+        run(parseInt(page || '1', 10));
+    });
+})();
+</script>
+{% endblock %}

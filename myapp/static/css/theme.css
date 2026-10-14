@@ -470,6 +470,9 @@ label.req::after {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  /* ห้ามตัดคำ: ภาษาไทยไม่มีช่องว่างระหว่างคำ ถ้าไม่ nowrap
+     ป้ายจะขึ้นบรรทัดเป็น "ดำเนิ|นกา|ร" ซึ่งอ่านไม่ออก */
+  white-space: nowrap;
 }
 .emp-status::before {
   content: "";
@@ -492,6 +495,164 @@ label.req::after {
   background: rgba(142, 142, 147, 0.12);
   color: var(--muted);
   border: 1px solid var(--gray-border-soft);
+}
+/* ---- ป้ายสถานะการแจ้งปัญหา ----
+   ใช้โทน semantic เดียวกับป้ายอื่น แต่แยกชื่อคลาสเพื่อไม่ให้ชนกับ
+   status-active/status-leave ของพนักงาน (ความหมายคนละเรื่องกัน) */
+.issue-status-open {
+  background: var(--semantic-warning-bg);
+  color: var(--semantic-warning-fg);
+  border: 1px solid var(--semantic-warning-border);
+}
+.issue-status-in_progress {
+  background: var(--semantic-info-bg);
+  color: var(--semantic-info-fg);
+  border: 1px solid var(--semantic-info-border);
+}
+.issue-status-resolved {
+  background: var(--semantic-success-bg);
+  color: var(--semantic-success-fg);
+  border: 1px solid var(--semantic-success-border);
+}
+.issue-status-closed {
+  background: rgba(142, 142, 147, 0.12);
+  color: var(--muted);
+  border: 1px solid var(--gray-border-soft);
+}
+.issue-detail {
+  color: var(--muted);
+  line-height: 1.5;
+  white-space: pre-line;
+}
+/* ฟอร์มปิดเรื่องในแถว: input กับปุ่มวางคู่กันในบรรทัดเดียว
+   วางซ้อนแนวตั้งจะทำให้คอลัมน์ "จัดการ" สูงมากจนตารางดูไม่เป็นตาราง */
+.issue-resolve-form {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  justify-content: flex-end;
+}
+.issue-resolve-form .btn {
+  white-space: nowrap;
+}
+.issue-resolve-input {
+  min-width: 170px;
+  width: 170px;
+}
+/* คิวแจ้งปัญหา 6 คอลัมน์ในจอ ~700px = บีบจนรายละเอียดกลายเป็นคำเดียวต่อบรรทัด
+   บังคับความกว้างขั้นต่ำแล้วให้ .table-responsive เลื่อนแนวนอนแทน
+   (ถ้าไม่กำหนด browser จะย่อคอลัมน์ให้พอดีแทนที่จะให้ล้น) */
+.issue-table {
+  min-width: 860px;
+}
+
+/* ---- การ์ดออเดอร์ในหน้าบัญชีผู้ใช้ ----
+   เดิมเป็นตาราง 6 คอลัมน์ (อ่านยากบนมือถือ และบอกไม่ได้ว่าลูกค้าต้องทำอะไรต่อ)
+   การ์ดต่อออเดอร์ทำให้เห็นสินค้า → ยอดที่จ่ายแล้ว/ขาด → ปุ่มที่กดต่อได้ ในจุดเดียว */
+.account-order {
+  border: 1px solid var(--gray-border-soft);
+  border-radius: var(--radius-lg, 18px);
+  background: var(--surface-1, var(--gray-bg));
+  padding: 16px;
+  margin-bottom: 14px;
+}
+.account-order:last-child {
+  margin-bottom: 0;
+}
+.account-order-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.account-order-no {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.account-order-status {
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 980px;
+  white-space: nowrap;
+}
+.account-order-status.status-pending {
+  background: var(--semantic-warning-bg);
+  color: var(--semantic-warning-fg);
+  border: 1px solid var(--semantic-warning-border);
+}
+.account-order-status.status-paid,
+.account-order-status.status-shipped {
+  background: var(--semantic-info-bg);
+  color: var(--semantic-info-fg);
+  border: 1px solid var(--semantic-info-border);
+}
+.account-order-status.status-delivered {
+  background: var(--semantic-success-bg);
+  color: var(--semantic-success-fg);
+  border: 1px solid var(--semantic-success-border);
+}
+.account-order-items {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.account-order-thumb img {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 12px;
+  background: var(--gray-bg);
+  display: block;
+}
+.account-order-summary {
+  min-width: 0;
+}
+.account-order-progress {
+  margin-bottom: 12px;
+}
+.account-order-bar {
+  height: 6px;
+  border-radius: 980px;
+  background: var(--gray-border-soft);
+  overflow: hidden;
+}
+.account-order-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 980px;
+  background: var(--apple-blue);
+  transition: width var(--ease-apple, ease) 0.4s;
+}
+.account-order-issues {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+.account-order-issue {
+  padding: 3px 10px;
+  border-radius: 980px;
+  border: 1px solid var(--gray-border-soft);
+  background: var(--gray-bg);
+}
+.account-order-issue.issue-resolved {
+  border-color: var(--semantic-success-border);
+  color: var(--semantic-success-fg);
+}
+.account-order-issue.issue-closed {
+  color: var(--muted);
+}
+.account-order-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 .table-avatar {
   width: 40px;
