@@ -39,6 +39,8 @@ urlpatterns = [
     path('checkout/', views.CheckoutView.as_view(), name='checkout'),
     path('order/success/<int:order_id>/', views.OrderSuccessView.as_view(), name='order_success'),
     path('order/tracking/', views.OrderTrackingView.as_view(), name='order_tracking'),
+    path('order/<int:order_id>/confirm-received/', views.OrderConfirmReceivedView.as_view(),
+         name='order_confirm_received'),
     path('payment/', views.PaymentRedirectView.as_view(), name='payment'),
     path('payment/quick/', views.QuickPayView.as_view(), name='payment_quick'),
     path('payment/manual/', views.PaymentManualView.as_view(), name='payment_manual'),

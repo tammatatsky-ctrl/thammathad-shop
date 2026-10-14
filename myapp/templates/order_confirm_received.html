@@ -1,0 +1,35 @@
+{% comment %}
+    order_confirm_received.html — ปุ่ม "ยืนยันได้รับสินค้าแล้ว" สำหรับลูกค้า
+
+    ทำไมต้องมี
+        ขั้น 'delivered' เดิมให้เฉพาะเจ้าหน้าที่กด ซึ่งทำให้สถานะไม่ได้สะท้อน
+        ความจริง (ของอาจถึงมือก็ต่อเมื่อ **ผู้รับ**บอกว่าได้รับแล้ว)
+        และถ้าเผลอกดปุ่มที่ยังไม่ถึง ข้อมูลผิดนั้นแก้ยากภายหลัง
+
+    แสดงเมื่อ: ออเดอร์เป็น 'shipped' เท่านั้น (ห้ามกดข้ามขั้น)
+    ยืนยันตัวตนด้วย: เลขออเดอร์ + เบอร์โทรที่ใช้สั่งซื้อ (เหมือนช่องทางลูกค้าอื่น)
+{% endcomment %}
+{% if order.status == 'shipped' %}
+<div class="card panel-card mb-4 order-confirm-card">
+    <h5 class="mb-2"><i class="bi bi-box-seam me-2 text-primary"></i>ได้รับสินค้าแล้วหรือยัง?</h5>
+    <p class="text-muted-apple small mb-3">
+        ถ้าตรวจสอบของแล้วถูกต้องครบ และไม่มีปัญหาอะไร กดยืนยันได้เลย
+        ระบบจะปิดออเดอร์เป็น <strong>ถึงมือแล้ว</strong> ทันที
+        หากยังไม่ถึง หรือมีปัญหา อย่ากดยืนยัน — ติดต่อร้านได้ทางเบอร์โทรในใบเสร็จ
+    </p>
+    <form method="POST" action="{% url 'order_confirm_received' order.id %}"
+          data-confirm="ยืนยันว่าคุณได้รับสินค้าครบถูกต้องแล้วหรือยัง? การกดยืนยันถือว่าปิดออเดอร์ถาวร"
+          data-confirm-title="ยืนยันการรับสินค้า"
+          data-confirm-icon="bi-box2-heart-fill"
+          data-confirm-ok="ยืนยันว่าได้รับแล้ว"
+          data-confirm-tone="primary">
+        {% csrf_token %}
+        <input type="hidden" name="order_id" value="{{ order.id }}">
+        <input type="hidden" name="phone" value="{{ order.phone }}">
+        <input type="hidden" name="back" value="{{ back_url|default:request.get_full_path }}">
+        <button type="submit" class="btn btn-primary w-100">
+            <i class="bi bi-check2-circle me-1"></i>ยืนยันว่าได้รับสินค้าแล้ว
+        </button>
+    </form>
+</div>
+{% endif %}

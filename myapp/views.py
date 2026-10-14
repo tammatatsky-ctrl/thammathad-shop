@@ -1239,6 +1239,59 @@ class PaymentManualView(View):
         return redirect(back)
 
 
+class OrderConfirmReceivedView(View):
+    """POST /order/<id>/confirm-received/ — **ลูกค้า**ยืนยันว่าได้รับสินค้าแล้ว
+
+    ทำไมต้องมี
+        ขั้น 'delivered' เดิมให้เฉพาะเจ้าหน้าที่กด → สถานะไม่ได้สะท้อนความจริง
+        ถ้าของยังไม่ถึงมือจริง แต่เจ้าหน้าที่เผลอกดปุ่ม ระบบก็บันทึกว่า"ถึงมือแล้ว"
+        ซึ่งเป็นข้อมูลผิดที่ยากแก้ทีหลังเพราะระบบเชื่อว่าของถึงแล้ว
+
+        การให้ลูกค้ายืนยันเองตรงกับความจริงของการส่งของ: ของถึงมือก็ต่อเมื่อ
+        **ผู้รับ**บอกว่าได้รับแล้ว ไม่ใช่เมื่อผู้ส่งกดว่าส่งแล้ว
+
+    กติกา
+        - ต้องเป็นเจ้าของออเดอร์ (ยืนยันด้วยเบอร์โทรเหมือนช่องทางอื่นของลูกค้า)
+        - เดินบันไดถูกต้อง: ต้องเป็น 'shipped' เท่านั้น (ห้ามข้ามจาก pending)
+        - ยังอนุญาตให้เจ้าหน้าที่กดได้สำหรับกรณีลูกค้าติดต่อไม่ได้
+          (เช่น เก็บเงินปลายทาง) — ดู `OrderStatusService.staff_options()`
+        - ทั้งสองทางถูกบันทึก audit แยกกัน บอกได้ว่าใครยืนยัน
+    """
+
+    def post(self, request, *args, **kwargs):
+        order, err = _authed_order(request, request.POST.get('order_id'),
+                                   request.POST.get('phone'))
+        back = request.POST.get('back') or reverse('order_tracking')
+        if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
+            back = reverse('order_tracking')
+        if err:
+            messages.error(request, err)
+            return redirect(back)
+
+        if order.status == 'delivered':
+            messages.info(request, f'ออเดอร์ #{order.id} ยืนยันรับสินค้าแล้วอยู่')
+            return redirect(back)
+        if order.status != 'shipped':
+            messages.error(
+                request,
+                f'ออเดอร์ #{order.id} ยังไม่ได้จัดส่ง (ตอนนี้คือ "{order.get_status_display()}") '
+                f'— ยืนยันรับสินค้าได้ต่อเมื่อร้านกดจัดส่งแล้วเท่านั้น')
+            return redirect(back)
+
+        OrderStatusService.auto_move(order, 'delivered', actor='customer:confirm-received')
+        Audit.record(
+            request.user, 'order_status',
+            summary=(f'ออเดอร์ #{order.id}: ลูกค้ายืนยันได้รับสินค้าแล้ว '
+                     f'({order.customer_name})'),
+            target=order,
+            before={'status': 'shipped'}, after={'status': 'delivered'},
+            request=request,
+        )
+        messages.success(request,
+                         f'ขอบคุณครับ ยืนยันรับสินค้าออเดอร์ #{order.id} เรียบร้อยแล้ว')
+        return redirect(back)
+
+
 class SlipVerifyView(View):
     """POST /payment/slip/ — อัปโหลดสลิป → SlipOK OCR → สร้าง Payment อัตโนมัติ
     คืน JSON สำหรับ fetch (X-Requested-With)
@@ -1906,12 +1959,30 @@ class OrderDetailView(StaffRequiredMixin, TemplateView):
             'payments': order.payments.order_by('-created_at'),
             'reported': reported,
             'remaining': order.remaining,
-            'allowed_statuses': [(v, dict(Order.STATUS_CHOICES)[v]) for v in OrderStatusService.staff_options(order)],
+            'allowed_statuses': self._status_options(order),
             # ปุ่มบังคับสถานะสำหรับ superuser เท่านั้น (can_override ตรวจ is_superuser
             # เองอีกชั้น) — staff ธรรมดาจะไม่เห็นเลย ไม่ใช่แค่กดไม่ได้
             'can_override_paid': OrderStatusService.can_override(order, self.request.user),
         })
         return ctx
+
+    @staticmethod
+    def _status_options(order):
+        """ป้ายปุ่มสถานะที่เจ้าหน้าที่เลื่อนได้
+
+        ขั้น 'ถึงมือแล้ว' เป็นขั้นที่ **ลูกค้าควรเป็นคนยืนยัน** (ดู
+        `OrderConfirmReceivedView`) เจ้าหน้าที่ยังกดได้สำหรับกรณีที่
+        ติดต่อลูกค้าไม่ได้ เช่น เก็บเงินปลายทาง — ป้ายจึงต้องบอกความต่างนี้
+        ไม่ใช่แสดง "ถึงมือ" เฉย ๆ เหมือนเป็นทางปกติ
+        """
+        labels = dict(Order.STATUS_CHOICES)
+        out = []
+        for value in OrderStatusService.staff_options(order):
+            if value == 'delivered':
+                out.append((value, 'ถึงมือแล้ว (กรณีลูกค้าติดต่อไม่ได้)'))
+            else:
+                out.append((value, labels.get(value, value)))
+        return out
 
 
 class OrderStatusView(StaffRequiredMixin, View):

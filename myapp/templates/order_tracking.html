@@ -201,6 +201,7 @@
                         </button>
                     </form>
                     {% endif %}
+                    {% include 'order_confirm_received.html' with back_url=request.get_full_path %}
                     {% include 'payment_manual_form.html' with back_url=request.get_full_path %}
 
                     <div class="mt-4">
