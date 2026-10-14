@@ -23,42 +23,17 @@
 
 `settings.py` ตั้งใจให้ **error ตอน boot** ถ้า env ไม่ครบ ดีกว่ารันแล้วรั่ว
 
-> ⚠️ **อ่านข้อนี้ก่อน** — เป็นกับดักที่ทำให้คนเสียเวลามากที่สุดตอน deploy
+> ⚠️ **อ่านข้อนี้ก่อน — เป็นกับดักที่ทำให้เสียเวลามากที่สุดตอน deploy**
 >
 > **Environment variables ที่ตั้งในแท็บ Web มีผลกับเฉพาะ process ของเว็บ**
 > คำสั่ง `manage.py` ที่รันใน **Bash console จะไม่เห็นค่าเหล่านั้น**
-> ผลคือเว็บขึ้นปกติ แต่ `python manage.py migrate` / `seed_catalog` /
-> `seed_demo_data` / `preflight` จะ error ทั้งหมดว่า
+> ผลคือเว็บอาจขึ้นปกติ แต่ `python manage.py migrate` / `seed_catalog` /
+> `seed_demo_data` / `preflight` จะ error ว่า
 > `ต้องตั้ง env DJANGO_SECRET_KEY` — ทั้งที่เพิ่งตั้งไปแล้วในแท็บ Web
 >
-> วิธีที่ถูกคือใช้ **ไฟล์ `.env`** ซึ่ง `settings.py` เรียก `load_dotenv()` อยู่แล้ว
-> จึงมีผลกับทั้งเว็บและ console ใช้ค่าเดียวกันได้ ไม่มีทางหลุดแยกกัน
+> → ต้องตั้ง **สองที่** ตามคำสั่งด้านล่าง
 
-### สร้าง `.env` (ทำครั้งเดียว)
-
-```bash
-cd ~/my_django_app
-python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
-# คัดลอกค่าที่ได้ไปใส่ในขั้นถัดไป
-
-cat > .env <<'EOF'
-DJANGO_DEBUG=0
-DJANGO_SECRET_KEY=<วางค่าที่ได้>
-EMAIL_URL=
-EOF
-
-chmod 600 .env     # เฉพาะเจ้าของอ่านได้
-```
-
-ตรวจว่าได้ผล:
-```bash
-python manage.py check          # ต้องขึ้น System check identified no issues
-```
-
-> `.env` ไม่ถูกรวมใน `pa_update.zip` และอยู่ใน `.gitignore` ของโปรเจกต์
-> จึงไม่หลุดไปกับ git ทั้งที่ยังตั้งค่าได้ตามต้องการ
-
-### ตัวแปรที่ตั้งได้
+### A) สำหรับเว็บ — แท็บ Web → Environment variables
 
 | ตัวแปร | ค่า | ถ้าไม่ตั้ง |
 |---|---|---|
@@ -67,9 +42,36 @@ python manage.py check          # ต้องขึ้น System check identifi
 | `EMAIL_URL` | เว้นว่างได้ | ระบบจะไม่ลอกว่าส่งแล้ว แต่ "ลืมรหัสผ่าน" ใช้กับลูกค้าจริงไม่ได้ |
 | `GEMINI_API_KEY` / `SLIPOK_API_KEY` | เว้นว่างได้ | ฟีเจอร์นั้นถูกซ่อน (ตั้งใจ ไม่ใช่ของพัง) |
 
-> ถ้าตั้งค่าเดียวกันไว้ทั้งใน `.env` **และ** แท็บ Web ค่าในแท็บ Web จะชนะเสมอ
-> (`load_dotenv()` ไม่เขียนทับตัวแปรที่มีอยู่แล้ว) — ถ้าตั้งทั้งสองที่
-> **ต้องใส่ค่าเดียวกัน** ไม่งั้น session ที่สร้างจาก console จะใช้กับเว็บไม่ได้
+### B) สำหรับ Bash console — เขียนลง `~/.bashrc` (ทำครั้งเดียว)
+
+```bash
+python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
+# คัดลอกค่าที่ได้ → K
+
+cat >> ~/.bashrc <<'EOF'
+export DJANGO_DEBUG=0
+export DJANGO_SECRET_KEY='วางค่าKตรงนี้'
+EOF
+
+source ~/.bashrc
+```
+
+> ต้องมี **เครื่องหมายคำพูดเดี่ยว** `'...'` ครอบค่าคีย์ เพราะค่าที่ Django สุ่ม
+> มี `&` และ `%` ปนอยู่ — ไม่มีเครื่องหมายจะโดน shell ตัดทิ้ง
+>
+> ต้องใส่ **ค่าเดียวกับแท็บ Web** ไม่งั้น session ที่สร้างจาก console
+> จะใช้กับเว็บไม่ได้ (คีย์ไม่ตรงกัน)
+
+### ตรวจว่าได้ผล
+
+```bash
+python manage.py check    # ต้องขึ้น System check identified no issues
+```
+
+> หมายเหตุ: `settings.py` มี `load_dotenv()` อยู่แล้ว แต่พึ่ง `python-dotenv`
+> ซึ่งต้องติดตั้งสำเร็จก่อน ถ้า `pip install` ล้มกลางทาง
+> `except ImportError: pass` จะกลืน error **เงียบ ๆ** แล้วไปต่อง่าย
+> โดยไม่บอกว่าไม่ได้อ่าน `.env` — ดู §"ติดตั้งไม่ผ่าน" ด้านล่าง
 
 ---
 
@@ -121,7 +123,7 @@ pip install -r ~/my_django_app/requirements.txt
 workon django-shop
 cd ~/my_django_app
 python manage.py migrate            # ครั้งแรก DB ว่าง
-python manage.py seed_catalog      # สินค้า 12 ชิ้น 4 หมวด — ต้องทำก่อนข้อ 3
+python manage.py seed_catalog      # สินค้า 12 ชิ้น 4 หมวด — ต้องทำก่อนข้อถัดไป
 python manage.py seed_demo_data    # พนักงาน 13 · ลูกค้า 6 · ออเดอร์ 10 · ปัญหา 4
 ```
 
@@ -130,7 +132,15 @@ python manage.py seed_demo_data    # พนักงาน 13 · ลูกค้
 >
 > ถ้าบน server มีข้อมูลจริงอยู่แล้ว **ไม่ต้องรัน seed** — seed จะไปแตะข้อมูลที่มีอยู่
 
-### 5) ตรวจความพร้อม (บน server)
+### 5) ตรวจว่าติดตั้งได้ครบ (ก่อน seed — อย่าข้าม)
+
+```bash
+pip list | grep -Ei '^(Django|djangorestframework|drf-spectacular|Pillow|python-dotenv|qrcode|promptpay-qr)'
+```
+
+ต้องเห็น **7 บรรทัด** ถ้าไม่ครบ = การติดตั้งล้มกลางทาง ให้ทำตาม §"ติดตั้งไม่ผ่าน"
+
+### 6) เตรียมฐานข้อมูล (**ต้องเรียงตามลำดับ**)
 
 ```bash
 python manage.py preflight
@@ -178,7 +188,36 @@ application = get_wsgi_application()
 
 ---
 
-## อัปเดตครั้งถัดไป (ไม่ต้องทำข้อ 3/4/6 ซ้ำ)
+## 🔴 "ติดตั้งไม่ผ่าน" — อ่านท้ายสุดของ output เสมอ
+
+`pip` พิมพ์หลายบล็อกเรียงกัน และคนมักคัดลอกมาแค่บล็อกแรกซึ่ง**ไม่ใช่ตัวที่ทำให้ล้ม**
+
+```
+ERROR: pip's dependency resolver does not currently take into account ...
+moviepy 2.1.1 requires pillow<11.0 ...          ← คำเตือน (ไม่ใช่ตัวที่ทำให้ล้ม)
+dj-rest-auth 6.0.0 requires Django<6.0 ...       ← คำเตือน
+Successfully installed ...                        ← ติดตั้งสำเร็จ
+...
+error: command '/usr/bin/gcc' failed ...          ← ตัวที่ทำให้ล้มจริง (อยู่ข้างล่าง)
+```
+
+คำสั่งช่วยดู:
+```bash
+pip install -r requirements.txt 2>&1 | tail -20
+```
+
+**ตรวจว่าครบจริง** (ไม่ใช่ดูข้อความ แต่ดูรายการที่ติดตั้ง):
+```bash
+pip list | grep -Ei '^(Django|djangorestframework|drf-spectacular|Pillow|python-dotenv|qrcode|promptpay-qr)'
+```
+
+> อาการที่พบจริง: `pip` ล้มที่ `pycairo` → หยุดกลางทาง → `Django` **ไม่ถูกติดตั้ง**
+> แต่ข้อความ `Successfully installed` ที่อยู่ด้านบนทำให้เข้าใจว่าสำเร็จ
+> แล้วไปหาปัญหาที่ผิดทางนาน
+
+---
+
+## อัปเดตครั้งถัดไป (ไม่ต้องทำข้อ 3/5/6/7 ซ้ำ)
 
 1. สร้าง zip ใหม่บนเครื่องตัวเอง (ดูคำสั่งด้านล่าง)
 2. อัปโหลด `pa_update.zip` → Files
