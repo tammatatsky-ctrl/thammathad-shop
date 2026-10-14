@@ -96,9 +96,9 @@ class Command(BaseCommand):
         self.stdout.write('')
         summary = f'ผ่าน {len(checks) - len(fails) - len(warns)}/{len(checks)}'
         if warns:
-            summary += f' · WARN {len(warns)}'
+            summary += f' | WARN {len(warns)}'
         if fails:
-            summary += f' · FAIL {len(fails)}'
+            summary += f' | FAIL {len(fails)}'
         self.stdout.write(summary)
 
         if fails:

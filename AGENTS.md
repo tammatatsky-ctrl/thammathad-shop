@@ -78,7 +78,7 @@ python manage.py collectstatic       # Collect to staticfiles/
 - **Service layer** (`services.py`): Cart (session-based), Catalog, RateLimit, ThaiCalendar, ExchangeRate (open.er-api.com), GeoIP (ipwho.is), Translate (MyMemory), PromptPay QR, SlipOK OCR, GeminiAI, Validators, OrderStatusService, PaymentService — no business logic in views.
 - **Order status lifecycle** (`OrderStatusService`): บันไดขั้นเดียว รอ → ชำระเงินแล้ว → จัดส่ง → ถึงมือ — ห้ามข้าม/ถอยหลัง; ขั้น "ชำระเงินแล้ว" ขึ้นอัตโนมัติ (เจ้าหน้าที่ตั้งด้วยมือไม่ได้).
   - **ขั้นสุดท้าย "ถึงมือแล้ว" ให้ลูกค้ายืนยันเองเป็นหลัก** (`OrderConfirmReceivedView` → `POST /order/<id>/confirm-received/`, ยืนยันตัวตนด้วยเลขออเดอร์+เบอร์) — ของถึงมือก็ต่อเมื่อผู้รับบอกว่าได้รับแล้ว ไม่ใช่ผู้ส่งกดว่าส่งแล้ว. เจ้าหน้าที่ยังกดได้สำหรับกรณีติดต่อลูกค้าไม่ได้ (เก็บเงินปลายทาง) โดยป้ายบอกว่าเป็นทางสำรอง (`OrderDetailView._status_options`) — ถ้าตัดออกเฉย ๆ ออเดอร์ COD จะค้างที่ "จัดส่งแล้ว" ถาวร
-- **การแจ้งปัญหา** (`OrderIssue`): ลูกค้าแจ้งได้จาก `/contact/` หรือจากหน้าติดตามออเดอร์ → เจ้าหน้าที่ปิดเรื่องที่ `/orders/issues/`. กฎที่ห้ามละเมิด: (ก) ผูกกับออเดอร์ต้องผ่าน `_authed_order` (เลขออเดอร์+เบอร์) (ข) **ปิดเรื่องโดยไม่เขียน `resolution` ไม่ได้** — บังคับที่ `OrderIssue.mark()` ไม่ใช่ HTML `required`
+- **การแจ้งปัญหา** (`OrderIssue`): ลูกค้าแจ้งได้จากหน้าเฉพาะ `/issue/` (`IssueReportView`) หรือกดลิงก์จากหน้าติดตามออเดอร์/หน้าบัญชี (`/issue/?order=...&phone=...`) → เจ้าหน้าที่ปิดเรื่องที่ `/orders/issues/`. ส่วน `/contact/` แยกเป็นหน้าข้อมูลติดต่อ + แผนที่ตามเดิม. กฎที่ห้ามละเมิด: (ก) ผูกกับออเดอร์ต้องผ่าน `_authed_order` (เลขออเดอร์+เบอร์) (ข) **ปิดเรื่องโดยไม่เขียน `resolution` ไม่ได้** — บังคับที่ `OrderIssue.mark()` ไม่ใช่ HTML `required`
 - **Superuser override** (`PaymentService.override_mark_paid()`): ทางออกสำหรับกรณีเงินมาผิดทาง (สดหน้าร้าน/โอนผิดบัญชี) — **เฉพาะ `is_superuser`** ต้องใส่เหตุผล, สร้าง `Payment` ให้รายได้กับประวัติเงินตรงกัน, บันทึก audit ทุกครั้ง. **ยังห้ามข้ามบันได** — override ข้ามแค่ "ขั้นอัตโนมัติ" ไม่ใช่บันได. ดูสิทธิ์ก่อนด้วย `OrderStatusService.can_override(order, user)`
 - **PaymentService.record_payment()**: จุดรับเงินจุดเดียวของทุกช่องทาง (สลิป OCR / ปุ่มโอน 1 คลิก) — เมื่อยอดแจ้งสะสมครบยอดรวม → สถานะเป็น paid อัตโนมัติ + บันทึก `ActivityLog` action=`payment` ทุกครั้งที่มียอดเข้า (รวมจ่ายบางส่วน).
 
@@ -573,13 +573,14 @@ basetemplate.html          Public base (navbar, footer, toast, theme switch, len
     issue_list.html        คิวการแจ้งปัญหา (รายงาน → การแจ้งปัญหา)
 
   index.html, product.html, product_detail.html, cart.html, checkout.html,
-  order_tracking.html, order_success.html, contact.html, account.html,
-  account_login.html, account_register.html, slip_upload.html, address_form.html
+  order_tracking.html, order_success.html, contact.html, issue_report.html,
+  account.html, account_login.html, account_register.html, slip_upload.html,
+  address_form.html
 
 Partial ที่ include ซ้ำหลายหน้า (partials — ต้องแก้ที่เดียว ใช้ได้ทุกที่):
   order_confirm_received.html  ปุ่ม "ยืนยันว่าได้รับสินค้าแล้ว" (สำเร็จ + ติดตาม)
   payment_manual_form.html     ช่อง "แจ้งยอดโอนเอง" (สำเร็จ + ติดตาม)
-  issue_form.html              ฟอร์มแจ้งปัญหา (contact + ผูกกับ order ได้)
+  issue_form.html              ฟอร์มแจ้งปัญหา (ใช้ใน issue_report.html + ผูกกับ order ได้)
   *_rows.html                  แถวตารางหลังบ้านสำหรับ live search
                                (สล็อต data-slot="rows"/"count"/"pagination"
                                 — JS ในหน้า list สลับตามชื่อนี้)

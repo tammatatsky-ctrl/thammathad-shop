@@ -54,6 +54,21 @@ class Command(BaseCommand):
         parser.add_argument(
             '--docx-only', action='store_true', help='สร้างเฉพาะ Word')
         parser.add_argument(
+            '--student-name', default='นายธรรมธัช รูปไธสง',
+            help='ชื่อ-นามสกุลผู้จัดทำ')
+        parser.add_argument(
+            '--student-id', default='671320104',
+            help='รหัสนักศึกษา')
+        parser.add_argument(
+            '--advisor', default='ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย',
+            help='อาจารย์ประจำวิชา / เสนอ')
+        parser.add_argument(
+            '--course', default='4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์',
+            help='ชื่อรายวิชา')
+        parser.add_argument(
+            '--blank-cover', action='store_true',
+            help='เว้นช่องว่างหน้าปกไว้สำหรับกรอกด้วยตนเอง')
+        parser.add_argument(
             '--open', action='store_true',
             help='เปิดไฟล์ที่สร้างให้ทันทีหลังเสร็จ (Windows เท่านั้น)')
 
@@ -72,29 +87,49 @@ class Command(BaseCommand):
         tests = facts.count_tests()
 
         self.stdout.write(self.style.MIGRATE_HEADING(
-            f'ข้อมูลที่ดึงจากโค้ดจริง: {len(models)} ตาราง · '
-            f'{len(routes)} เส้นทาง · {len(services)} service · '
+            f'ข้อมูลที่ดึงจากโค้ดจริง: {len(models)} ตาราง | '
+            f'{len(routes)} เส้นทาง | {len(services)} service | '
             f'{tests["cases"]} เทสต์'))
 
         diagrams.register_thai_fonts()
         pack = {
             'er': (diagrams.er_diagram(models),
-                   'ภาพที่ 1 — ER Diagram แสดงความสัมพันธ์ระหว่างตารางทั้งหมด '
-                   'ซึ่งอ่านค่าจากโมเดลในโค้ดโดยตรง'),
+                   'ภาพที่ 3.3 แผนภาพความสัมพันธ์ข้อมูล (Entity-Relationship Diagram) อ่านค่าจากโมเดลจริง'),
             'layered': (diagrams.layered_architecture(),
-                        'ภาพที่ 2 — สถาปัตยกรรมแบบชั้น ตรรกะทางธุรกิจ'
-                        'อยู่ที่ชั้น Service'),
+                        'ภาพที่ 3.2 สถาปัตยกรรมระบบแบบ 4 ชั้น ตรรกะทางธุรกิจรวมศูนย์อยู่ที่ชั้น Service Layer'),
             'lifecycle': (diagrams.order_lifecycle_diagram(
                 _lifecycle_steps(), ['ลูกค้า', 'เจ้าหน้าที่', 'ระบบ']),
-                'ภาพที่ 3 — แผนผังลำดับการเปลี่ยนสถานะออเดอร์ ต้องเดิน'
-                'ทีละขั้นและห้ามย้อนหลัง'),
+                'ภาพที่ 3.4 แผนผังวงจรชีวิตสถานะคำสั่งซื้อแบบทิศทางเดียว ต้องเดินทีละขั้นและห้ามย้อนกลับ'),
             'usecase': (diagrams.use_case_diagram(_use_cases()),
-                        'ภาพที่ 4 — กรณีใช้งานของระบบ แยกตามผู้กระทำ'),
+                        'ภาพที่ 3.1 แผนภาพกรณีการใช้งานของระบบ (Use Case Diagram) แยกตามผู้กระทำ'),
         }
 
         appendix = self._appendix_blocks(models, services, routes, loc,
                                          tests)
         chapters = content.chapter_order()
+
+        # จัดเตรียมข้อมูลปกและข้อมูลทางวิชาการ
+        if options.get('blank_cover'):
+            cover_data = COVER.copy()
+        else:
+            cover_data = {
+                'title': COVER.get('title') or 'ระบบร้านค้าออนไลน์สำหรับอุปกรณ์คอมพิวเตอร์และไอที',
+                'title_en': 'E-Commerce System for Computer Hardware and IT Accessories',
+                'project_name': 'THAMMATHAD SHOP',
+                'student': {
+                    'ชื่อ-นามสกุล': options.get('student_name') or COVER['student']['ชื่อ-นามสกุล'] or 'นายธรรมธัช รูปไธสง',
+                    'รหัสนักศึกษา': options.get('student_id') or COVER['student']['รหัสนักศึกษา'] or '671320104',
+                    'ชั้นปี': 'ชั้นปีที่ 3',
+                    'สาขา': COVER['student'].get('สาขา') or 'วิทยาการคอมพิวเตอร์',
+                    'คณะ': 'คณะวิทยาศาสตร์และเทคโนโลยี',
+                },
+                'advisor': options.get('advisor') or COVER.get('advisor') or 'ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย',
+                'course': options.get('course') or '4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์',
+                'course_en': '4123713 Special Topics in Computer Science',
+                'university': 'มหาวิทยาลัยราชภัฏกำแพงเพชร',
+                'semester': 'ภาคการศึกษาที่ 1 ปีการศึกษา 2569',
+                'year': COVER.get('year', '2569'),
+            }
 
         want_pdf = not options['docx_only']
         want_docx = not options['pdf_only']
@@ -103,13 +138,13 @@ class Command(BaseCommand):
         if want_pdf:
             from myapp.docs.pdf_builder import build_pdf
             path = out_dir / 'รายงาน-THAMMATHAD-SHOP.pdf'
-            build_pdf(str(path), COVER, chapters, pack, appendix)
+            build_pdf(str(path), cover_data, chapters, pack, appendix)
             written.append(path)
 
         if want_docx:
             from myapp.docs.docx_builder import build_docx
             path = out_dir / 'รายงาน-THAMMATHAD-SHOP.docx'
-            build_docx(str(path), COVER, chapters, pack, appendix)
+            build_docx(str(path), cover_data, chapters, pack, appendix)
             written.append(path)
 
         for path in written:
@@ -206,6 +241,30 @@ class Command(BaseCommand):
         blocks.append(('table', {
             'head': ('เรื่อง', 'วิธีจัดการ', 'อยู่ที่'),
             'rows': list(facts.security_checklist()),
+        }))
+
+        blocks.append(('h2', 'ภาคผนวก ก.5 สรุปข้อกำหนดเส้นทางและ REST API'))
+        api_routes = [r for r in routes if r.name.startswith('api')]
+        blocks.append(('table', {
+            'head': ('เส้นทาง (Endpoint)', 'เมธอด', 'กลุ่มผู้ใช้/โซน', 'ชื่อ View/ฟังก์ชัน'),
+            'rows': [
+                (r.pattern, r.methods, r.zone, r.name or r.view)
+                for r in api_routes[:15]
+            ],
+        }))
+
+        blocks.append(('h2', 'ภาคผนวก ข ประวัติผู้จัดทำโครงงาน (Author Biography)'))
+        blocks.append(('table', {
+            'head': ('หัวข้อข้อมูล', 'รายละเอียด'),
+            'rows': [
+                ('ชื่อ-นามสกุล', 'นายธรรมธัช รูปไธสง'),
+                ('รหัสนักศึกษา', '671320104'),
+                ('หลักสูตร / สาขาวิชา', 'วิทยาศาสตรบัณฑิต (วท.บ.) สาขาวิชาวิทยาการคอมพิวเตอร์'),
+                ('คณะและสถาบัน', 'คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏกำแพงเพชร'),
+                ('รายวิชาโครงงาน', '4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์ (Special Topics in Computer Science)'),
+                ('อาจารย์ประจำวิชา', 'ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย'),
+                ('ผลงานในโครงงาน', 'วิเคราะห์ ออกแบบ และพัฒนาระบบ THAMMATHAD SHOP (สถาปัตยกรรม 4 ชั้น, Single Point Payment, One-Way Order Ladder, Append-Only Audit Trail, Automated Test Suite 383 เคส)'),
+            ],
         }))
 
         return blocks

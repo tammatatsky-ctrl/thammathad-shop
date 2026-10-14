@@ -86,6 +86,7 @@ urlpatterns = [
          name='password_change_done'),
 
     path('contact/', views.ContactView.as_view(), name='contact'),
+    path('issue/', views.IssueReportView.as_view(), name='issue_report'),
     path('order/<int:order_id>/issue/', views.OrderIssueCreateView.as_view(),
          name='order_issue'),
     path('staff/login/', views.StaffLoginView.as_view(), name='staff_login'),

@@ -32,8 +32,14 @@
                     </div>
                 </div>
 
-                <div class="mt-4">
-                    {% include 'issue_form.html' with kinds=kinds %}
+                <div class="card panel-card mt-4 d-flex flex-row align-items-center justify-content-between flex-wrap gap-3" data-motion="reveal">
+                    <div>
+                        <h2 class="h6 mb-1"><i class="bi bi-exclamation-triangle me-2 text-warning"></i>พบปัญหากับสินค้าหรือออเดอร์?</h2>
+                        <p class="text-muted-apple small mb-0">แจ้งเรื่องผ่านระบบเพื่อให้เจ้าหน้าที่ตรวจสอบและติดตามสถานะได้ทันที</p>
+                    </div>
+                    <a href="{% url 'issue_report' %}" class="btn btn-primary btn-sm">
+                        <i class="bi bi-chat-left-text me-1"></i>ไปหน้าแจ้งปัญหา
+                    </a>
                 </div>
 
                 <div class="card panel-card--large mt-4 map-card" data-motion="reveal" data-dir="zoom">

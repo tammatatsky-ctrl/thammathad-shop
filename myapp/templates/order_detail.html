@@ -12,6 +12,21 @@
                 <span class="breadcrumbs-here">ออเดอร์ #{{ order.id }}</span>
             </nav>
 
+            {% if unresolved_issues_count %}
+            <div class="alert alert-danger d-flex align-items-center justify-content-between p-3 mb-4 rounded-3 border-danger shadow-sm" data-motion="reveal">
+                <div class="d-flex align-items-center gap-3">
+                    <i class="bi bi-exclamation-triangle-fill fs-3 text-danger"></i>
+                    <div>
+                        <strong class="d-block text-danger fs-6">คำสั่งซื้อนี้มีปัญหาค้างอยู่ {{ unresolved_issues_count }} เรื่องที่ยังไม่ได้รับการแก้ไข</strong>
+                        <small class="text-muted-apple">กรุณาตรวจสอบการแจ้งปัญหาก่อนเปลี่ยนสถานะหรือจัดส่งสินค้า</small>
+                    </div>
+                </div>
+                <a href="{% url 'issue_list' %}?q={{ order.id }}" class="btn btn-sm btn-danger text-nowrap">
+                    <i class="bi bi-chat-left-dots me-1"></i>ดูการแจ้งปัญหา
+                </a>
+            </div>
+            {% endif %}
+
             <div class="card panel-card--wide mb-4" data-motion="reveal">
                 <div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-4">
                     <div>
@@ -134,6 +149,45 @@
                                             {% endfor %}
                                         </tbody>
                                     </table>
+                </div>
+            </div>
+            {% endif %}
+
+            {% if issues %}
+            <div class="card panel-card--wide mb-4" data-motion="reveal">
+                <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                    <h6 class="mb-0"><i class="bi bi-chat-left-dots me-2"></i>ประวัติการแจ้งปัญหา ({{ issues|length }})</h6>
+                    <a href="{% url 'issue_list' %}?q={{ order.id }}" class="btn btn-sm btn-light">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>จัดการในหน้ารับเรื่อง
+                    </a>
+                </div>
+                <div class="list-group list-group-flush border rounded-3 bg-surface overflow-hidden">
+                    {% for i in issues %}
+                    <div class="list-group-item p-3">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                            <div>
+                                <span class="fw-bold me-2">#{{ i.pk }} {{ i.subject }}</span>
+                                <span class="badge border text-muted-apple font-mono">{{ i.get_kind_display }}</span>
+                            </div>
+                            <span class="emp-status issue-status-{{ i.status }}">{{ i.get_status_display }}</span>
+                        </div>
+                        <p class="small text-muted-apple mb-2">{{ i.detail }}</p>
+                        <div class="d-flex justify-content-between align-items-center small text-muted-apple flex-wrap gap-2">
+                            <span>ผู้แจ้ง: {{ i.name }} ({{ i.phone }}) &bull; {{ i.created_at|date:"d/m/Y H:i" }}</span>
+                            {% if i.handled_by %}
+                            <span>ผู้ดำเนินการ: {{ i.handled_by.get_full_name|default:i.handled_by.username }}</span>
+                            {% endif %}
+                        </div>
+                        {% if i.resolution %}
+                        <div class="mt-2 p-2 rounded-2 bg-success-subtle text-success-emphasis border border-success-subtle small">
+                            <strong>ผลการดำเนินการ:</strong> {{ i.resolution }}
+                            {% if i.resolved_at %}
+                            <span class="text-muted-apple ms-1 font-mono">({{ i.resolved_at|date:"d/m/Y H:i" }})</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
             {% endif %}

@@ -1,18 +1,33 @@
 {% comment %}
-    issue_form.html — ฟอร์ม "แจ้งปัญหา" ของลูกค้า
+    issue_form.html — ฟอร์ม "แจ้งปัญหา" ของลูกค้า (ใช้ในหน้า /issue/)
 
-    ใช้เมื่อ: มีปัญหากับออเดอร์หรือสินค้า (ของเสียหาย / ส่งผิด / ยอดไม่ตรง / ส่งล่า)
-    ผูกกับออเดอร์ได้ — ถ้ามี `order_id` ใน context ระบบจะยืนยันตัวตนด้วยเบอร์โทร
-    จึงแจ้งแทนออเดอร์คนอื่นไม่ได้
+    ใช้เมื่อ: มีปัญหากับออเดอร์หรือสินค้า (ของเสียหาย / ส่งผิด / ยอดไม่ตรง / ส่งล่าช้า)
+    ผูกกับออเดอร์ได้ 2 ทาง:
+      1. มาจากปุ่มในหน้าติดตามออเดอร์หรือหน้าบัญชี (`/issue/?order=<id>&phone=<phone>`)
+         → `order` ถูกยืนยันสิทธิ์แล้วและฝังใน hidden input
+      2. เข้าหน้า `/issue/` โดยตรง → กรอกเลขออเดอร์ (ถ้ามี) คู่กับเบอร์โทรที่สั่งซื้อ
+         ระบบจะตรวจ `_authed_order` ตอน POST จึงแจ้งแทนออเดอร์คนอื่นไม่ได้
 
     คาดหวัง context: order (ไม่บังคับ), back_url, kinds
 {% endcomment %}
 <div class="card panel-card--large" data-motion="reveal">
-    <h2 class="h5 mb-1"><i class="bi bi-exclamation-triangle me-2 text-primary"></i>แจ้งปัญหา</h2>
+    <h2 class="h5 mb-1"><i class="bi bi-exclamation-triangle me-2 text-primary"></i>ฟอร์มแจ้งปัญหา</h2>
     <p class="text-muted-apple small mb-4">
         พบปัญหากับสินค้าหรือออเดอร์ของคุณ? แจ้งไว้ที่นี่ เจ้าหน้าที่จะตรวจสอบ
         และติดต่อกลับทางเบอร์โทรที่ให้ไว้
     </p>
+
+    {% if order %}
+    <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 p-3 mb-4 rounded-3"
+         style="background: var(--surface-2, var(--gray-bg)); border: 1px solid var(--gray-border-soft);">
+        <div>
+            <span class="badge bg-primary-subtle text-primary me-2 font-mono">ออเดอร์ #{{ order.id }}</span>
+            <span class="fw-medium">{{ order.customer_name }}</span>
+            <span class="text-muted-apple small ms-2">· ฿{{ order.total|floatformat:2 }} ({{ order.get_status_display }})</span>
+        </div>
+        <a href="{% url 'issue_report' %}" class="small text-decoration-none">เปลี่ยน / แจ้งเรื่องทั่วไป</a>
+    </div>
+    {% endif %}
 
     <form method="POST" action="{% url 'order_issue' order.id|default:0 %}"
           class="row g-3">
@@ -42,7 +57,7 @@
             <label class="form-label" for="issueDetail">รายละเอียด</label>
             <textarea name="detail" id="issueDetail" rows="4" required maxlength="2000"
                       class="form-control"
-                      placeholder="อธิบายว่าเกิดอะไรขึ้น วันที่/เวลาที่สั่งซื้อ หรือหมายเลขออเดอร์"></textarea>
+                      placeholder="อธิบายว่าเกิดอะไรขึ้น วันที่/เวลาที่สั่งซื้อ หรืออาการที่พบ"></textarea>
         </div>
 
         {% if not order %}
@@ -54,9 +69,17 @@
         <div class="col-md-6">
             <label class="form-label" for="issuePhone">เบอร์โทรที่ติดต่อได้</label>
             <input type="tel" name="phone" id="issuePhone" maxlength="20" required
-                   class="form-control" placeholder="0812345678" inputmode="numeric">
+                   class="form-control" placeholder="0812345678" inputmode="numeric"
+                   value="{{ user.customer_profile.phone|default:'' }}">
         </div>
-        <div class="col-12">
+        <div class="col-md-6">
+            <label class="form-label" for="issueOrderId">
+                เลขออเดอร์ <span class="text-muted-apple small">(ถ้ามี — ต้องตรงกับเบอร์โทรที่สั่งซื้อ)</span>
+            </label>
+            <input type="number" name="order_id" id="issueOrderId" min="1"
+                   class="form-control font-mono" placeholder="เช่น 223" inputmode="numeric">
+        </div>
+        <div class="col-md-6">
             <label class="form-label" for="issueEmail">
                 อีเมล <span class="text-muted-apple small">(ไม่บังคับ)</span>
             </label>

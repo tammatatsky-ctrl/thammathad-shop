@@ -109,16 +109,31 @@ class CustomerReportsIssueTest(TestCase):
         from myapp.models import OrderIssue
         self.assertEqual(OrderIssue.objects.count(), 0)
 
-    def test_contact_page_renders_the_form(self):
-        html = self.client.get(reverse('contact')).content.decode('utf-8')
-        self.assertIn('แจ้งปัญหา', html)
-        self.assertIn('name="detail"', html)
+    def test_issue_report_page_renders_the_form_and_contact_is_separate(self):
+        """หน้า /issue/ แสดงฟอร์มแจ้งปัญหา ส่วนหน้า /contact/ แยกเป็นหน้าติดต่อที่มีปุ่มชี้ไป /issue/"""
+        issue_html = self.client.get(reverse('issue_report')).content.decode('utf-8')
+        self.assertIn('แจ้งปัญหา', issue_html)
+        self.assertIn('name="detail"', issue_html)
+
+        contact_html = self.client.get(reverse('contact')).content.decode('utf-8')
+        self.assertNotIn('name="detail"', contact_html,
+                         'ฟอร์มแจ้งปัญหาต้องแยกออกจากหน้า /contact/')
+        self.assertIn(reverse('issue_report'), contact_html)
+
+    def test_issue_report_page_prefills_verified_order(self):
+        """เปิด /issue/?order=<id>&phone=<phone> ที่ตรงกัน → แสดงออเดอร์ที่ผูกไว้"""
+        html = self.client.get(
+            reverse('issue_report'),
+            {'order': self.order.id, 'phone': self.order.phone},
+        ).content.decode('utf-8')
+        self.assertIn(f'ออเดอร์ #{self.order.id}', html)
 
     def test_report_link_on_tracking_page_carries_order_identity(self):
         html = self.client.get(
             reverse('order_tracking'),
             {'order': self.order.id, 'phone': self.order.phone}
         ).content.decode('utf-8')
+        self.assertIn(reverse('issue_report'), html)
         self.assertIn(f'order={self.order.id}', html)
 
 
@@ -170,6 +185,18 @@ class StaffHandlesIssueTest(TestCase):
         keep.refresh_from_db()
         self.assertEqual(keep.status, 'open')
 
+    def test_list_renders_resolved_issue_without_handled_by(self):
+        """เรื่องที่แก้แล้วแต่ไม่มี handled_by (เช่น seed data) ต้องเรนเดอร์ได้ ไม่พัง 500"""
+        from myapp.models import OrderIssue
+        OrderIssue.objects.create(
+            order=self.order, name='คนสอง', phone='0899', kind='other',
+            subject='เรื่องที่แก้แล้ว', detail='x', status='resolved',
+            resolution='แก้แล้ว', handled_by=None)
+        self.client.force_login(self.staff)
+        r = self.client.get(reverse('issue_list'))
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('เรื่องที่แก้แล้ว', r.content.decode('utf-8'))
+
     @override_settings(ACTIVITY_LOG_ENABLED=True)
     def test_resolve_requires_a_resolution(self):
         """ปิดโดยไม่บอกว่าทำอะไร = ลูกค้าต้องถามซ้ำ → ต้องปฏิเสธ"""
@@ -219,6 +246,21 @@ class StaffHandlesIssueTest(TestCase):
         issue.refresh_from_db()
         self.assertEqual(issue.status, 'open')
 
+    def test_order_detail_shows_issue_alert_and_list(self):
+        """หน้ารายละเอียดออเดอร์ของ staff ต้องเตือนเมื่อมีปัญหาค้างอยู่"""
+        issue = self._open_issue()
+        self.client.force_login(self.staff)
+        html = self.client.get(reverse('order_detail', args=[self.order.id])).content.decode('utf-8')
+        self.assertIn('คำสั่งซื้อนี้มีปัญหาค้างอยู่', html)
+        self.assertIn('ของชำรุด', html)
+
+    def test_order_manage_shows_open_issue_count_badge(self):
+        """หน้าตารางคำสั่งซื้อของ staff ต้องมี badge เตือนปัญหาค้าง"""
+        self._open_issue()
+        self.client.force_login(self.staff)
+        html = self.client.get(reverse('order_manage')).content.decode('utf-8')
+        self.assertIn('มีปัญหาค้างอยู่ 1 เรื่อง', html)
+
 
 class CustomerSeesResolutionTest(TestCase):
     """ลูกค้าเห็นผลที่ร้านเขียนไว้ — ปิดวงจรครบ ไม่ต้องโทรมาถามซ้ำ"""
@@ -252,6 +294,25 @@ class CustomerSeesResolutionTest(TestCase):
         self.client.force_login(self.customer)
         html = self.client.get(reverse('account')).content.decode('utf-8')
         self.assertIn('แก้ไขแล้ว', html)
+        self.assertIn('ส่งของใหม่ให้แล้ว', html)
+
+    def test_guest_sees_issue_and_resolution_on_tracking_page(self):
+        from myapp.models import OrderIssue
+        issue = OrderIssue.objects.create(
+            order=self.order, name='บ ซ',
+            phone=self.order.phone, kind='damaged',
+            subject='เมาส์ชำรุด', detail='ปุ่มหลุด')
+        issue.mark('resolved', self.customer, 'เคลมสินค้าใหม่ให้เรียบร้อย')
+
+        r = self.client.get(reverse('order_tracking'), {
+            'order': self.order.id,
+            'phone': self.order.phone,
+        })
+        self.assertEqual(r.status_code, 200)
+        html = r.content.decode('utf-8')
+        self.assertIn('ประวัติการแจ้งปัญหา / ข้อสอบถาม', html)
+        self.assertIn('เมาส์ชำรุด', html)
+        self.assertIn('เคลมสินค้าใหม่ให้เรียบร้อย', html)
 
     def test_cannot_see_another_customers_issue(self):
         from myapp.models import OrderIssue

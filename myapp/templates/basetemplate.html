@@ -65,6 +65,7 @@
                     {% if user.is_authenticated %}
                     <li class="nav-item"><a class="nav-link" href="{% url 'account' %}"><i class="bi bi-box-seam"></i> ออเดอร์ของฉัน</a></li>
                     {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{% url 'issue_report' %}"><i class="bi bi-exclamation-diamond"></i>แจ้งปัญหา</a></li>
                     <li class="nav-item"><a class="nav-link" href="{% url 'contact' %}"><i class="bi bi-headset"></i>ติดต่อสอบถาม</a></li>
                 </ul>
                 {% if user.is_authenticated %}
@@ -141,6 +142,7 @@
                 <div>
                     <p class="footer-col-title">ช่วยเหลือ</p>
                     <ul class="footer-links">
+                        <li><a href="{% url 'issue_report' %}">แจ้งปัญหาสินค้า/ออเดอร์</a></li>
                         <li><a href="{% url 'contact' %}">ติดต่อเรา</a></li>
                         <li><a href="{% url 'order_tracking' %}">เช็คสถานะออเดอร์</a></li>
                         <li><a href="{% url 'staff_login' %}">เข้าสู่ระบบผู้ดูแล</a></li>

@@ -178,12 +178,30 @@
                                 เตรียมจาก AccountView._issues_by_order ไม่ใช่ query ในลูป)
                             {% endcomment %}
                             {% if o.my_issues %}
-                            <div class="account-order-issues">
-                                <i class="bi bi-chat-left-text me-1"></i>
+                            <div class="account-order-issues-box mb-3 p-3 rounded-3 border bg-body-tertiary">
+                                <div class="small fw-semibold mb-2 text-muted-apple d-flex align-items-center gap-1">
+                                    <i class="bi bi-chat-left-text"></i> ประวัติการแจ้งปัญหา ({{ o.my_issues|length }})
+                                </div>
                                 {% for i in o.my_issues %}
-                                <span class="account-order-issue issue-{{ i.status }}">
-                                    {{ i.subject }} — {{ i.get_status_display }}
-                                </span>
+                                <div class="account-issue-item py-2 {% if not forloop.last %}border-bottom{% endif %}">
+                                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-1">
+                                        <span class="fw-semibold small">#{{ i.pk }} {{ i.subject }}</span>
+                                        <span class="account-order-issue issue-{{ i.status }}">
+                                            {{ i.get_status_display }}
+                                        </span>
+                                    </div>
+                                    <div class="small text-muted-apple mb-1">
+                                        {{ i.detail }}
+                                    </div>
+                                    {% if i.resolution %}
+                                    <div class="account-issue-resolution p-2 rounded-2 mt-1 small bg-success-subtle text-success-emphasis border border-success-subtle">
+                                        <i class="bi bi-check2-circle me-1"></i><strong>คำชี้แจงจากทางร้าน:</strong> {{ i.resolution }}
+                                        {% if i.resolved_at %}
+                                        <span class="d-block text-muted-apple font-mono" style="font-size: 0.75rem;">(เมื่อ {{ i.resolved_at|date:"d/m/Y H:i" }})</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                </div>
                                 {% endfor %}
                             </div>
                             {% endif %}
@@ -197,7 +215,7 @@
                                    rel="noopener" class="btn btn-sm btn-light">
                                     <i class="bi bi-printer me-1"></i>ใบเสร็จ
                                 </a>
-                                <a href="{% url 'contact' %}?order={{ o.id }}&amp;phone={{ o.phone|urlencode }}"
+                                <a href="{% url 'issue_report' %}?order={{ o.id }}&amp;phone={{ o.phone|urlencode }}"
                                    class="btn btn-sm btn-light">
                                     <i class="bi bi-exclamation-triangle me-1"></i>แจ้งปัญหา
                                 </a>

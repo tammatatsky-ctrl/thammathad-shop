@@ -108,7 +108,7 @@ class RenderedOutputHasNoTemplateSyntaxTest(TestCase):
                              f'หน้า {url} มีซากเทมเพลตหลุดออกมา: "{marker}"')
 
     def test_public_pages_clean(self):
-        for url in ('/', '/product/', '/contact/', '/account/login/',
+        for url in ('/', '/product/', '/contact/', '/issue/', '/account/login/',
                     '/account/password-reset/', '/order/tracking/'):
             with self.subTest(url=url):
                 self._assert_clean(url)

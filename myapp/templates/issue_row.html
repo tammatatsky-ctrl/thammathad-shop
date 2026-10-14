@@ -16,7 +16,18 @@
 </td>
 <td class="text-start" data-label="ปัญหา">
     <strong>{{ i.subject }}</strong>
-    <small class="d-block issue-detail">{{ i.detail|truncatechars:160 }}</small>
+    {% if i.detail|length > 120 %}
+    <details class="issue-detail-toggle mt-1">
+        <summary class="small text-muted-apple" style="cursor:pointer;">
+            {{ i.detail|truncatechars:100 }} <span class="badge badge-light border ms-1">ดูเต็ม</span>
+        </summary>
+        <div class="small p-2 mt-1 rounded bg-body-tertiary border text-break">
+            {{ i.detail|linebreaksbr }}
+        </div>
+    </details>
+    {% else %}
+    <small class="d-block issue-detail">{{ i.detail }}</small>
+    {% endif %}
     <small class="d-block text-muted-apple">{{ i.get_kind_display }}</small>
 </td>
 <td data-label="ออเดอร์">
@@ -39,21 +50,36 @@
         ปิดเรื่องโดยไม่บอกว่าทำอะไร = ลูกค้าต้องโทรมาถามซ้ำ
     {% endcomment %}
     {% if i.status == 'open' or i.status == 'in_progress' %}
-    <form method="POST" action="{% url 'issue_update' i.pk %}" class="issue-resolve-form">
-        {% csrf_token %}
-        <input type="hidden" name="status" value="resolved">
-        <input type="text" name="resolution" required
-               placeholder="ผลการดำเนินการ..."
-               class="form-control form-control-sm issue-resolve-input">
-        <button type="submit" class="btn btn-sm btn-primary"
-                data-confirm="ปิดเรื่องนี้เลยหรือไม่? ลูกค้าจะเห็นผลที่กรอกไว้ในหน้าบัญชีของเขา"
-                data-confirm-title="ยืนยันการปิดเรื่อง"
-                data-confirm-ok="ปิดเรื่อง"
-                data-confirm-icon="bi-check2-circle">
-            <i class="bi bi-check2 me-1"></i>แก้แล้ว
-        </button>
-    </form>
+    <div class="d-flex flex-column align-items-end gap-1">
+        {% if i.status == 'open' %}
+        <form method="POST" action="{% url 'issue_update' i.pk %}" class="d-inline mb-1">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="in_progress">
+            <input type="hidden" name="resolution" value="เจ้าหน้าที่รับเรื่องแล้ว กำลังประสานงานตรวจสอบ">
+            <button type="submit" class="btn btn-xs btn-outline-info py-0 px-2" style="font-size:0.75rem;" title="รับเรื่องและเปลี่ยนเป็นกำลังดำเนินการ">
+                <i class="bi bi-hourglass-split me-1"></i>รับเรื่องดำเนินการ
+            </button>
+        </form>
+        {% endif %}
+        <form method="POST" action="{% url 'issue_update' i.pk %}" class="issue-resolve-form">
+            {% csrf_token %}
+            <input type="hidden" name="status" value="resolved">
+            <input type="text" name="resolution" required
+                   placeholder="ผลการดำเนินการ..."
+                   class="form-control form-control-sm issue-resolve-input">
+            <button type="submit" class="btn btn-sm btn-primary"
+                    data-confirm="ปิดเรื่องนี้เลยหรือไม่? ลูกค้าจะเห็นผลที่กรอกไว้ในหน้าบัญชีและหน้าติดตามพัสดุ"
+                    data-confirm-title="ยืนยันการปิดเรื่อง"
+                    data-confirm-ok="ปิดเรื่อง"
+                    data-confirm-icon="bi-check2-circle">
+                <i class="bi bi-check2 me-1"></i>แก้แล้ว
+            </button>
+        </form>
+    </div>
     {% else %}
-    <span class="text-muted-apple small">{{ i.handled_by|default:"—"|truncatechars:18 }}</span>
+    <span class="text-muted-apple small">
+        {% if i.handled_by %}{{ i.handled_by.get_full_name|default:i.handled_by.username }}{% else %}—{% endif %}
+        {% if i.resolved_at %}<br><span class="font-mono text-nowrap" style="font-size:0.75rem;">{{ i.resolved_at|date:"d/m H:i" }}</span>{% endif %}
+    </span>
     {% endif %}
 </td>

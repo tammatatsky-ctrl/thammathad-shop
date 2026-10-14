@@ -12,6 +12,18 @@
 </div>
 
 <div class="drawer-body">
+    {% if unresolved_issues_count %}
+    <div class="alert alert-danger d-flex align-items-center justify-content-between p-2 mb-3 rounded-3 small border-danger">
+        <div>
+            <i class="bi bi-exclamation-triangle-fill me-1 text-danger"></i>
+            <strong class="text-danger">มีปัญหาค้างอยู่ {{ unresolved_issues_count }} เรื่อง</strong>
+        </div>
+        <a href="{% url 'issue_list' %}?q={{ order.id }}" class="btn btn-xs btn-danger py-0 px-2" style="font-size:0.75rem;">
+            ดูปัญหา
+        </a>
+    </div>
+    {% endif %}
+
     <!-- Status Action Ribbon -->
     {% if allowed_statuses %}
     <div class="p-3 mb-4 rounded-3 bg-body-tertiary border">
@@ -87,6 +99,29 @@
                 {% endfor %}
             </tbody>
         </table>
+    </div>
+    {% endif %}
+
+    <!-- Issues History -->
+    {% if issues %}
+    <h6 class="text-uppercase small fw-bold text-muted-apple mb-2">ประวัติการแจ้งปัญหา ({{ issues|length }})</h6>
+    <div class="list-group list-group-flush border rounded-3 mb-4 bg-surface small">
+        {% for i in issues %}
+        <div class="list-group-item p-2">
+            <div class="d-flex justify-content-between align-items-center gap-1 mb-1">
+                <strong class="text-truncate">#{{ i.pk }} {{ i.subject }}</strong>
+                <span class="badge {% if i.status == 'open' %}bg-warning-subtle text-warning-emphasis{% elif i.status == 'in_progress' %}bg-info-subtle text-info-emphasis{% elif i.status == 'resolved' %}bg-success-subtle text-success{% else %}bg-secondary-subtle text-muted{% endif %}" style="font-size:0.7rem;">
+                    {{ i.get_status_display }}
+                </span>
+            </div>
+            <div class="text-muted-apple text-truncate mb-1" style="font-size:0.8rem;">{{ i.detail }}</div>
+            {% if i.resolution %}
+            <div class="p-1 px-2 rounded bg-success-subtle text-success-emphasis border border-success-subtle" style="font-size:0.75rem;">
+                <strong>ผลการแก้ไข:</strong> {{ i.resolution }}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
     </div>
     {% endif %}
 </div>

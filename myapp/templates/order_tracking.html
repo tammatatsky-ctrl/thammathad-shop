@@ -203,8 +203,41 @@
                     {% endif %}
                     {% include 'order_confirm_received.html' with back_url=request.get_full_path %}
 
+                    {% if issues %}
+                    <hr class="apple-divider my-4">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                        <h6 class="mb-0"><i class="bi bi-chat-left-dots me-2"></i>ประวัติการแจ้งปัญหา / ข้อสอบถาม</h6>
+                        <span class="badge badge-light border">{{ issues|length }} รายการ</span>
+                    </div>
+                    <div class="list-group list-group-flush border rounded-3 mb-4 bg-surface overflow-hidden">
+                        {% for i in issues %}
+                        <div class="list-group-item p-3">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
+                                <div>
+                                    <strong class="d-block">{{ i.subject }}</strong>
+                                    <small class="text-muted-apple font-mono">{{ i.created_at|date:"d/m/Y H:i" }} &bull; {{ i.get_kind_display }}</small>
+                                </div>
+                                <span class="badge {% if i.status == 'open' %}bg-warning-subtle text-warning-emphasis{% elif i.status == 'in_progress' %}bg-info-subtle text-info-emphasis{% elif i.status == 'resolved' %}bg-success-subtle text-success{% else %}bg-secondary-subtle text-muted{% endif %}">
+                                    {{ i.get_status_display }}
+                                </span>
+                            </div>
+                            <p class="small text-muted-apple mb-2">{{ i.detail }}</p>
+                            {% if i.resolution %}
+                            <div class="p-2 rounded-2 bg-success-subtle text-success-emphasis border border-success-subtle small">
+                                <div class="fw-semibold"><i class="bi bi-reply-fill me-1"></i>การดำเนินการจากร้านค้า:</div>
+                                <div class="mt-1">{{ i.resolution }}</div>
+                                {% if i.resolved_at %}
+                                <div class="text-muted-apple font-mono mt-1" style="font-size:0.75rem;">(อัปเดตเมื่อ {{ i.resolved_at|date:"d/m/Y H:i" }})</div>
+                                {% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
                     <div class="mb-4">
-                        <a href="{% url 'contact' %}{% if order %}?order={{ order.id }}&phone={{ order.phone|urlencode }}{% endif %}"
+                        <a href="{% url 'issue_report' %}{% if order %}?order={{ order.id }}&phone={{ order.phone|urlencode }}{% endif %}"
                            class="text-decoration-none">
                             <i class="bi bi-exclamation-triangle me-1 text-warning"></i>
                             <span class="link-arrow">พบปัญหากับออเดอร์นี้? แจ้งให้เราทราบ</span>

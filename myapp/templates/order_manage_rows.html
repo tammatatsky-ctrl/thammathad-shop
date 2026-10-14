@@ -15,7 +15,14 @@
     <tbody data-motion="stagger" class="in">
         {% for o in orders %}
         <tr class="order-clickable-row" data-order-id="{{ o.id }}">
-            <td class="fw-bold font-mono text-start" data-label="ออเดอร์">#{{ o.id }}</td>
+            <td class="fw-bold font-mono text-start" data-label="ออเดอร์">
+                #{{ o.id }}
+                {% if o.open_issues_count %}
+                <a href="{% url 'issue_list' %}?q={{ o.id }}" class="badge bg-danger-subtle text-danger border border-danger-subtle ms-1 text-decoration-none" title="มีปัญหาค้างอยู่ {{ o.open_issues_count }} เรื่อง">
+                    <i class="bi bi-exclamation-triangle-fill"></i> {{ o.open_issues_count }}
+                </a>
+                {% endif %}
+            </td>
             <td class="text-start fw-medium" data-label="ลูกค้า">{{ o.customer_name }}</td>
             <td class="text-center font-mono small text-muted-apple" data-label="เบอร์">{{ o.phone }}</td>
             <td class="fw-bold tabular-nums text-end" data-label="ยอด">฿ {{ o.total|floatformat:2 }}</td>

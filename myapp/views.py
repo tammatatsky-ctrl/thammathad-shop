@@ -1133,6 +1133,7 @@ class OrderTrackingView(View):
             ctx['reported'] = reported
             ctx['remaining'] = order.remaining
             ctx['slip_enabled'] = SlipOK.enabled()
+            ctx['issues'] = order.issues.order_by('-created_at')
         elif request is not None:
             messages.error(request, 'ไม่พบออเดอร์ กรุณาตรวจสอบหมายเลขออเดอร์และเบอร์โทรศัพท์')
         return ctx
@@ -1405,24 +1406,47 @@ class SlipVerifyView(View):
 
 
 class ContactView(TemplateView):
-    """หน้าติดต่อ — ข้อมูลร้าน + ฟอร์มแจ้งปัญหา (เดิมมีแต่ข้อความนิ่ง)
+    """หน้าติดต่อผู้จัดทำ + ข้อมูลติดต่อร้าน + แผนที่.
 
-    เพิ่มฟอร์มแจ้งปัญหาเพราะหน้านี้คือจุดที่ลูกค้ามองหาหาทางแก้ปัญหาอยู่แล้ว
-    แต่เดิมกดอะไรไม่ได้เลย — ถ้ามีปัญหาจริงเข้าใจว่า "ต้องไปโทรหาอะไร" ทั้งที่มีช่องทางอยู่ตรงนั้น
+    ส่วนฟอร์มแจ้งปัญหาแยกออกไปอยู่หน้า `/issue/` (`IssueReportView`) แล้ว
+    เพื่อให้หน้าติดต่อมีหน้าที่เดียวชัดเจน และมีปุ่มลัดพาไปหน้าแจ้งปัญหาแทน.
     """
 
     template_name = 'contact.html'
 
+
+class IssueReportView(TemplateView):
+    """หน้าแจ้งปัญหาสำหรับลูกค้า (`/issue/`) — แยกออกจาก `/contact/` เป็นหน้าเฉพาะ.
+
+    ทำไมต้องแยกเป็นหน้าเฉพาะ
+        หน้าติดต่อ (`/contact/`) คือข้อมูลร้าน + แผนที่ ส่วนการแจ้งปัญหาคืองานบริการลูกค้า
+        ที่ผูกกับออเดอร์ได้และตรวจสถานะย้อนหลังได้ การแยกออกทำให้:
+          1. มีลิงก์ตรงในเมนู/ปุ่มจากหน้าติดตามออเดอร์และหน้าบัญชีผู้ใช้ (`/issue/?order=...&phone=...`)
+          2. ลูกค้าที่ล็อกอินอยู่เห็นประวัติเรื่องที่ตัวเองเคยแจ้งและผลการดำเนินการในหน้าเดียวกันทันที
+          3. ถ้าส่งมาจากปุ่มในออเดอร์ (`?order=&phone=`) ระบบตรวจสิทธิ์ด้วย `_authed_order`
+             ก่อนผูกออเดอร์ให้อัตโนมัติ (แจ้งแทนออเดอร์คนอื่นไม่ได้)
+    """
+
+    template_name = 'issue_report.html'
+
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         ctx['kinds'] = OrderIssue.KIND_CHOICES
-        # มาจากปุ่ม "พบปัญหากับออเดอร์นี้" → ?order=&phone=
-        # ยืนยันตัวตนเหมือนทุกช่องทางอื่นก่อนผูกฟอร์มเข้ากับออเดอร์นั้น
+        # มาจากปุ่ม "พบปัญหากับออเดอร์นี้" หรือการ์ดในหน้าบัญชี → ?order=&phone=
+        # ยืนยันตัวตนด้วยเลขออเดอร์ + เบอร์โทรเหมือนทุกช่องทางของลูกค้าก่อนผูกกับออเดอร์
         if self.request.GET.get('order'):
-            order, _ = _authed_order(self.request,
-                                      self.request.GET.get('order'),
-                                      self.request.GET.get('phone'))
+            order, err = _authed_order(
+                self.request,
+                self.request.GET.get('order'),
+                self.request.GET.get('phone'),
+            )
             ctx['order'] = order
+            ctx['order_err'] = err
+        if self.request.user.is_authenticated:
+            ctx['my_issues'] = (
+                OrderIssue.objects.for_customer(self.request.user)
+                .select_related('order')[:10]
+            )
         return ctx
 
 
@@ -1956,10 +1980,20 @@ class OrderManageView(StaffRequiredMixin, ListView):
     STATUS_CHOICES = [('', 'ทั้งหมด')] + list(Order.STATUS_CHOICES)
 
     def get_queryset(self):
-        qs = Order.objects.select_related('user').prefetch_related('items__product').order_by('-created_at')
+        from django.db.models import Count, Q
+        qs = (Order.objects
+              .select_related('user')
+              .prefetch_related('items__product')
+              .annotate(
+                  open_issues_count=Count(
+                      'issues',
+                      filter=Q(issues__status__in=['open', 'in_progress']),
+                      distinct=True
+                  )
+              )
+              .order_by('-created_at'))
         q = self.request.GET.get('q', '').strip()
         if q:
-            from django.db.models import Q
             qs = qs.filter(
                 Q(id__icontains=q) |
                 Q(customer_name__icontains=q) |
@@ -2000,12 +2034,17 @@ class OrderDetailView(StaffRequiredMixin, TemplateView):
     def get_context_data(self, **kwargs):
         ctx = super().get_context_data(**kwargs)
         oid = int(self.kwargs['order_id'])
-        order = get_object_or_404(Order.objects.select_related('user').prefetch_related('items__product'), id=oid)
+        order = get_object_or_404(Order.objects.select_related('user').prefetch_related('items__product', 'issues'), id=oid)
         reported = order.reported_total
+        issues = list(order.issues.order_by('-created_at'))
+        unresolved_issues = [i for i in issues if i.status in ('open', 'in_progress')]
         ctx.update({
             'order': order,
             'items': order.items.select_related('product').all(),
             'payments': order.payments.order_by('-created_at'),
+            'issues': issues,
+            'unresolved_issues': unresolved_issues,
+            'unresolved_issues_count': len(unresolved_issues),
             'reported': reported,
             'remaining': order.remaining,
             'allowed_statuses': self._status_options(order),
@@ -2160,11 +2199,11 @@ class OrderIssueCreateView(View):
         - guest → เก็บเฉพาะชื่อ/เบอร์/อีเมล ไม่มีบัญชีผูก
     """
 
-    #: เดินจากหน้าสำเร็จ/ติดตาม → กลับที่มาหลังแจ้งเสร็จ
+    #: เดินจากหน้าแจ้งปัญหา/ติดตาม → กลับที่มาหลังแจ้งเสร็จ (default ไปหน้า `/issue/`)
     def post(self, request, *args, **kwargs):
-        back = request.POST.get('back') or reverse('contact')
+        back = request.POST.get('back') or reverse('issue_report')
         if not url_has_allowed_host_and_scheme(back, allowed_hosts={request.get_host()}):
-            back = reverse('contact')
+            back = reverse('issue_report')
 
         order = None
         order_id = request.POST.get('order_id', '').strip()
@@ -2245,12 +2284,13 @@ class OrderIssueUpdateView(StaffRequiredMixin, View):
         status = request.POST.get('status', '').strip()
         resolution = (request.POST.get('resolution') or '').strip()
         old = issue.status
+        back = request.POST.get('back') or reverse('issue_list')
 
         if not issue.mark(status, request.user, resolution):
             reason = ('สถานะไม่ถูกต้อง' if status not in dict(OrderIssue.STATUS_CHOICES)
                       else 'ต้องเขียนผลการดำเนินการก่อนปิดเรื่อง')
             messages.error(request, reason)
-            return redirect(reverse('issue_list'))
+            return redirect(back)
 
         Audit.record(
             request.user, 'order',
@@ -2260,7 +2300,7 @@ class OrderIssueUpdateView(StaffRequiredMixin, View):
             request=request,
         )
         messages.success(request, f'อัปเดตการแจ้งปัญหา #{issue.pk} แล้ว')
-        return redirect(reverse('issue_list'))
+        return redirect(back)
 
 
 class OrderInvoiceView(View):
