@@ -33,45 +33,107 @@
 >
 > → ต้องตั้ง **สองที่** ตามคำสั่งด้านล่าง
 
-### A) สำหรับเว็บ — แท็บ Web → Environment variables
+> ⚠️ **PythonAnywhere ไม่มีช่อง "Environment variables" ในแท็บ Web**
+> ทั้งบัญชีฟรีและจ่ายเงินก็ไม่มี (ถามได้จากทีมงานได้) การตั้งค่าต้องทำ
+> **2 จุด** ตามคู่มือทางการของ PythonAnywhere เอง:
+>
+> | ที่ไหน | ทำอะไร | ทำไม |
+> |---|---|---|
+> | **ไฟล์ WSGI** | `load_dotenv()` โหลดไฟล์ `.env` | process ของเว็บ (ต้องเกิด**ก่อน** `get_wsgi_application()`) |
+> | **`postactivate`** | `export` ค่าเดียวกัน | Bash console + cron (console ไม่ได้อ่าน `.env`) |
+
+### A) สร้างไฟล์ `.env` (ทำครั้งเดียว)
+
+```bash
+cd ~/my_django_app
+python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
+# คัดลอกค่าที่ได้ไปใส่ในบรรทัด DJANGO_SECRET_KEY ด้านล่าง
+
+cat > .env <<'EOF'
+DJANGO_DEBUG=0
+DJANGO_SECRET_KEY=วางค่าคีย์ตรงนี้
+EOF
+
+chmod 600 .env
+cat .env          # ตรวจว่าเขียนถูก
+```
+
+> ตรวจว่าไฟล์ถูกต้อง (ต้องเห็นค่าคีย์ครบ ประมาณ 50 ตัวอักษร):
+> ```bash
+> python -c "from dotenv import dotenv_values; print(dotenv_values('.env'))"
+> ```
+>
+> ⚠️ `DJANGO_SECRET_KEY` ที่ Django สุ่มมามี `&` และ `%` ปนอยู่
+> ในไฟล์ `.env` ใส่**ไม่ต้อง**ใส่เครื่องหมายคำพูด (แตกต่างจากคำสั่ง `export`
+> ใน Bash ที่ต้องใส่ `'...'`)
+
+### B) ตั้งให้ Bash console ใช้ได้
+
+`postactivate` ของ virtualenv จะรันทุกครั้งที่ `workon django-shop`
+
+```bash
+cat >> ~/.virtualenvs/django-shop/bin/postactivate <<'EOF'
+export DJANGO_DEBUG=0
+export DJANGO_SECRET_KEY='วางค่าคีย์เดียวกับข้างบน'
+EOF
+
+source ~/.virtualenvs/django-shop/bin/postactivate
+```
+
+> ต้องมี **เครื่องหมายคำพูดเดี่ยว** `'...'` ครอบค่าคีย์ เพราะ `&` และ `%`
+> ถ้าไม่มี Bash จะตัดค่าทิ้ง (Django จะขึ้นว่าต้องตั้ง env)
+>
+> ต้องใส่ **ค่าเดียวกับไฟล์ `.env`** ไม่งั้น session ที่สร้างจาก console
+> จะใช้กับเว็บไม่ได้
+
+### C) ให้เว็บใช้ได้ — แก้ไฟล์ WSGI
+
+แท็บ **Web** → กดลิงก์ **WSGI configuration file** → **ลบเนื้อหาเดิมทั้งหมด** → วาง:
+
+```python
+import os
+import sys
+
+path = '/home/tammatat/my_django_app'
+if path not in sys.path:
+    sys.path.insert(0, path)
+
+# โหลด .env ก่อน get_wsgi_application() — Web tab ของ PythonAnywhere
+# ไม่มีช่อง Environment variables ต้องโหลดเองตรงนี้
+from dotenv import load_dotenv
+load_dotenv(os.path.join(path, '.env'))
+
+os.environ['DJANGO_SETTINGS_MODULE'] = 'myproject.settings'
+
+from django.core.wsgi import get_wsgi_application
+application = get_wsgi_application()
+```
+
+> ⚠️ `load_dotenv()` **ต้องอยู่ก่อน** `get_wsgi_application()`
+> เพราะตอนนั้น Django จะโหลด settings และอ่านค่าคีย์ทันที
+> ถ้าสลับลำดับ เว็บจะขึ้นว่าต้องตั้ง env แม้ไฟล์ `.env` จะถูกต้อง
+
+### D) ตรวจว่าได้ผล
+
+```bash
+# console
+workon django-shop && cd ~/my_django_app
+python manage.py check        # ต้องขึ้น System check identified no issues
+```
+
+จากนั้นกด **Reload** ในแท็บ Web แล้วเปิดเว็บ
+ถ้าขึ้นว่าต้องตั้ง env → ดู **Error log** ในแท็บ Web ว่ามี
+`ModuleNotFoundError: No module named 'dotenv'` หรือไม่
+(แปลว่าติดตั้งไม่ครบ — ดู §"ติดตั้งไม่ผ่าน")
+
+### ตัวแปรอื่นที่ตั้งได้ (ถ้าต้องการ)
+
+เพิ่มในไฟล์ `.env` และ `postactivate` ให้ตรงกัน
 
 | ตัวแปร | ค่า | ถ้าไม่ตั้ง |
 |---|---|---|
-| `DJANGO_DEBUG` | `0` | หน้า error สีเหลืองชอว์ settings ทั้งหมดรวม API key |
-| `DJANGO_SECRET_KEY` | ค่าสุ่มใหม่ | **เว็บไม่ขึ้นเลย** (`RuntimeError`) |
 | `EMAIL_URL` | เว้นว่างได้ | ระบบจะไม่ลอกว่าส่งแล้ว แต่ "ลืมรหัสผ่าน" ใช้กับลูกค้าจริงไม่ได้ |
 | `GEMINI_API_KEY` / `SLIPOK_API_KEY` | เว้นว่างได้ | ฟีเจอร์นั้นถูกซ่อน (ตั้งใจ ไม่ใช่ของพัง) |
-
-### B) สำหรับ Bash console — เขียนลง `~/.bashrc` (ทำครั้งเดียว)
-
-```bash
-python -c "from django.core.management.utils import get_random_secret_key as k; print(k())"
-# คัดลอกค่าที่ได้ → K
-
-cat >> ~/.bashrc <<'EOF'
-export DJANGO_DEBUG=0
-export DJANGO_SECRET_KEY='วางค่าKตรงนี้'
-EOF
-
-source ~/.bashrc
-```
-
-> ต้องมี **เครื่องหมายคำพูดเดี่ยว** `'...'` ครอบค่าคีย์ เพราะค่าที่ Django สุ่ม
-> มี `&` และ `%` ปนอยู่ — ไม่มีเครื่องหมายจะโดน shell ตัดทิ้ง
->
-> ต้องใส่ **ค่าเดียวกับแท็บ Web** ไม่งั้น session ที่สร้างจาก console
-> จะใช้กับเว็บไม่ได้ (คีย์ไม่ตรงกัน)
-
-### ตรวจว่าได้ผล
-
-```bash
-python manage.py check    # ต้องขึ้น System check identified no issues
-```
-
-> หมายเหตุ: `settings.py` มี `load_dotenv()` อยู่แล้ว แต่พึ่ง `python-dotenv`
-> ซึ่งต้องติดตั้งสำเร็จก่อน ถ้า `pip install` ล้มกลางทาง
-> `except ImportError: pass` จะกลืน error **เงียบ ๆ** แล้วไปต่อง่าย
-> โดยไม่บอกว่าไม่ได้อ่าน `.env` — ดู §"ติดตั้งไม่ผ่าน" ด้านล่าง
 
 ---
 
@@ -166,21 +228,7 @@ staticfiles ตรงกับ source · migration · ฐานข้อมู�
 
 ### 7) WSGI
 
-ในแท็บ Web กด **WSGI configuration file** → **ลบเนื้อหาเดิมทั้งหมด** → วาง:
-
-```python
-import os
-import sys
-
-path = '/home/tammatat/my_django_app'
-if path not in sys.path:
-    sys.path.insert(0, path)
-
-os.environ['DJANGO_SETTINGS_MODULE'] = 'myproject.settings'
-
-from django.core.wsgi import get_wsgi_application
-application = get_wsgi_application()
-```
+ทำตามหัวข้อ **C) ให้เว็บใช้ได้ — แก้ไฟล์ WSGI** ด้านบน (ต้องมี `load_dotenv`)
 
 ### 8) Reload
 
