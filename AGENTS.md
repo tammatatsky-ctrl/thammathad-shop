@@ -118,6 +118,10 @@ python manage.py collectstatic       # Collect to staticfiles/
 - `management/commands/`: `setup_roles.py` (กลุ่ม+permission ตามบทบาท) · `backup_db.py` (สำรอง SQLite + cron) · `seed_catalog.py` (สินค้าตัวอย่าง 12 ชิ้น/4 หมวด — upsert ตาม id รันซ้ำได้ ไม่ลบอะไรทิ้ง) · `seed_demo_data.py` (**ล้างข้อมูลทดสอบ → ใส่ข้อมูลตัวอย่างจริง**: พนักงาน 13 · ลูกค้า 6 · ออเดอร์ 10 · แจ้งปัญหา 4; มี `--dry-run` / `--keep-junk`)
   - **กฎการลบข้อมูลทดสอบ**: ระบุชื่อที่จะลบเป็นรายการชัดเจนเสมอ ห้ามใช้ regex กวาด (เช่น `username__contains='probe'`) — ถ้าภายหลังมีบัญชีคนจริงที่ชื่อคล้ายจะถูกลบเงียบ ๆ
   - **`auto_now_add` ทับค่าที่ส่งเข้า `create()` เสมอ** — การย้อน `created_at` ต้องทำด้วย `.filter(pk=...).update(created_at=...)` หลังสร้าง ถ้าใช้เป็นคีย์ idempotency ด้วย (ให้ lookup หาเจอรอบถัดไป) การส่งเข้า `create()` จะได้ผลคนละเรื่องกับที่อ่านออกมา
+  - `build_report.py` — **สร้างเอกสารรายงานส่งอาจารย์เป็น PDF + Word** พร้อมไดอะแกรมและ Data Dictionary ที่**ดึงจากโค้ดจริง** ผ่าน `myapp/docs/facts.py` (โมเดล/เส้นทาง/service/บรรทัดโค้ด/จำนวนเทสต์) และเนื้อหาจาก `myapp/docs/content.py` — ห้ามพิมพ์ตัวเลขตายในเอกสาร เพราะจะเริ่มผิดทันทีที่โค้ดเปลี่ยนโดยไม่มีใครสังเกต
+    - `python manage.py build_report` → `docs/รายงาน/รายงาน-THAMMATHAD-SHOP.{pdf,docx}`
+    - ต้องมี `reportlab` · `python-docx` · `rlPyCairo` + ฟอนต์ไทยในเครื่อง (Leelawadee / TH Sarabun) — ถ้าไม่มีฟอนต์ คำสั่งจะบอกชื่อฟอนต์ที่ต้องมี ไม่ใช่ล้มแบบไม่บอกสาเหตุ
+    - ไดอะแกรม PDF เป็น **vector** คมชัดทุกขนาด · Word ต้องฝังเป็น PNG จึงเบลอเมื่อขยายมาก ๆ (ข้อแลกเปลี่ยนของ python-docx ไม่ใช่ข้อผิดพลาด)
 
 ### External Integrations (services.py)
 
