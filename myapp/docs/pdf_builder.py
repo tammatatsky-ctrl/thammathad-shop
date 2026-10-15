@@ -322,6 +322,12 @@ def _styles() -> dict[str, ParagraphStyle]:
     s['cover_meta_bold'] = ParagraphStyle(
         'cover_meta_bold', parent=base, fontName=FONT_BOLD, fontSize=15,
         leading=22, alignment=TA_CENTER, textColor=diagrams.INK)
+    s['sign_name'] = ParagraphStyle(
+        'sign_name', parent=base, fontName=FONT_BOLD, fontSize=16,
+        leading=22, alignment=TA_RIGHT, rightIndent=20 * mm, textColor=diagrams.INK)
+    s['sign_role'] = ParagraphStyle(
+        'sign_role', parent=base, fontName=FONT_REGULAR, fontSize=15,
+        leading=21, alignment=TA_RIGHT, rightIndent=20 * mm, textColor=diagrams.INK)
 
     return s
 
@@ -377,7 +383,7 @@ class _ChapterMarker(Flowable):
 # ส่วนประกอบหน้าเอกสาร (Cover, Approval, TOC, Tables, Figures)
 # ---------------------------------------------------------------------------
 def _cover(meta: dict[str, Any], is_inner: bool = False) -> list:
-    """หน้าปกนอกและหน้าปกในตามรูปแบบวิชาการ"""
+    """หน้าปกรายงานตามรูปแบบวิชาการมาตรฐาน"""
     s = _styles()
     title_th = meta.get('title', 'ระบบร้านค้าออนไลน์สำหรับอุปกรณ์คอมพิวเตอร์และไอที')
     title_en = meta.get('title_en', 'E-Commerce System for Computer Hardware and IT Accessories')
@@ -392,30 +398,68 @@ def _cover(meta: dict[str, Any], is_inner: bool = False) -> list:
     year = meta.get('year', '2569')
 
     story = [
-        Spacer(1, 15 * mm),
-        Paragraph('รายงานโครงงานทางวิทยาการคอมพิวเตอร์', s['cover_report_type']),
-        Spacer(1, 4 * mm),
-        Paragraph('ภาคการศึกษาที่ 1 ปีการศึกษา 2569', s['cover_meta']),
-        Spacer(1, 14 * mm),
+        Spacer(1, 20 * mm),
         Paragraph(esc(title_th), s['cover_title']),
         Spacer(1, 3 * mm),
         Paragraph('(THAMMATHAD SHOP)', s['cover_project']),
         Spacer(1, 3 * mm),
-        Paragraph(esc(title_en), s['cover_title_en']),
-        Spacer(1, 22 * mm),
+        Paragraph(esc(title_en.upper()), s['cover_title_en']),
+        Spacer(1, 40 * mm),
         Paragraph('<b>ผู้จัดทำ</b>', s['cover_meta_bold']),
-        Spacer(1, 2 * mm),
+        Spacer(1, 2.5 * mm),
         Paragraph(esc(name) if name else '________________________________', s['cover_meta']),
         Paragraph(f'รหัสนักศึกษา {esc(std_id)}' if std_id else 'รหัสนักศึกษา ____________________', s['cover_meta']),
-        Spacer(1, 10 * mm),
+        Spacer(1, 20 * mm),
         Paragraph('<b>เสนอ</b>', s['cover_meta_bold']),
-        Spacer(1, 2 * mm),
+        Spacer(1, 2.5 * mm),
         Paragraph(esc(advisor) if advisor else '________________________________', s['cover_meta']),
-        Spacer(1, 14 * mm),
+        Spacer(1, 42 * mm),
         Paragraph(f'รายงานนี้เป็นส่วนหนึ่งของรายวิชา {esc(course)}', s['cover_meta']),
         Paragraph(f'สาขาวิชา{esc(dept)} {esc(faculty)}', s['cover_meta']),
         Paragraph(esc(univ), s['cover_meta_bold']),
         Paragraph(f'ปีการศึกษา {esc(year)}', s['cover_meta']),
+    ]
+    return story
+
+
+def _preface(meta: dict[str, Any]) -> list:
+    """หน้าคำนำ (Preface) ตามหลักวิชาการ"""
+    s = _styles()
+    student = meta.get('student', {})
+    name = student.get('ชื่อ-นามสกุล', 'นายธรรมธัช รูปไธสง')
+
+    p1 = (
+        'รายงานฉบับนี้จัดทำขึ้นเพื่อเป็นส่วนหนึ่งของรายวิชา 4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์ '
+        '(Special Topics in Computer Science) หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ '
+        'คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏกำแพงเพชร โดยมีวัตถุประสงค์เพื่อนำเสนอผลการศึกษา ค้นคว้า '
+        'การวิเคราะห์ ออกแบบ และพัฒนาระบบร้านค้าออนไลน์สำหรับอุปกรณ์คอมพิวเตอร์และไอที (THAMMATHAD SHOP)'
+    )
+    p2 = (
+        'เนื้อหาภายในเล่มประกอบด้วยการวิเคราะห์ความต้องการและกลุ่มผู้ใช้งานระบบ, การออกแบบสถาปัตยกรรมระบบ 4 ชั้น '
+        '(4-Layer Clean Architecture) และแบบจำลองข้อมูลเชิงสัมพันธ์ (ERD), การพัฒนาโปรแกรมประยุกต์เว็บด้วยภาษา Python '
+        'บนเฟรมเวิร์ก Django 6.0, การออกแบบส่วนต่อประสานผู้ใช้ตามแนวคิด Apple Liquid Glass Design, '
+        'การพัฒนาระบบการเงินและจุดรับเงินจุดเดียว (Single Point of Payment Entry) ร่วมกับระบบตรวจสอบสลิปโอนเงินอัตโนมัติด้วย AI, '
+        'ตลอดจนกระบวนการทดสอบระบบแบบอัตโนมัติ (Automated Testing) ครอบคลุม 412 กรณีทดสอบ'
+    )
+    p3 = (
+        'ผู้จัดทำหวังเป็นอย่างยิ่งว่า รายงานฉบับนี้จะเป็นประโยชน์และเป็นแนวทางในการศึกษา ค้นคว้า '
+        'ตลอดจนการประยุกต์ใช้ในการพัฒนาระบบเว็บแอปพลิเคชันพาณิชย์อิเล็กทรอนิกส์สำหรับผู้ที่สนใจ '
+        'หากรายงานฉบับนี้มีข้อบกพร่องประการใด ผู้จัดทำขอน้อมรับข้อชี้แนะเพื่อนำไปปรับปรุงและพัฒนาต่อไป'
+    )
+
+    story = [
+        Spacer(1, 10 * mm),
+        Paragraph('คำนำ', s['h1']),
+        Spacer(1, 8 * mm),
+        Paragraph(esc(p1), s['body_indent']),
+        Spacer(1, 3 * mm),
+        Paragraph(esc(p2), s['body_indent']),
+        Spacer(1, 3 * mm),
+        Paragraph(esc(p3), s['body_indent']),
+        Spacer(1, 20 * mm),
+        Paragraph(esc(name), s['sign_name']),
+        Spacer(1, 1.5 * mm),
+        Paragraph('ผู้จัดทำโครงงาน', s['sign_role']),
     ]
     return story
 
@@ -931,10 +975,16 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         idx = raw_p - 2  # ปก = หน้า 1 -> หน้า 2 คือ ก
         return THAI_NUMERALS[idx] if 0 <= idx < len(THAI_NUMERALS) else str(idx + 1)
 
-    # 2. ส่วนนำ -> Template: prelim (สารบัญ สารบัญตาราง สารบัญภาพ)
+    # 2. ส่วนนำ -> Template: prelim (คำนำ สารบัญ สารบัญตาราง สารบัญภาพ)
+    # 2.0 คำนำ (Preface)
+    story.append(PageAnchor('preface', page_registry))
+    story += _preface(meta)
+    story.append(PageBreak())
+
     # 2.1 สารบัญ (Table of Contents)
     story.append(PageAnchor('toc', page_registry))
     toc_entries = [
+        ('', 'คำนำ', p_prelim('preface', 'ก')),
         ('', 'สารบัญตาราง', p_prelim('lot', 'ค')),
         ('', 'สารบัญภาพ', p_prelim('lof', 'ง')),
         ('บทที่ 1', 'บทนำ', p_num('ch_intro', 1)),

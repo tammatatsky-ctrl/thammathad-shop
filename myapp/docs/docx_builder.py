@@ -198,37 +198,38 @@ def _cover(doc, meta: dict) -> None:
     for _ in range(2):
         doc.add_paragraph()
 
-    _para(doc, 'รายงานโครงงานทางวิทยาการคอมพิวเตอร์', 16, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
-    _para(doc, 'ภาคการศึกษาที่ 1 ปีการศึกษา 2569', 15,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
-
-    _para(doc, meta.get('title', ''), 20, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
-    _para(doc, '(THAMMATHAD SHOP)', 17, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
-    _para(doc, meta.get('title_en', 'E-Commerce System for Computer Hardware and IT Accessories'), 15, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=20, color=(0, 0, 0))
-
-    _para(doc, 'ผู้จัดทำ', 15, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
+    title_th = meta.get('title', 'ระบบร้านค้าออนไลน์สำหรับอุปกรณ์คอมพิวเตอร์และไอที')
+    title_en = meta.get('title_en', 'E-Commerce System for Computer Hardware and IT Accessories')
     student = meta.get('student', {})
     name = student.get('ชื่อ-นามสกุล', 'นายธรรมธัช รูปไธสง')
     std_id = student.get('รหัสนักศึกษา', '671320104')
-    _para(doc, name or '________________________________', 15,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2, color=(0, 0, 0))
-    _para(doc, f'รหัสนักศึกษา {std_id}' if std_id else 'รหัสนักศึกษา ____________________', 15,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10, color=(0, 0, 0))
-
-    _para(doc, 'เสนอ', 15, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
-    _para(doc, meta.get('advisor', '') or 'ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย',
-          15, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
-
-    course = meta.get('course', '4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์')
     dept = student.get('สาขา', 'วิทยาการคอมพิวเตอร์')
     faculty = student.get('คณะ', 'คณะวิทยาศาสตร์และเทคโนโลยี')
+    advisor = meta.get('advisor', 'ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย')
+    course = meta.get('course', '4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์')
     univ = meta.get('university', 'มหาวิทยาลัยราชภัฏกำแพงเพชร')
     year = meta.get('year', '2569')
 
+    # ส่วนบน: ชื่อโครงงาน
+    _para(doc, title_th, 20, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, '(THAMMATHAD SHOP)', 16, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, title_en.upper(), 14, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=36, color=(0, 0, 0))
+
+    # ส่วนกลาง: ผู้จัดทำ และ เสนอ
+    _para(doc, 'ผู้จัดทำ', 16, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
+    _para(doc, name or '________________________________', 16,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2, color=(0, 0, 0))
+    _para(doc, f'รหัสนักศึกษา {std_id}' if std_id else 'รหัสนักศึกษา ____________________', 16,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=18, color=(0, 0, 0))
+
+    _para(doc, 'เสนอ', 16, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
+    _para(doc, advisor or 'ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย',
+          16, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=36, color=(0, 0, 0))
+
+    # ส่วนล่าง: สถาบัน
     _para(doc, f'รายงานนี้เป็นส่วนหนึ่งของรายวิชา {course}', 15,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
     _para(doc, f'สาขาวิชา{dept} {faculty}', 15,
@@ -237,6 +238,58 @@ def _cover(doc, meta: dict) -> None:
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
     _para(doc, f'ปีการศึกษา {year}', 15,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6, color=(0, 0, 0))
+    _page_break(doc)
+
+
+def _preface(doc, meta: dict) -> None:
+    """หน้าคำนำในเอกสาร Word ตามหลักวิชาการ"""
+    student = meta.get('student', {})
+    name = student.get('ชื่อ-นามสกุล', 'นายธรรมธัช รูปไธสง')
+
+    _para(doc, 'คำนำ', 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
+
+    p1 = (
+        'รายงานฉบับนี้จัดทำขึ้นเพื่อเป็นส่วนหนึ่งของรายวิชา 4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์ '
+        '(Special Topics in Computer Science) หลักสูตรวิทยาศาสตรบัณฑิต สาขาวิชาวิทยาการคอมพิวเตอร์ '
+        'คณะวิทยาศาสตร์และเทคโนโลยี มหาวิทยาลัยราชภัฏกำแพงเพชร โดยมีวัตถุประสงค์เพื่อนำเสนอผลการศึกษา ค้นคว้า '
+        'การวิเคราะห์ ออกแบบ และพัฒนาระบบร้านค้าออนไลน์สำหรับอุปกรณ์คอมพิวเตอร์และไอที (THAMMATHAD SHOP)'
+    )
+    p2 = (
+        'เนื้อหาภายในเล่มประกอบด้วยการวิเคราะห์ความต้องการและกลุ่มผู้ใช้งานระบบ, การออกแบบสถาปัตยกรรมระบบ 4 ชั้น '
+        '(4-Layer Clean Architecture) และแบบจำลองข้อมูลเชิงสัมพันธ์ (ERD), การพัฒนาโปรแกรมประยุกต์เว็บด้วยภาษา Python '
+        'บนเฟรมเวิร์ก Django 6.0, การออกแบบส่วนต่อประสานผู้ใช้ตามแนวคิด Apple Liquid Glass Design, '
+        'การพัฒนาระบบการเงินและจุดรับเงินจุดเดียว (Single Point of Payment Entry) ร่วมกับระบบตรวจสอบสลิปโอนเงินอัตโนมัติด้วย AI, '
+        'ตลอดจนกระบวนการทดสอบระบบแบบอัตโนมัติ (Automated Testing) ครอบคลุม 412 กรณีทดสอบ'
+    )
+    p3 = (
+        'ผู้จัดทำหวังเป็นอย่างยิ่งว่า รายงานฉบับนี้จะเป็นประโยชน์และเป็นแนวทางในการศึกษา ค้นคว้า '
+        'ตลอดจนการประยุกต์ใช้ในการพัฒนาระบบเว็บแอปพลิเคชันพาณิชย์อิเล็กทรอนิกส์สำหรับผู้ที่สนใจ '
+        'หากรายงานฉบับนี้มีข้อบกพร่องประการใด ผู้จัดทำขอน้อมรับข้อชี้แนะเพื่อนำไปปรับปรุงและพัฒนาต่อไป'
+    )
+
+    for p_text in (p1, p2, p3):
+        p = doc.add_paragraph()
+        p.paragraph_format.left_indent = Cm(0)
+        p.paragraph_format.first_line_indent = Cm(1.25)
+        p.paragraph_format.space_after = Pt(6)
+        p.paragraph_format.line_spacing = 1.35
+        _style_run(p.add_run(p_text), 16, False, (0, 0, 0))
+
+    for _ in range(2):
+        doc.add_paragraph()
+
+    p_sig = doc.add_paragraph()
+    p_sig.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_sig.paragraph_format.right_indent = Cm(2.0)
+    p_sig.paragraph_format.space_after = Pt(2)
+    _style_run(p_sig.add_run(name), 16, True, (0, 0, 0))
+
+    p_role = doc.add_paragraph()
+    p_role.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p_role.paragraph_format.right_indent = Cm(2.0)
+    p_role.paragraph_format.space_after = Pt(6)
+    _style_run(p_role.add_run('ผู้จัดทำโครงงาน'), 15, False, (0, 0, 0))
+
     _page_break(doc)
 
 
@@ -489,38 +542,40 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
         rfonts.set(qn(attr), 'TH Sarabun New')
 
     _cover(doc, meta)
+    _preface(doc, meta)
 
     toc_rows = [
-        ('บทที่ 1', 3, 'บทนำ'),
-        ('1.1', 3, 'ความเป็นมาและความสำคัญของโครงงาน'),
-        ('1.2', 3, 'วัตถุประสงค์ของโครงงาน'),
-        ('1.3', 4, 'ขอบเขตของระบบงาน'),
-        ('1.4', 5, 'ประโยชน์ที่คาดว่าจะได้รับ'),
-        ('บทที่ 2', 6, 'การวิเคราะห์และออกแบบระบบ'),
-        ('2.1', 6, 'การวิเคราะห์ความต้องการของระบบ (Requirements Analysis)'),
-        ('2.2', 7, 'การออกแบบกรณีการใช้งานและกลุ่มผู้ใช้ (Use Case & Actor Analysis)'),
-        ('2.3', 8, 'การออกแบบสถาปัตยกรรมระบบ 4 ชั้น (4-Layer Clean Architecture)'),
-        ('2.4', 9, 'การออกแบบแบบจำลองข้อมูลและความสัมพันธ์ (Data Modeling & ERD)'),
-        ('2.5', 10, 'เมทริกซ์ความสัมพันธ์และกฎเกณฑ์ความคงสภาพ (Relationship Matrix)'),
-        ('2.6', 11, 'การออกแบบเครื่องจักรสถานะคำสั่งซื้อ (Order Lifecycle State Machine)'),
-        ('บทที่ 3', 12, 'การพัฒนาระบบ'),
-        ('3.1', 12, 'สภาพแวดล้อมและเทคโนโลยีที่ใช้ในการพัฒนาระบบ (Technology Stack & Tools)'),
-        ('3.2', 13, 'โครงสร้างโปรเจกต์และโมดูลระบบ (Project Directory Structure)'),
-        ('3.3', 14, 'สถาปัตยกรรมส่วนต่อประสาน 2 โซน (Dual-Zone Architecture)'),
-        ('3.4', 15, 'การพัฒนาระบบการเงินและจุดรับเงินจุดเดียว (Single Point of Payment Entry)'),
-        ('3.5', 16, 'การพัฒนาระบบการแจ้งปัญหาและข้อร้องเรียนของลูกค้า (Order Issue Resolution)'),
-        ('3.6', 17, 'ระบบบันทึกประวัติการทำงานแบบเพิ่มต่อท้าย (Append-Only Audit Trail)'),
-        ('3.7', 18, 'การรักษาความมั่นคงปลอดภัยของระบบ (System Security & RBAC)'),
-        ('บทที่ 4', 19, 'ผลการพัฒนาและภาพหน้าจอระบบ'),
-        ('4.1', 19, 'ผลการพัฒนาส่วนต่อประสานสำหรับลูกค้า (Customer Storefront Zone)'),
-        ('4.2', 22, 'ผลการพัฒนาส่วนต่อประสานสำหรับเจ้าหน้าที่ (Staff Management Zone)'),
-        ('บทที่ 5', 25, 'การทดสอบและสรุปผล'),
-        ('5.1', 25, 'ระเบียบวิธีและกลยุทธ์การทดสอบอัตโนมัติ'),
-        ('5.2', 26, 'สาระสำคัญของการทดสอบระบบ'),
-        ('5.3', 27, f'สรุปผลการรันชุดทดสอบอัตโนมัติ ({TOTAL_TESTS} Test Cases)'),
-        ('5.4', 27, 'สรุปผลการดำเนินงานโครงงาน'),
-        ('5.5', 28, 'ปัญหา อุปสรรค และแนวทางการแก้ไข'),
-        ('5.6', 29, 'ข้อจำกัดและข้อเสนอแนะในการพัฒนาต่อยอด'),
+        ('', 'ก', 'คำนำ'),
+        ('บทที่ 1', 1, 'บทนำ'),
+        ('1.1', 1, 'ความเป็นมาและความสำคัญของโครงงาน'),
+        ('1.2', 1, 'วัตถุประสงค์ของโครงงาน'),
+        ('1.3', 2, 'ขอบเขตของระบบงาน'),
+        ('1.4', 3, 'ประโยชน์ที่คาดว่าจะได้รับ'),
+        ('บทที่ 2', 4, 'การวิเคราะห์และออกแบบระบบ'),
+        ('2.1', 4, 'การวิเคราะห์ความต้องการของระบบ (Requirements Analysis)'),
+        ('2.2', 5, 'การออกแบบกรณีการใช้งานและกลุ่มผู้ใช้ (Use Case & Actor Analysis)'),
+        ('2.3', 6, 'การออกแบบสถาปัตยกรรมระบบ 4 ชั้น (4-Layer Clean Architecture)'),
+        ('2.4', 7, 'การออกแบบแบบจำลองข้อมูลและความสัมพันธ์ (Data Modeling & ERD)'),
+        ('2.5', 8, 'เมทริกซ์ความสัมพันธ์และกฎเกณฑ์ความคงสภาพ (Relationship Matrix)'),
+        ('2.6', 9, 'การออกแบบเครื่องจักรสถานะคำสั่งซื้อ (Order Lifecycle State Machine)'),
+        ('บทที่ 3', 10, 'การพัฒนาระบบ'),
+        ('3.1', 10, 'สภาพแวดล้อมและเทคโนโลยีที่ใช้ในการพัฒนาระบบ (Technology Stack & Tools)'),
+        ('3.2', 11, 'โครงสร้างโปรเจกต์และโมดูลระบบ (Project Directory Structure)'),
+        ('3.3', 12, 'สถาปัตยกรรมส่วนต่อประสาน 2 โซน (Dual-Zone Architecture)'),
+        ('3.4', 13, 'การพัฒนาระบบการเงินและจุดรับเงินจุดเดียว (Single Point of Payment Entry)'),
+        ('3.5', 14, 'การพัฒนาระบบการแจ้งปัญหาและข้อร้องเรียนของลูกค้า (Order Issue Resolution)'),
+        ('3.6', 15, 'ระบบบันทึกประวัติการทำงานแบบเพิ่มต่อท้าย (Append-Only Audit Trail)'),
+        ('3.7', 16, 'การรักษาความมั่นคงปลอดภัยของระบบ (System Security & RBAC)'),
+        ('บทที่ 4', 17, 'ผลการพัฒนาและภาพหน้าจอระบบ'),
+        ('4.1', 17, 'ผลการพัฒนาส่วนต่อประสานสำหรับลูกค้า (Customer Storefront Zone)'),
+        ('4.2', 20, 'ผลการพัฒนาส่วนต่อประสานสำหรับเจ้าหน้าที่ (Staff Management Zone)'),
+        ('บทที่ 5', 23, 'การทดสอบและสรุปผล'),
+        ('5.1', 23, 'ระเบียบวิธีและกลยุทธ์การทดสอบอัตโนมัติ'),
+        ('5.2', 24, 'สาระสำคัญของการทดสอบระบบ'),
+        ('5.3', 25, f'สรุปผลการรันชุดทดสอบอัตโนมัติ ({TOTAL_TESTS} Test Cases)'),
+        ('5.4', 25, 'สรุปผลการดำเนินงานโครงงาน'),
+        ('5.5', 26, 'ปัญหา อุปสรรค และแนวทางการแก้ไข'),
+        ('5.6', 27, 'ข้อจำกัดและข้อเสนอแนะในการพัฒนาต่อยอด'),
         ('', 28, 'เอกสารอ้างอิงและบรรณานุกรม'),
         ('', 29, 'ภาคผนวก'),
         ('ภาคผนวก ก', 30, 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ'),
