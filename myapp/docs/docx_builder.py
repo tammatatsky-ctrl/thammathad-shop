@@ -22,12 +22,13 @@ from pathlib import Path
 from docx import Document
 from docx.enum.section import WD_SECTION
 from docx.enum.table import WD_TABLE_ALIGNMENT
-from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm, Pt, RGBColor
 
 from . import diagrams
+from .content import TOTAL_TESTS
 from .diagrams import FONT_BOLD, FONT_REGULAR
 
 
@@ -239,11 +240,118 @@ def _cover(doc, meta: dict) -> None:
     _page_break(doc)
 
 
-def _toc(doc, entries: list[tuple[str, int, str]]) -> None:
-    _para(doc, 'สารบัญเนื้อหา', 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
-    for num, page, title in entries:
-        is_chapter = num.startswith('บทที่') or num.startswith('ภาค') or num in ('สารบัญ', 'เอกสารอ้างอิง')
-        _para(doc, f'{num}    {title}    {page}', 15, bold=is_chapter, space_after=5, color=(0, 0, 0))
+def _toc(doc, entries: list) -> None:
+    """สารบัญ (Table of Contents) ในเอกสาร Word ตามหลักวิชาการ"""
+    _para(doc, 'สารบัญ', 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
+
+    t = doc.add_table(rows=1, cols=2)
+    t.alignment = WD_TABLE_ALIGNMENT.CENTER
+
+    # กำหนดเส้นขอบตามหลักวิชาการ: บน 1.5pt, ล่าง 1.5pt, ไม่มีเส้นแนวตั้ง/แนวนอนภายใน
+    tblBorders = OxmlElement('w:tblBorders')
+    for b_name in ['left', 'right', 'insideH', 'insideV']:
+        b = OxmlElement(f'w:{b_name}')
+        b.set(qn('w:val'), 'none')
+        tblBorders.append(b)
+
+    top_b = OxmlElement('w:top')
+    top_b.set(qn('w:val'), 'single')
+    top_b.set(qn('w:sz'), '12')  # 1.5 pt
+    top_b.set(qn('w:space'), '0')
+    top_b.set(qn('w:color'), '000000')
+    tblBorders.append(top_b)
+
+    bot_b = OxmlElement('w:bottom')
+    bot_b.set(qn('w:val'), 'single')
+    bot_b.set(qn('w:sz'), '12')  # 1.5 pt
+    bot_b.set(qn('w:space'), '0')
+    bot_b.set(qn('w:color'), '000000')
+    tblBorders.append(bot_b)
+    t._tbl.tblPr.append(tblBorders)
+
+    # แถวหัวตาราง
+    hdr_cells = t.rows[0].cells
+    hdr_cells[0].width = Cm(14.0)
+    hdr_cells[1].width = Cm(1.5)
+
+    p0 = hdr_cells[0].paragraphs[0]
+    p0.paragraph_format.space_before = Pt(2)
+    p0.paragraph_format.space_after = Pt(2)
+    r0 = p0.add_run('บทที่')
+    _style_run(r0, 15, True, (0, 0, 0))
+
+    p1 = hdr_cells[1].paragraphs[0]
+    p1.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    p1.paragraph_format.space_before = Pt(2)
+    p1.paragraph_format.space_after = Pt(2)
+    r1 = p1.add_run('หน้า')
+    _style_run(r1, 15, True, (0, 0, 0))
+
+    # เส้นใต้แถวหัวตาราง 0.75 pt
+    for c in hdr_cells:
+        tcPr = c._tc.get_or_add_tcPr()
+        tcBorders = OxmlElement('w:tcBorders')
+        b = OxmlElement('w:bottom')
+        b.set(qn('w:val'), 'single')
+        b.set(qn('w:sz'), '6')  # 0.75 pt
+        b.set(qn('w:space'), '0')
+        b.set(qn('w:color'), '000000')
+        tcBorders.append(b)
+        tcPr.append(tcBorders)
+
+    for entry in entries:
+        # รองรับทั้ง (num, page, title) และ (num, title, page)
+        if isinstance(entry[1], (int, str)) and str(entry[1]).isdigit():
+            num, page, title = entry[0], str(entry[1]), str(entry[2])
+        elif isinstance(entry[2], (int, str)) and (str(entry[2]).isdigit() or str(entry[2]) in ('ก', 'ข', 'ค', 'ง')):
+            num, title, page = entry[0], str(entry[1]), str(entry[2])
+        else:
+            num, page, title = entry[0], str(entry[1]), str(entry[2])
+
+        is_major = not num or num.startswith('บทที่') or title in (
+            'สารบัญ', 'สารบัญเนื้อหา', 'สารบัญตาราง', 'สารบัญภาพ',
+            'เอกสารอ้างอิงและบรรณานุกรม', 'ภาคผนวก'
+        )
+
+        row_cells = t.add_row().cells
+        row_cells[0].width = Cm(14.0)
+        row_cells[1].width = Cm(1.5)
+
+        p_title = row_cells[0].paragraphs[0]
+        p_title.paragraph_format.line_spacing = 1.25
+        p_title.paragraph_format.space_before = Pt(1.5)
+        p_title.paragraph_format.space_after = Pt(1.5)
+
+        p_page = row_cells[1].paragraphs[0]
+        p_page.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        p_page.paragraph_format.line_spacing = 1.25
+        p_page.paragraph_format.space_before = Pt(1.5)
+        p_page.paragraph_format.space_after = Pt(1.5)
+
+        # Tab stop with dot leader for cell 0
+        p_title.paragraph_format.tab_stops.add_tab_stop(
+            Cm(13.8), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS
+        )
+
+        if is_major and num.startswith('บทที่'):
+            r_t = p_title.add_run(f'{num}    {title}\t')
+            _style_run(r_t, 14, True, (0, 0, 0))
+        elif is_major:
+            r_t = p_title.add_run(f'{title}\t')
+            _style_run(r_t, 14, True, (0, 0, 0))
+        elif num.startswith('ภาคผนวก'):
+            p_title.paragraph_format.left_indent = Cm(0.8)
+            r_t = p_title.add_run(f'{num}  {title}\t')
+            _style_run(r_t, 13.5, False, (0, 0, 0))
+        else:
+            p_title.paragraph_format.left_indent = Cm(0.8)
+            r_t = p_title.add_run(f'{num}  {title}\t')
+            _style_run(r_t, 13.5, False, (0, 0, 0))
+
+        r_p = p_page.add_run(page)
+        _style_run(r_p, 14 if is_major else 13.5, is_major, (0, 0, 0))
+
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
     _page_break(doc)
 
 
@@ -383,18 +491,42 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
     _cover(doc, meta)
 
     toc_rows = [
-        ('สารบัญ', 2, 'สารบัญเนื้อหา'),
         ('บทที่ 1', 3, 'บทนำ'),
-        ('บทที่ 2', 5, 'การวิเคราะห์และออกแบบระบบ'),
-        ('บทที่ 3', 8, 'การพัฒนาระบบ'),
-        ('บทที่ 4', 12, 'ผลการพัฒนาและภาพหน้าจอระบบ'),
-        ('บทที่ 5', 16, 'การทดสอบและสรุปผล'),
-        ('เอกสารอ้างอิง', 19, 'เอกสารอ้างอิงและบรรณานุกรม'),
-        ('ภาคผนวก', 20, 'ภาคผนวก (APPENDICES)'),
-        ('ภาคผนวก ก', 21, 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ'),
-        ('ภาคผนวก ข', 23, 'คู่มือการใช้งานระบบโดยย่อ'),
-        ('ภาคผนวก ค', 25, 'พจนานุกรมข้อมูลและโครงสร้างระบบ'),
-        ('ภาคผนวก ง', 35, 'ประวัติผู้จัดทำโครงงาน'),
+        ('1.1', 3, 'ความเป็นมาและความสำคัญของโครงงาน'),
+        ('1.2', 3, 'วัตถุประสงค์ของโครงงาน'),
+        ('1.3', 4, 'ขอบเขตของระบบงาน'),
+        ('1.4', 5, 'ประโยชน์ที่คาดว่าจะได้รับ'),
+        ('บทที่ 2', 6, 'การวิเคราะห์และออกแบบระบบ'),
+        ('2.1', 6, 'การวิเคราะห์ความต้องการของระบบ (Requirements Analysis)'),
+        ('2.2', 7, 'การออกแบบกรณีการใช้งานและกลุ่มผู้ใช้ (Use Case & Actor Analysis)'),
+        ('2.3', 8, 'การออกแบบสถาปัตยกรรมระบบ 4 ชั้น (4-Layer Clean Architecture)'),
+        ('2.4', 9, 'การออกแบบแบบจำลองข้อมูลและความสัมพันธ์ (Data Modeling & ERD)'),
+        ('2.5', 10, 'เมทริกซ์ความสัมพันธ์และกฎเกณฑ์ความคงสภาพ (Relationship Matrix)'),
+        ('2.6', 11, 'การออกแบบเครื่องจักรสถานะคำสั่งซื้อ (Order Lifecycle State Machine)'),
+        ('บทที่ 3', 12, 'การพัฒนาระบบ'),
+        ('3.1', 12, 'สภาพแวดล้อมและเทคโนโลยีที่ใช้ในการพัฒนาระบบ (Technology Stack & Tools)'),
+        ('3.2', 13, 'โครงสร้างโปรเจกต์และโมดูลระบบ (Project Directory Structure)'),
+        ('3.3', 14, 'สถาปัตยกรรมส่วนต่อประสาน 2 โซน (Dual-Zone Architecture)'),
+        ('3.4', 15, 'การพัฒนาระบบการเงินและจุดรับเงินจุดเดียว (Single Point of Payment Entry)'),
+        ('3.5', 16, 'การพัฒนาระบบการแจ้งปัญหาและข้อร้องเรียนของลูกค้า (Order Issue Resolution)'),
+        ('3.6', 17, 'ระบบบันทึกประวัติการทำงานแบบเพิ่มต่อท้าย (Append-Only Audit Trail)'),
+        ('3.7', 18, 'การรักษาความมั่นคงปลอดภัยของระบบ (System Security & RBAC)'),
+        ('บทที่ 4', 19, 'ผลการพัฒนาและภาพหน้าจอระบบ'),
+        ('4.1', 19, 'ผลการพัฒนาส่วนต่อประสานสำหรับลูกค้า (Customer Storefront Zone)'),
+        ('4.2', 22, 'ผลการพัฒนาส่วนต่อประสานสำหรับเจ้าหน้าที่ (Staff Management Zone)'),
+        ('บทที่ 5', 25, 'การทดสอบและสรุปผล'),
+        ('5.1', 25, 'ระเบียบวิธีและกลยุทธ์การทดสอบอัตโนมัติ'),
+        ('5.2', 26, 'สาระสำคัญของการทดสอบระบบ'),
+        ('5.3', 27, f'สรุปผลการรันชุดทดสอบอัตโนมัติ ({TOTAL_TESTS} Test Cases)'),
+        ('5.4', 27, 'สรุปผลการดำเนินงานโครงงาน'),
+        ('5.5', 28, 'ปัญหา อุปสรรค และแนวทางการแก้ไข'),
+        ('5.6', 29, 'ข้อจำกัดและข้อเสนอแนะในการพัฒนาต่อยอด'),
+        ('', 30, 'เอกสารอ้างอิงและบรรณานุกรม'),
+        ('', 31, 'ภาคผนวก'),
+        ('ภาคผนวก ก', 32, 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ'),
+        ('ภาคผนวก ข', 34, 'คู่มือการใช้งานระบบโดยย่อ'),
+        ('ภาคผนวก ค', 36, 'พจนานุกรมข้อมูลและโครงสร้างระบบ'),
+        ('ภาคผนวก ง', 46, 'ประวัติผู้จัดทำโครงงาน'),
     ]
     _toc(doc, toc_rows)
 

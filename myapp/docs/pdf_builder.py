@@ -29,6 +29,7 @@ from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, Image,
                                 KeepTogether, NextPageTemplate, PageBreak,
                                 PageTemplate, Paragraph, Spacer, Table,
@@ -251,6 +252,29 @@ def _styles() -> dict[str, ParagraphStyle]:
         'note', parent=base, fontName=FONT_REGULAR, fontSize=14,
         leading=20, textColor=diagrams.INK)
 
+    # สไตล์สำหรับสารบัญ สารบัญตาราง และสารบัญภาพตามหลักวิชาการ
+    s['th_toc_left'] = ParagraphStyle(
+        'th_toc_left', parent=base, fontName=FONT_BOLD, fontSize=15,
+        leading=21, textColor=diagrams.INK)
+    s['th_toc_right'] = ParagraphStyle(
+        'th_toc_right', parent=base, fontName=FONT_BOLD, fontSize=15,
+        leading=21, alignment=TA_RIGHT, textColor=diagrams.INK)
+    s['td_toc_major'] = ParagraphStyle(
+        'td_toc_major', parent=base, fontName=FONT_BOLD, fontSize=14,
+        leading=20, textColor=diagrams.INK)
+    s['td_toc_sub'] = ParagraphStyle(
+        'td_toc_sub', parent=base, fontName=FONT_REGULAR, fontSize=14,
+        leading=20, leftIndent=20, firstLineIndent=-20, textColor=diagrams.INK)
+    s['td_toc_app_sub'] = ParagraphStyle(
+        'td_toc_app_sub', parent=base, fontName=FONT_REGULAR, fontSize=14,
+        leading=20, leftIndent=20, firstLineIndent=-20, textColor=diagrams.INK)
+    s['td_toc_page'] = ParagraphStyle(
+        'td_toc_page', parent=base, fontName=FONT_REGULAR, fontSize=14,
+        leading=20, alignment=TA_RIGHT, textColor=diagrams.INK)
+    s['td_toc_page_bold'] = ParagraphStyle(
+        'td_toc_page_bold', parent=base, fontName=FONT_BOLD, fontSize=14,
+        leading=20, alignment=TA_RIGHT, textColor=diagrams.INK)
+
     # สไตล์สำหรับหัวเรื่องภาคผนวก และหน้าคั่นบอกตอนภาคผนวกตามหลักวิชาการ
     s['app_label'] = ParagraphStyle(
         'app_label', parent=base, fontName=FONT_BOLD, fontSize=18, leading=24,
@@ -472,100 +496,131 @@ def _acknowledgements(meta: dict[str, Any], text: str) -> list:
     return story
 
 
+def _make_dotted_line(prefix_html: str, raw_text: str, page_str: str,
+                      font_name: str, font_size: float, col_w: float) -> str:
+    """คำนวณและเติมเส้นไข่ปลา (. . . . .) เชื่อมระหว่างชื่อหัวข้อและเลขหน้าตามหลักวิชาการ"""
+    w_text = stringWidth(raw_text, font_name, font_size)
+    w_dot = stringWidth('. ', font_name, font_size)
+    if w_text > col_w:
+        rem_w = col_w - (w_text % col_w) - 12
+    else:
+        rem_w = col_w - w_text - 12
+
+    if rem_w < 15:
+        return prefix_html
+
+    n_dots = max(3, int(rem_w / w_dot))
+    dots_str = ('. ' * n_dots).strip()
+    if dots_str:
+        return f'{prefix_html} <font color="#888888">{dots_str}</font>'
+    return prefix_html
+
+
 def _toc(entries: list[tuple[str, str, str | int]]) -> list:
-    """สารบัญเนื้อหา (Table of Contents)"""
+    """สารบัญ (Table of Contents) ตามหลักวิชาการ"""
     s = _styles()
+    col_title_w = CONTENT_W - 16 * mm
+    col_page_w = 16 * mm
     rows = [
-        [Paragraph('<b>ลำดับ</b>', s['th']),
-         Paragraph('<b>ชื่อบท / หัวข้อเรื่อง</b>', s['th']),
-         Paragraph('<b>หน้า</b>', s['th'])],
+        [Paragraph('<b>บทที่</b>', s['th_toc_left']),
+         Paragraph('<b>หน้า</b>', s['th_toc_right'])],
     ]
     for num, title, page in entries:
-        is_major = not num or num.startswith('บทที่') or title in ('สารบัญเนื้อหา', 'สารบัญตาราง', 'สารบัญภาพ', 'เอกสารอ้างอิงและบรรณานุกรม', 'ภาคผนวก', 'บทคัดย่อ')
-        cell_style = s['td']
-        num_text = f'<b>{esc(num)}</b>' if (is_major or num.startswith('ภาคผนวก')) and num else esc(num)
-        title_text = f'<b>{esc(title)}</b>' if is_major else f'&nbsp;&nbsp;&nbsp;&nbsp;{esc(title)}'
-        rows.append([
-            Paragraph(num_text, cell_style),
-            Paragraph(title_text, cell_style),
-            Paragraph(str(page), cell_style),
-        ])
+        is_major = not num or num.startswith('บทที่') or title in (
+            'สารบัญ', 'สารบัญเนื้อหา', 'สารบัญตาราง', 'สารบัญภาพ',
+            'เอกสารอ้างอิงและบรรณานุกรม', 'ภาคผนวก', 'บทคัดย่อ'
+        )
+        fn = FONT_BOLD if is_major else FONT_REGULAR
+        st_page = s['td_toc_page_bold'] if is_major else s['td_toc_page']
 
-    table = Table(rows, colWidths=[24 * mm, CONTENT_W - 40 * mm, 16 * mm], repeatRows=1)
+        if is_major and num.startswith('บทที่'):
+            st_title = s['td_toc_major']
+            prefix = f'<b>{esc(num)}&nbsp;&nbsp;&nbsp;&nbsp;{esc(title)}</b>'
+            raw = f'{num}    {title}'
+        elif is_major:
+            st_title = s['td_toc_major']
+            prefix = f'<b>{esc(title)}</b>'
+            raw = title
+        elif num.startswith('ภาคผนวก'):
+            st_title = s['td_toc_app_sub']
+            prefix = f'&nbsp;&nbsp;&nbsp;&nbsp;<b>{esc(num)}</b>&nbsp;&nbsp;{esc(title)}'
+            raw = f'    {num}  {title}'
+        else:
+            st_title = s['td_toc_sub']
+            prefix = f'&nbsp;&nbsp;&nbsp;&nbsp;{esc(num)}&nbsp;&nbsp;{esc(title)}'
+            raw = f'    {num}  {title}'
+
+        txt = _make_dotted_line(prefix, raw, str(page), fn, 14, col_title_w)
+        rows.append([Paragraph(txt, st_title), Paragraph(str(page), st_page)])
+
+    table = Table(rows, colWidths=[col_title_w, col_page_w], repeatRows=1)
     table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), FONT_REGULAR),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
+        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
         ('LINEABOVE', (0, 0), (-1, 0), 1.2, colors.black),
         ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.black),
         ('LINEBELOW', (0, -1), (-1, -1), 1.2, colors.black),
-        ('LINEBELOW', (0, 1), (-1, -2), 0.4, colors.HexColor('#e0e0e0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4.5),
-        ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 2.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 2.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
-    return [Paragraph('สารบัญเนื้อหา', s['h1']), Spacer(1, 4 * mm), table]
+    return [Paragraph('สารบัญ', s['h1']), Spacer(1, 4 * mm), table]
 
 
 def _lot(table_entries: list[tuple[str, str, str | int]]) -> list:
-    """สารบัญตาราง (List of Tables)"""
+    """สารบัญตาราง (List of Tables) ตามหลักวิชาการ"""
     s = _styles()
+    col_title_w = CONTENT_W - 16 * mm
+    col_page_w = 16 * mm
     rows = [
-        [Paragraph('<b>ตารางที่</b>', s['th']),
-         Paragraph('<b>ชื่อตาราง</b>', s['th']),
-         Paragraph('<b>หน้า</b>', s['th'])],
+        [Paragraph('<b>ตารางที่</b>', s['th_toc_left']),
+         Paragraph('<b>หน้า</b>', s['th_toc_right'])],
     ]
     for num, title, page in table_entries:
-        rows.append([
-            Paragraph(esc(num), s['td']),
-            Paragraph(esc(title), s['td']),
-            Paragraph(str(page), s['td']),
-        ])
+        prefix = f'<b>{esc(num)}</b>&nbsp;&nbsp;{esc(title)}'
+        raw = f'{num}  {title}'
+        txt = _make_dotted_line(prefix, raw, str(page), FONT_REGULAR, 14, col_title_w)
+        rows.append([Paragraph(txt, s['td_toc_sub']), Paragraph(str(page), s['td_toc_page'])])
 
-    table = Table(rows, colWidths=[24 * mm, CONTENT_W - 40 * mm, 16 * mm], repeatRows=1)
+    table = Table(rows, colWidths=[col_title_w, col_page_w], repeatRows=1)
     table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), FONT_REGULAR),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
+        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
         ('LINEABOVE', (0, 0), (-1, 0), 1.2, colors.black),
         ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.black),
         ('LINEBELOW', (0, -1), (-1, -1), 1.2, colors.black),
-        ('LINEBELOW', (0, 1), (-1, -2), 0.4, colors.HexColor('#e0e0e0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4.5),
-        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
     return [Paragraph('สารบัญตาราง', s['h1']), Spacer(1, 4 * mm), table]
 
 
 def _lof(figure_entries: list[tuple[str, str, str | int]]) -> list:
-    """สารบัญภาพ (List of Figures)"""
+    """สารบัญภาพ (List of Figures) ตามหลักวิชาการ"""
     s = _styles()
+    col_title_w = CONTENT_W - 16 * mm
+    col_page_w = 16 * mm
     rows = [
-        [Paragraph('<b>ภาพที่</b>', s['th']),
-         Paragraph('<b>ชื่อภาพและคำบรรยาย</b>', s['th']),
-         Paragraph('<b>หน้า</b>', s['th'])],
+        [Paragraph('<b>ภาพที่</b>', s['th_toc_left']),
+         Paragraph('<b>หน้า</b>', s['th_toc_right'])],
     ]
     for num, title, page in figure_entries:
-        rows.append([
-            Paragraph(esc(num), s['td']),
-            Paragraph(esc(title), s['td']),
-            Paragraph(str(page), s['td']),
-        ])
+        prefix = f'<b>{esc(num)}</b>&nbsp;&nbsp;{esc(title)}'
+        raw = f'{num}  {title}'
+        txt = _make_dotted_line(prefix, raw, str(page), FONT_REGULAR, 14, col_title_w)
+        rows.append([Paragraph(txt, s['td_toc_sub']), Paragraph(str(page), s['td_toc_page'])])
 
-    table = Table(rows, colWidths=[24 * mm, CONTENT_W - 40 * mm, 16 * mm], repeatRows=1)
+    table = Table(rows, colWidths=[col_title_w, col_page_w], repeatRows=1)
     table.setStyle(TableStyle([
-        ('FONTNAME', (0, 0), (-1, -1), FONT_REGULAR),
-        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
+        ('VALIGN', (0, 0), (-1, -1), 'BOTTOM'),
         ('LINEABOVE', (0, 0), (-1, 0), 1.2, colors.black),
         ('LINEBELOW', (0, 0), (-1, 0), 0.8, colors.black),
         ('LINEBELOW', (0, -1), (-1, -1), 1.2, colors.black),
-        ('LINEBELOW', (0, 1), (-1, -2), 0.4, colors.HexColor('#e0e0e0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4.5),
-        ('ALIGN', (2, 0), (2, -1), 'CENTER'),
+        ('TOPPADDING', (0, 0), (-1, -1), 3),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
+        ('LEFTPADDING', (0, 0), (-1, -1), 0),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 0),
     ]))
     return [Paragraph('สารบัญภาพ', s['h1']), Spacer(1, 4 * mm), table]
 
@@ -876,11 +931,10 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         idx = raw_p - 2  # ปก = หน้า 1 -> หน้า 2 คือ ก
         return THAI_NUMERALS[idx] if 0 <= idx < len(THAI_NUMERALS) else str(idx + 1)
 
-    # 2. ส่วนนำ -> Template: prelim (สารบัญเนื้อหา สารบัญตาราง สารบัญภาพ)
-    # 2.1 สารบัญเนื้อหา (Table of Contents)
+    # 2. ส่วนนำ -> Template: prelim (สารบัญ สารบัญตาราง สารบัญภาพ)
+    # 2.1 สารบัญ (Table of Contents)
     story.append(PageAnchor('toc', page_registry))
     toc_entries = [
-        ('', 'สารบัญเนื้อหา', p_prelim('toc', 'ก')),
         ('', 'สารบัญตาราง', p_prelim('lot', 'ค')),
         ('', 'สารบัญภาพ', p_prelim('lof', 'ง')),
         ('บทที่ 1', 'บทนำ', p_num('ch_intro', 1)),
