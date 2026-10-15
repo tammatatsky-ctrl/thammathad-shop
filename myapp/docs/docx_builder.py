@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import os
 import re
+from pathlib import Path
 
 from docx import Document
 from docx.enum.section import WD_SECTION
@@ -64,10 +65,8 @@ def _style_run(run, size: float, bold: bool, color: tuple[int, int, int] | None,
     run.font.bold = bold
     if color:
         run.font.color.rgb = RGBColor(*color)
-    # ต้องตั้งทั้งชื่อฟอนต์สำหรับอักษรละตินและภาษาไทย (w:eastAsia)
-    # ถ้าตั้งแค่ run.font.name Word จะใช้ฟอนต์ไทยของระบบแทน ทำให้
-    # ข้อความในไฟล์ที่ส่งอาจารย์หน้าตาไม่เหมือนฉบับ PDF
-    name = font or (FONT_BOLD if bold else FONT_REGULAR)
+    # ใน Word ต้องตั้งชื่อฟอนต์ภาษาไทยเป็น TH Sarabun New และกำหนด w:eastAsia
+    name = font or 'TH Sarabun New'
     run.font.name = name
     rpr = run._element.get_or_add_rPr()
     rfonts = rpr.find(qn('w:rFonts'))
@@ -78,7 +77,7 @@ def _style_run(run, size: float, bold: bool, color: tuple[int, int, int] | None,
         rfonts.set(qn(attr), name)
 
 
-def _para(doc, text: str, size: float = 11, bold: bool = False,
+def _para(doc, text: str, size: float = 16, bold: bool = False,
           align=WD_ALIGN_PARAGRAPH.LEFT, space_after: float = 6,
           color: tuple[int, int, int] | None = None,
           justify: bool = False):
@@ -98,26 +97,51 @@ def _para(doc, text: str, size: float = 11, bold: bool = False,
 
 def _table(doc, spec: dict, widths_cm: list[float] | None = None):
     if spec.get('title'):
-        _para(doc, spec['title'], 10, bold=True, space_after=4, color=(0, 0, 0))
+        _para(doc, spec['title'], 15, bold=True, space_after=4, color=(0, 0, 0))
 
     head, rows = spec['head'], spec['rows']
     t = doc.add_table(rows=1, cols=len(head))
     t.style = 'Table Grid'
     t.alignment = WD_TABLE_ALIGNMENT.CENTER
 
+    if widths_cm is None:
+        n_cols = len(head)
+        if n_cols == 2:
+            widths_cm = [CONTENT_CM * 0.35, CONTENT_CM * 0.65]
+        elif n_cols == 3:
+            h0 = str(head[0])
+            if 'บทบาท' in h0:
+                widths_cm = [CONTENT_CM * 0.25, CONTENT_CM * 0.38, CONTENT_CM * 0.37]
+            elif 'ด้าน' in h0:
+                widths_cm = [CONTENT_CM * 0.24, CONTENT_CM * 0.40, CONTENT_CM * 0.36]
+            else:
+                widths_cm = [CONTENT_CM * 0.25, CONTENT_CM * 0.40, CONTENT_CM * 0.35]
+        elif n_cols == 4:
+            widths_cm = [CONTENT_CM * 0.16, CONTENT_CM * 0.26, CONTENT_CM * 0.28, CONTENT_CM * 0.30]
+        elif n_cols == 6:
+            widths_cm = [2.2, 3.2, 2.4, 2.4, 2.6, max(2.0, CONTENT_CM - (2.2 + 3.2 + 2.4 + 2.4 + 2.6))]
+
     for i, h in enumerate(head):
         cell = t.rows[0].cells[i]
         cell.text = ''
-        run = cell.paragraphs[0].add_run(str(h))
-        _style_run(run, 9.5, True, (0, 0, 0))
+        p = cell.paragraphs[0]
+        p.paragraph_format.line_spacing = 1.25
+        p.paragraph_format.space_after = Pt(2)
+        p.paragraph_format.space_before = Pt(2)
+        run = p.add_run(str(h))
+        _style_run(run, 13.5, True, (0, 0, 0))
         _set_cell_background(cell, 'F0F0F0')
 
     for r_i, row in enumerate(rows):
         cells = t.add_row().cells
         for c_i, value in enumerate(row):
             cells[c_i].text = ''
-            run = cells[c_i].paragraphs[0].add_run(str(value))
-            _style_run(run, 9, False, (0, 0, 0))
+            p = cells[c_i].paragraphs[0]
+            p.paragraph_format.line_spacing = 1.25
+            p.paragraph_format.space_after = Pt(2)
+            p.paragraph_format.space_before = Pt(2)
+            run = p.add_run(str(value))
+            _style_run(run, 13, False, (0, 0, 0))
             if r_i % 2 == 1:
                 _set_cell_background(cells[c_i], 'FAFAFA')
 
@@ -134,7 +158,7 @@ def _picture(doc, png: bytes, caption: str, width_cm: float | None = None):
     width = width_cm or min(CONTENT_CM, 16.5)
     doc.add_picture(io.BytesIO(png), width=Cm(width))
     doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _para(doc, caption, 9, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14,
+    _para(doc, caption, 14, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14,
           color=(0, 0, 0))
 
 
@@ -148,45 +172,47 @@ def _header_footer(section, chapter: str = '') -> None:
     header.alignment = WD_ALIGN_PARAGRAPH.LEFT
     _style_run(header.add_run(f'THAMMATHAD SHOP — รายงานโครงงาน'
                               + (f'  |  {chapter}' if chapter else '')),
-               8, False, (0, 0, 0))
+               14, False, (0, 0, 0))
 
     footer = section.footer.paragraphs[0]
     footer.text = ''
     footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    # เลขหน้ามุมบนขวาหรือล่างขวา
+    # เลขหน้ามุมล่างขวา
+    run = footer.add_run()
+    _style_run(run, 14, False, (0, 0, 0))
     fld = OxmlElement('w:fldSimple')
     fld.set(qn('w:instr'), 'PAGE')
-    footer._p.append(fld)
+    run._r.append(fld)
 
 
 def _cover(doc, meta: dict) -> None:
     for _ in range(2):
         doc.add_paragraph()
 
-    _para(doc, 'รายงานโครงงานทางวิทยาการคอมพิวเตอร์', 13, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6, color=(0, 0, 0))
-    _para(doc, 'ภาคการศึกษาที่ 1 ปีการศึกษา 2569', 11,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=18, color=(0, 0, 0))
+    _para(doc, 'รายงานโครงงานทางวิทยาการคอมพิวเตอร์', 16, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, 'ภาคการศึกษาที่ 1 ปีการศึกษา 2569', 15,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
 
-    _para(doc, meta.get('title', ''), 22, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6, color=(0, 0, 0))
-    _para(doc, '(THAMMATHAD SHOP)', 13, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6, color=(0, 0, 0))
-    _para(doc, meta.get('title_en', 'E-Commerce System for Computer Hardware and IT Accessories'), 12, bold=True,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=26, color=(0, 0, 0))
+    _para(doc, meta.get('title', ''), 20, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, '(THAMMATHAD SHOP)', 17, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, meta.get('title_en', 'E-Commerce System for Computer Hardware and IT Accessories'), 15, bold=True,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=20, color=(0, 0, 0))
 
-    _para(doc, 'ผู้จัดทำ', 11, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, 'ผู้จัดทำ', 15, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
     student = meta.get('student', {})
     name = student.get('ชื่อ-นามสกุล', 'นายธรรมธัช รูปไธสง')
     std_id = student.get('รหัสนักศึกษา', '671320104')
-    _para(doc, name or '________________________________', 11,
+    _para(doc, name or '________________________________', 15,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=2, color=(0, 0, 0))
-    _para(doc, f'รหัสนักศึกษา {std_id}' if std_id else 'รหัสนักศึกษา ____________________', 11,
-          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
+    _para(doc, f'รหัสนักศึกษา {std_id}' if std_id else 'รหัสนักศึกษา ____________________', 15,
+          align=WD_ALIGN_PARAGRAPH.CENTER, space_after=10, color=(0, 0, 0))
 
-    _para(doc, 'เสนอ', 11, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=4, color=(0, 0, 0))
+    _para(doc, 'เสนอ', 15, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
     _para(doc, meta.get('advisor', '') or 'ผู้ช่วยศาสตราจารย์สุรินทร์ เพชรไทย',
-          11, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=16, color=(0, 0, 0))
+          15, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
 
     course = meta.get('course', '4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์')
     dept = student.get('สาขา', 'วิทยาการคอมพิวเตอร์')
@@ -194,21 +220,22 @@ def _cover(doc, meta: dict) -> None:
     univ = meta.get('university', 'มหาวิทยาลัยราชภัฏกำแพงเพชร')
     year = meta.get('year', '2569')
 
-    _para(doc, f'รายงานนี้เป็นส่วนหนึ่งของรายวิชา {course}', 10.5,
+    _para(doc, f'รายงานนี้เป็นส่วนหนึ่งของรายวิชา {course}', 15,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
-    _para(doc, f'สาขาวิชา{dept} {faculty}', 10.5,
+    _para(doc, f'สาขาวิชา{dept} {faculty}', 15,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
-    _para(doc, univ, 11, bold=True,
+    _para(doc, univ, 16, bold=True,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3, color=(0, 0, 0))
-    _para(doc, f'ปีการศึกษา {year}', 10.5,
+    _para(doc, f'ปีการศึกษา {year}', 15,
           align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6, color=(0, 0, 0))
     _page_break(doc)
 
 
 def _toc(doc, entries: list[tuple[str, int, str]]) -> None:
-    _para(doc, 'สารบัญ', 18, bold=True, space_after=14, color=(0, 0, 0))
+    _para(doc, 'สารบัญเนื้อหา', 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14, color=(0, 0, 0))
     for num, page, title in entries:
-        _para(doc, f'{num}    {title}    {page}', 11, space_after=5, color=(0, 0, 0))
+        is_chapter = num.startswith('บทที่') or num.startswith('ภาค') or num in ('สารบัญ', 'เอกสารอ้างอิง')
+        _para(doc, f'{num}    {title}    {page}', 15, bold=is_chapter, space_after=5, color=(0, 0, 0))
     _page_break(doc)
 
 
@@ -216,48 +243,87 @@ def _render_blocks(doc, blocks: list) -> None:
     for block in blocks:
         kind = block[0]
         if kind == 'h2':
-            _para(doc, block[1], 14, bold=True, space_after=8,
+            _para(doc, block[1], 16, bold=True, space_after=8,
                   color=(0, 0, 0))
         elif kind == 'h3':
-            _para(doc, block[1], 12.5, bold=True, space_after=6, color=(0, 0, 0))
+            _para(doc, block[1], 16, bold=True, space_after=6, color=(0, 0, 0))
         elif kind == 'p':
             # แยกย่อหน้าตามบรรทัดว่างที่คนเขียนไว้ (ต้องตรงกับฝั่ง PDF)
             chunks = [c.strip() for c in re.split(r'\n[ \t]*\n', block[1])
                       if c.strip()]
             for chunk in chunks:
-                _para(doc, chunk, 11, space_after=7, color=(0, 0, 0))
+                p_elem = _para(doc, chunk, 16, space_after=7, color=(0, 0, 0))
+                if not chunk.startswith('<b>'):
+                    p_elem.paragraph_format.first_line_indent = Cm(1.25)
         elif kind == 'note':
-            _para(doc, block[1], 9.5, space_after=6, color=(0, 0, 0))
+            _para(doc, block[1], 14, space_after=6, color=(0, 0, 0))
         elif kind == 'bullets':
             for item in block[1]:
                 text, detail = (item if isinstance(item, tuple) else (item, ''))
                 p = doc.add_paragraph(style='List Bullet')
                 p.paragraph_format.space_after = Pt(4)
-                p.paragraph_format.line_spacing = 1.3
-                _style_run(p.add_run(text + detail), 11, False, (0, 0, 0))
+                p.paragraph_format.line_spacing = 1.35
+                _style_run(p.add_run(text + detail), 16, False, (0, 0, 0))
             doc.add_paragraph()
         elif kind == 'table':
             _table(doc, block[1])
         elif kind == 'focus':
-            _para(doc, 'ตารางที่ 4.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', 10, bold=True, space_after=4, color=(0, 0, 0))
+            _para(doc, 'ตารางที่ 5.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', 15, bold=True, space_after=4, color=(0, 0, 0))
             _table(doc, {'head': ('สิ่งที่ตรวจ', 'รายละเอียดการทดสอบ'),
                          'rows': [list(r) for r in block[1]]},
                     widths_cm=[CONTENT_CM * 0.36, CONTENT_CM * 0.64])
         elif kind == 'ref_item':
             p = doc.add_paragraph()
-            p.paragraph_format.left_indent = Cm(0.8)
-            p.paragraph_format.first_line_indent = Cm(-0.8)
+            p.paragraph_format.left_indent = Cm(1.0)
+            p.paragraph_format.first_line_indent = Cm(-1.0)
             p.paragraph_format.space_after = Pt(4)
-            _style_run(p.add_run(block[1]), 10, False, (0, 0, 0))
+            p.paragraph_format.line_spacing = 1.35
+            _style_run(p.add_run(block[1]), 15, False, (0, 0, 0))
+        elif kind == 'image':
+            img_path = block[1]
+            caption = block[2] if len(block) > 2 else ''
+            if os.path.exists(img_path):
+                with open(img_path, 'rb') as f:
+                    _picture(doc, f.read(), caption, width_cm=8.0)
+
+
+def _default_screenshots_pack() -> dict[str, tuple[str, str]]:
+    from django.conf import settings
+    sc_dir = Path(settings.BASE_DIR) / 'docs' / 'screenshots'
+    return {
+        'fig_4_1': (str(sc_dir / '01_home_catalog.png'),
+                    'ภาพที่ 4.1 หน้าแรกและแคตตาล็อกสินค้าพร้อมการค้นหาสด (Home & Product Catalog)'),
+        'fig_4_2': (str(sc_dir / '02_product_detail.png'),
+                    'ภาพที่ 4.2 หน้ารายละเอียดสินค้า ข้อมูลทางเทคนิค และสต็อกคงเหลือ (Product Detail & Specifications)'),
+        'fig_4_3': (str(sc_dir / '03_cart_checkout.png'),
+                    'ภาพที่ 4.3 ตะกร้าสินค้าและการสรุปรายการก่อนสั่งซื้อ (Cart & Checkout Review)'),
+        'fig_4_4': (str(sc_dir / '04_order_tracking.png'),
+                    'ภาพที่ 4.4 หน้าติดตามคำสั่งซื้อ บันไดสถานะ 4 ขั้น และประวัติการแจ้งปัญหา (Order Tracking & Issue History)'),
+        'fig_4_5': (str(sc_dir / '05_customer_account.png'),
+                    'ภาพที่ 4.5 หน้าบัญชีลูกค้า ประวัติการสั่งซื้อ และสมุดที่อยู่จัดส่ง (Customer Account & Orders)'),
+        'fig_4_6': (str(sc_dir / '06_staff_orders.png'),
+                    'ภาพที่ 4.6 ตารางจัดการคำสั่งซื้อพร้อมระบบแจ้งเตือนปัญหา (Staff Orders Management)'),
+        'fig_4_7': (str(sc_dir / '07_staff_order_detail.png'),
+                    'ภาพที่ 4.7 หน้ารายละเอียดคำสั่งซื้อ ข้อมูลการชำระเงิน และการจัดการสถานะ (Staff Order Detail & Actions)'),
+        'fig_4_8': (str(sc_dir / '08_staff_issues.png'),
+                    'ภาพที่ 4.8 ศูนย์จัดการปัญหาคำสั่งซื้อและข้อร้องเรียนของลูกค้า (Staff Order Issues Center)'),
+        'fig_4_9': (str(sc_dir / '09_staff_dashboard.png'),
+                    'ภาพที่ 4.9 แดชบอร์ดสรุปยอดขาย การวิเคราะห์ และตัวชี้วัดประสิทธิภาพ (Sales Analytics Dashboard)'),
+        'fig_4_10': (str(sc_dir / '10_staff_employees.png'),
+                     'ภาพที่ 4.10 หน้าจัดการข้อมูลพนักงานและการสืบค้นสด (Staff Directory & Live Search)'),
+    }
 
 
 def build_docx(target: str, meta: dict, chapters: list[dict],
-               diagrams_pack: dict, appendix_blocks: list[dict]) -> str:
+               diagrams_pack: dict, appendix_blocks: list[dict],
+               screenshots_pack: dict | None = None) -> str:
     """ประกอบเอกสาร Word ทั้งเล่มแล้วบันทึกลง `target`
 
     คืนค่า: พาธไฟล์ที่บันทึกจริง
     """
     diagrams.register_thai_fonts()
+    if screenshots_pack is None:
+        screenshots_pack = _default_screenshots_pack()
     doc = Document()
 
     section = doc.sections[0]
@@ -271,57 +337,87 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
 
     # สไตล์ปกติของเอกสาร ใช้เป็นค่าเริ่มต้นให้ข้อความใหม่
     normal = doc.styles['Normal']
-    normal.font.name = FONT_REGULAR
-    normal.font.size = Pt(11)
+    normal.font.name = 'TH Sarabun New'
+    normal.font.size = Pt(16)
     rpr = normal.element.get_or_add_rPr()
     rfonts = rpr.find(qn('w:rFonts'))
     if rfonts is None:
         rfonts = OxmlElement('w:rFonts')
         rpr.append(rfonts)
     for attr in ('w:ascii', 'w:hAnsi', 'w:cs', 'w:eastAsia'):
-        rfonts.set(qn(attr), FONT_REGULAR)
+        rfonts.set(qn(attr), 'TH Sarabun New')
 
     _cover(doc, meta)
 
     toc_rows = [
-        ('บทคัดย่อ', 2, 'บทคัดย่อภาษาไทยและภาษาอังกฤษ'),
-        ('สารบัญ', 3, 'สารบัญเนื้อหา'),
+        ('สารบัญ', 2, 'สารบัญเนื้อหา'),
+        ('บทที่ 1', 3, 'บทนำ'),
+        ('บทที่ 2', 5, 'การวิเคราะห์และออกแบบระบบ'),
+        ('บทที่ 3', 8, 'การพัฒนาระบบ'),
+        ('บทที่ 4', 12, 'ผลการพัฒนาและภาพหน้าจอระบบ'),
+        ('บทที่ 5', 16, 'การทดสอบและสรุปผล'),
+        ('เอกสารอ้างอิง', 19, 'เอกสารอ้างอิงและบรรณานุกรม'),
+        ('ภาคผนวก ก', 20, 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ'),
+        ('ภาคผนวก ข', 22, 'คู่มือการใช้งานระบบโดยย่อ'),
+        ('ภาคผนวก ค', 24, 'พจนานุกรมข้อมูลและโครงสร้างระบบ'),
+        ('ภาคผนวก ง', 32, 'ประวัติผู้จัดทำโครงงาน'),
     ]
-    page_est = 3
-    for ch in chapters:
-        if ch['id'] == 'abstract':
-            continue
-        page_est += 1
-        num_label = ch['title'].split()[0] if ch['title'].startswith('บทที่') else ''
-        toc_rows.append((num_label or '—', page_est, ch['title']))
-        page_est += max(1, len(ch['blocks']) // 6)
-    toc_rows.append(('ภาคผนวก ก', page_est + 1, 'ภาคผนวก ก พจนานุกรมข้อมูลและโครงสร้างระบบ'))
-    toc_rows.append(('ภาคผนวก ข', page_est + 3, 'ภาคผนวก ข ประวัติผู้จัดทำโครงงาน'))
     _toc(doc, toc_rows)
 
     for chapter in chapters:
-        _para(doc, chapter['title'], 18, bold=True, space_after=14)
-        _render_blocks(doc, chapter['blocks'])
+        _para(doc, chapter['title'], 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14)
+        for block in chapter['blocks']:
+            _render_blocks(doc, [block])
+            kind = block[0]
+            if chapter['id'] == 'analysis' and kind == 'h2':
+                if '2.2' in block[1] and 'usecase' in diagrams_pack:
+                    d, cap = diagrams_pack['usecase']
+                    _picture(doc, render_diagram_png(d), cap)
+                elif '2.3' in block[1] and 'layered' in diagrams_pack:
+                    d, cap = diagrams_pack['layered']
+                    _picture(doc, render_diagram_png(d), cap)
+                elif '2.4' in block[1] and 'er' in diagrams_pack:
+                    d, cap = diagrams_pack['er']
+                    _picture(doc, render_diagram_png(d), cap)
+                elif '2.6' in block[1] and 'lifecycle' in diagrams_pack:
+                    d, cap = diagrams_pack['lifecycle']
+                    _picture(doc, render_diagram_png(d), cap)
+
+            if chapter['id'] == 'results' and kind == 'p':
+                if '1. หน้าแรกและแคตตาล็อกสินค้า' in block[1]:
+                    for fig_k in ('fig_4_1', 'fig_4_2', 'fig_4_3', 'fig_4_4', 'fig_4_5'):
+                        if fig_k in screenshots_pack:
+                            img_f, cap = screenshots_pack[fig_k]
+                            if os.path.exists(img_f):
+                                with open(img_f, 'rb') as f:
+                                    _picture(doc, f.read(), cap, width_cm=15.0)
+                elif '1. ตารางจัดการคำสั่งซื้อ' in block[1]:
+                    for fig_k in ('fig_4_6', 'fig_4_7', 'fig_4_8', 'fig_4_9', 'fig_4_10'):
+                        if fig_k in screenshots_pack:
+                            img_f, cap = screenshots_pack[fig_k]
+                            if os.path.exists(img_f):
+                                with open(img_f, 'rb') as f:
+                                    _picture(doc, f.read(), cap, width_cm=15.0)
+        _page_break(doc)
+
+    # เอกสารอ้างอิงและบรรณานุกรม
+    from .content import REFERENCES
+    if REFERENCES:
+        _para(doc, 'เอกสารอ้างอิงและบรรณานุกรม', 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14)
+        _render_blocks(doc, REFERENCES)
         _page_break(doc)
 
     if appendix_blocks:
-        _para(doc, 'ภาคผนวก ก — พจนานุกรมข้อมูลและโครงสร้างระบบ', 18, bold=True,
-              space_after=14)
+        first_app = True
         for block in appendix_blocks:
             kind = block[0]
-            if kind == 'h2' and 'ภาคผนวก ข' in block[1]:
-                _page_break(doc)
-                _para(doc, block[1], 18, bold=True, space_after=14)
+            if kind == 'h2' and 'ภาคผนวก' in block[1]:
+                if not first_app:
+                    _page_break(doc)
+                first_app = False
+                _para(doc, block[1], 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14)
                 continue
             _render_blocks(doc, [block])
-        for key in ('er', 'layered', 'lifecycle', 'usecase'):
-            item = diagrams_pack.get(key)
-            if not item:
-                continue
-            drawing, caption = item
-            _picture(doc, render_diagram_png(drawing), caption)
-            if key == 'er':
-                _page_break(doc)
 
     os.makedirs(os.path.dirname(os.path.abspath(target)), exist_ok=True)
     doc.save(target)

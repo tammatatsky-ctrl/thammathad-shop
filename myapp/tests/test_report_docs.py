@@ -365,8 +365,7 @@ class ReportContentTest(TestCase):
 
     def test_all_required_chapters_present(self):
         ids = [c['id'] for c in content.chapter_order()]
-        for need in ('abstract', 'intro', 'tools', 'analysis', 'testing',
-                     'conclusion'):
+        for need in ('intro', 'analysis', 'development', 'results', 'conclusion'):
             self.assertIn(need, ids, f'รายงานขาดบท: {need}')
 
     def test_abstract_has_thai_and_english(self):

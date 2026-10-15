@@ -21,8 +21,16 @@ from reportlab.pdfbase.ttfonts import TTFont
 # ---------------------------------------------------------------------------
 # ฟอนต์ไทย
 # ---------------------------------------------------------------------------
+_local_appdata = os.environ.get('LOCALAPPDATA', '')
+_user_fonts = os.path.join(_local_appdata, 'Microsoft', 'Windows', 'Fonts') if _local_appdata else ''
+
 THAI_FONT_CANDIDATES = [
-    ('TH Sarabun New', 'C:/Windows/Fonts/THSARAB.TTF', 'C:/Windows/Fonts/THSARAB.TTF'),
+    ('TH Sarabun New (User)',
+     os.path.join(_user_fonts, 'THSarabunNew.ttf') if _user_fonts else '',
+     os.path.join(_user_fonts, 'THSarabunNew Bold.ttf') if _user_fonts else ''),
+    ('TH Sarabun New (Windows)', 'C:/Windows/Fonts/THSarabunNew.ttf', 'C:/Windows/Fonts/THSarabunNew Bold.ttf'),
+    ('TH Sarabun (Windows)', 'C:/Windows/Fonts/THSarabun.ttf', 'C:/Windows/Fonts/THSarabun Bold.ttf'),
+    ('TH Sarabun PSK', 'C:/Windows/Fonts/THSARAB.TTF', 'C:/Windows/Fonts/THSARAB.TTF'),
     ('Sarabun', 'C:/Windows/Fonts/Sarabun-Regular.ttf', None),
     ('Leelawadee UI', 'C:/Windows/Fonts/LeelawUI.ttf', None),
     ('Leelawadee', 'C:/Windows/Fonts/leelawad.ttf', 'C:/Windows/Fonts/leelawdb.ttf'),
@@ -32,6 +40,121 @@ THAI_FONT_CANDIDATES = [
 FONT_REGULAR = 'THAI'
 FONT_BOLD = 'THAI-BOLD'
 _font_ready = False
+
+
+# ---------------------------------------------------------------------------
+# กลไกจัดตำแหน่งสระและวรรณยุกต์ไทย (Thai PUA Glyph Shaping)
+# ป้องกันปัญหาสระและวรรณยุกต์ซ้อนกันหรือชนหางพยัญชนะ (ตัวสระซ้อนกัน)
+# ---------------------------------------------------------------------------
+_ASCENDER = set('\u0e1b\u0e1d\u0e1f\u0e2c')  # ป ฝ ฟ ฬ
+_DESCENDER = set('\u0e0e\u0e0f')              # ฎ ฏ
+_PEDESTAL = {'\u0e0d': '\uf70f', '\u0e10': '\uf700'}  # ญ ฐ
+
+_UPPER_VOWEL = set('\u0e31\u0e34\u0e35\u0e36\u0e37\u0e47\u0e4d')
+_UPPER_VOWEL_LEFT = {
+    '\u0e34': '\uf701', '\u0e35': '\uf702', '\u0e36': '\uf703', '\u0e37': '\uf704',
+    '\u0e31': '\uf710', '\u0e4d': '\uf711', '\u0e47': '\uf712'
+}
+
+_TONE = set('\u0e48\u0e49\u0e4a\u0e4b\u0e4c')
+_TONE_LEFT = {
+    '\u0e48': '\uf705', '\u0e49': '\uf706', '\u0e4a': '\uf707', '\u0e4b': '\uf708', '\u0e4c': '\uf709'
+}
+_TONE_UP = {
+    '\u0e48': '\uf713', '\u0e49': '\uf714', '\u0e4a': '\uf715', '\u0e4b': '\uf716', '\u0e4c': '\uf717'
+}
+_TONE_UP_LEFT = {
+    '\u0e48': '\uf713', '\u0e49': '\uf714', '\u0e4a': '\uf715', '\u0e4b': '\uf716', '\u0e4c': '\uf717'
+}
+
+_LOWER_VOWEL = set('\u0e38\u0e39\u0e3a')
+_LOWER_VOWEL_LOW = {'\u0e38': '\uf718', '\u0e39': '\uf719', '\u0e3a': '\uf71a'}
+
+_PUA_TO_THAI = {
+    '\uf700': '\u0e10',
+    '\uf701': '\u0e34', '\uf702': '\u0e35', '\uf703': '\u0e36', '\uf704': '\u0e37',
+    '\uf705': '\u0e48', '\uf706': '\u0e49', '\uf707': '\u0e4a', '\uf708': '\u0e4b', '\uf709': '\u0e4c',
+    '\uf70a': '\u0e48', '\uf70b': '\u0e49', '\uf70c': '\u0e4a', '\uf70d': '\u0e4b', '\uf70e': '\u0e4c',
+    '\uf70f': '\u0e0d',
+    '\uf710': '\u0e31', '\uf711': '\u0e4d', '\uf712': '\u0e47',
+    '\uf713': '\u0e48', '\uf714': '\u0e49', '\uf715': '\u0e4a', '\uf716': '\u0e4b', '\uf717': '\u0e4c',
+    '\uf718': '\u0e38', '\uf719': '\u0e39', '\uf71a': '\u0e3a',
+}
+
+
+def adjust_thai(text: str) -> str:
+    """ปรับวรรณยุกต์และสระภาษาไทยให้อยู่ในตำแหน่งที่ถูกต้อง (PUA) ไม่ซ้อนทับกัน"""
+    if not text:
+        return ''
+    chars = list(str(text))
+    n = len(chars)
+    out: list[str] = []
+    prev_cons = ''
+    i = 0
+    while i < n:
+        c = chars[i]
+        # สระอำ (ำ) ที่มีวรรณยุกต์นำหน้า (เช่น น้ำ, ย้ำ, ค่ำ, ถ้ำ)
+        if c in _TONE and i + 1 < n and chars[i + 1] == '\u0e33':
+            out.append(_TONE_UP[c])
+            i += 1
+            continue
+
+        # กรณีลำดับสลับ: วรรณยุกต์มาก่อนสระบน ให้สลับสระบนขึ้นก่อนและยกวรรณยุกต์ไปชั้นบน (Level 2)
+        if c in _TONE and i + 1 < n and chars[i + 1] in _UPPER_VOWEL:
+            upper = chars[i + 1]
+            has_asc = prev_cons in _ASCENDER
+            out.append(_UPPER_VOWEL_LEFT.get(upper, upper) if has_asc else upper)
+            out.append(_TONE_UP[c])
+            i += 2
+            continue
+
+        # สระบน (ิ, ี, ึ, ื, ั, ็, ํ)
+        if c in _UPPER_VOWEL:
+            has_asc = prev_cons in _ASCENDER
+            out.append(_UPPER_VOWEL_LEFT.get(c, c) if has_asc else c)
+            # ตรวจสอบว่ามีวรรณยุกต์ซ้อนด้านบนหรือไม่ (เช่น สิ่ง, ที่, ซึ่ง, ขึ้น, หนึ่ง, ลิขสิทธิ์)
+            if i + 1 < n and chars[i + 1] in _TONE:
+                tone = chars[i + 1]
+                out.append(_TONE_UP[tone])
+                i += 2
+                continue
+            i += 1
+            continue
+
+        # วรรณยุกต์เดี่ยวบนพยัญชนะ (เช่น ป่า, ป้า, ฟ้า -> หลบหางพยัญชนะมีหาง)
+        if c in _TONE:
+            has_asc = prev_cons in _ASCENDER
+            out.append(_TONE_LEFT[c] if has_asc else c)
+            i += 1
+            continue
+
+        # สระล่าง (ุ, ู, ฺ)
+        if c in _LOWER_VOWEL:
+            has_desc = prev_cons in _DESCENDER
+            out.append(_LOWER_VOWEL_LOW[c] if has_desc else c)
+            i += 1
+            continue
+
+        # ญ, ฐ ที่มีสระล่างรองรับ (ตัดเชิงออกไม่ให้ทับสระล่าง)
+        if c in _PEDESTAL and i + 1 < n and chars[i + 1] in _LOWER_VOWEL:
+            out.append(_PEDESTAL[c])
+            i += 1
+            continue
+
+        out.append(c)
+        if '\u0e01' <= c <= '\u0e2e':
+            prev_cons = c
+        elif c in ' \t\n\r':
+            prev_cons = ''
+        i += 1
+    return ''.join(out)
+
+
+def unshape_thai(text: str) -> str:
+    """แปลงอักขระ PUA กลับเป็นอักขระภาษาไทยมาตรฐาน"""
+    if not text:
+        return ''
+    return ''.join(_PUA_TO_THAI.get(c, c) for c in str(text))
 
 
 def register_thai_fonts() -> tuple[str, str]:
@@ -65,37 +188,53 @@ def text_width(text: str, size: float, bold: bool = False) -> float:
     """คำนวณความกว้างของข้อความ"""
     try:
         font = FONT_BOLD if bold else FONT_REGULAR
-        return pdfmetrics.stringWidth(text, font, size)
+        return pdfmetrics.stringWidth(adjust_thai(text), font, size)
     except Exception:
         return len(text) * size * 0.55
 
 
 def wrap(text: str, size: float, max_width: float, bold: bool = False,
          max_lines: int = 99) -> list[str]:
-    """ตัดบรรทัดตามความกว้างที่กำหนดสำหรับภาษาไทย"""
+    """ตัดบรรทัดตามคำภาษาไทยอย่างแม่นยำ ไม่ให้คำขาดกลาง (pythainlp tokenization)"""
     if not text:
         return ['']
+    try:
+        import pythainlp
+        # ตัดข้อความตามคำจริง
+        unshaped = unshape_thai(text)
+        tokens = pythainlp.word_tokenize(unshaped, engine='newmm', keep_whitespace=True)
+    except Exception:
+        tokens = list(text)
+
     lines: list[str] = []
-    current = ''
-    for ch in text:
-        if ch == '\n':
-            lines.append(current)
-            current = ''
+    current_tokens: list[str] = []
+    current_w = 0.0
+
+    for tok in tokens:
+        if tok == '\n':
+            lines.append(''.join(current_tokens))
+            current_tokens = []
+            current_w = 0.0
             continue
-        if text_width(current + ch, size, bold) <= max_width or not current:
-            current += ch
+        tw = text_width(tok, size, bold)
+        if current_w + tw <= max_width or not current_tokens:
+            current_tokens.append(tok)
+            current_w += tw
         else:
-            lines.append(current)
-            current = ch
-    lines.append(current)
+            lines.append(''.join(current_tokens))
+            current_tokens = [tok]
+            current_w = tw
 
-    if len(lines) > max_lines:
-        lines = lines[:max_lines]
-        lines[-1] = lines[-1][:max(0, int(max_width / (size * 0.55)) - 1)] + '…'
-    return lines
+    if current_tokens:
+        lines.append(''.join(current_tokens))
 
+    # ปรับตำแหน่งสระและวรรณยุกต์ในแต่ละบรรทัดให้สมบูรณ์
+    shaped_lines = [adjust_thai(line.strip()) for line in lines]
+    if len(shaped_lines) > max_lines:
+        shaped_lines = shaped_lines[:max_lines]
+        shaped_lines[-1] = shaped_lines[-1][:max(0, int(max_width / (size * 0.55)) - 1)] + '…'
+    return shaped_lines
 
-# ---------------------------------------------------------------------------
 # จานสีทางวิชาการ (Monochrome / Grayscale — ใช้สีดำเป็นหลักตามข้อกำหนด)
 # ---------------------------------------------------------------------------
 INK = HexColor('#000000')          # สีดำมาตรฐานสำหรับเส้นและข้อความหลัก
@@ -119,12 +258,13 @@ PURPLE_SOFT = HexColor('#f2f2f2')  # เทาอ่อน
 def text(draw: Drawing, x: float, y: float, value: str, size: float = 9,
          color: Color = INK, bold: bool = False, align: str = 'left',
          width: float = 0) -> None:
-    """วางข้อความ 1 บรรทัด (รองรับจัดกึ่งกลาง/ขวา)"""
+    """วางข้อความ 1 บรรทัด (รองรับจัดกึ่งกลาง/ขวา พร้อมจัดตำแหน่งสระไทย)"""
+    val = adjust_thai(value)
     if align == 'center':
-        x = x + width / 2 - text_width(value, size, bold) / 2
+        x = x + width / 2 - text_width(val, size, bold) / 2
     elif align == 'right':
-        x = x + width - text_width(value, size, bold)
-    draw.add(String(x, y, value,
+        x = x + width - text_width(val, size, bold)
+    draw.add(String(x, y, val,
                     fontName=FONT_BOLD if bold else FONT_REGULAR,
                     fontSize=size, fillColor=color))
 
@@ -182,18 +322,18 @@ def note(draw: Drawing, x: float, y: float, w: float, msg: str,
 def actor_figure(draw: Drawing, x: float, y: float, label: str, sublabel: str = '') -> None:
     """วาดสัญลักษณ์ Actor ตามมาตรฐาน UML (Stick Figure)"""
     # หัว (วงกลม)
-    draw.add(Circle(x, y + 24, 8, fillColor=PAPER, strokeColor=LINE, strokeWidth=1.2))
+    draw.add(Circle(x, y + 26, 9, fillColor=PAPER, strokeColor=LINE, strokeWidth=1.3))
     # ลำตัว
-    draw.add(Line(x, y + 16, x, y - 6, strokeColor=LINE, strokeWidth=1.2))
+    draw.add(Line(x, y + 17, x, y - 8, strokeColor=LINE, strokeWidth=1.3))
     # แขน
-    draw.add(Line(x - 14, y + 6, x + 14, y + 6, strokeColor=LINE, strokeWidth=1.2))
+    draw.add(Line(x - 16, y + 6, x + 16, y + 6, strokeColor=LINE, strokeWidth=1.3))
     # ขาซ้ายและขาขวา
-    draw.add(Line(x, y - 6, x - 10, y - 22, strokeColor=LINE, strokeWidth=1.2))
-    draw.add(Line(x, y - 6, x + 10, y - 22, strokeColor=LINE, strokeWidth=1.2))
+    draw.add(Line(x, y - 8, x - 11, y - 26, strokeColor=LINE, strokeWidth=1.3))
+    draw.add(Line(x, y - 8, x + 11, y - 26, strokeColor=LINE, strokeWidth=1.3))
     # ป้ายกำกับ
-    text(draw, x, y - 33, label, 8.5, INK, bold=True, align='center')
+    text(draw, x, y - 38, label, 11, INK, bold=True, align='center')
     if sublabel:
-        text(draw, x, y - 43, sublabel, 7.2, INK, align='center')
+        text(draw, x, y - 50, sublabel, 9.5, INK, align='center')
 
 
 def usecase_oval(draw: Drawing, cx: float, cy: float, w: float, h: float,
@@ -202,71 +342,65 @@ def usecase_oval(draw: Drawing, cx: float, cy: float, w: float, h: float,
     draw.add(Rect(cx - w / 2, cy - h / 2, w, h, rx=h / 2, ry=h / 2,
                   fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
     if code:
-        text(draw, cx, cy + 3, code, 6.8, INK, bold=True, align='center')
-        text(draw, cx, cy - 7, label, 7.4, INK, bold=False, align='center')
+        text(draw, cx, cy + 5, code, 9.0, INK, bold=True, align='center')
+        text(draw, cx, cy - 8, label, 9.5, INK, bold=False, align='center')
     else:
-        text(draw, cx, cy - 2.5, label, 7.6, INK, bold=False, align='center')
+        text(draw, cx, cy - 3, label, 9.5, INK, bold=False, align='center')
 
 
 # ---------------------------------------------------------------------------
 # ไดอะแกรม 1: Use Case Diagram (มาตรฐาน UML)
 # ---------------------------------------------------------------------------
-def use_case_diagram(cases: dict[str, list[tuple[str, str]]],
+def use_case_diagram(cases: dict[str, list[tuple[str, str]]] | None = None,
                      title: str = 'Use Case Diagram') -> Drawing:
     """แผนภาพกรณีการใช้งานตามมาตรฐาน UML (Use Case Diagram)"""
-    width = 520
-    height = 360
+    width = 440
+    height = 390
     d = Drawing(width, height)
 
     # 1. ขอบเขตระบบ (System Boundary)
-    sys_x, sys_y, sys_w, sys_h = 105, 20, 310, 315
+    sys_x, sys_y, sys_w, sys_h = 74, 15, 292, 360
     d.add(Rect(sys_x, sys_y, sys_w, sys_h, rx=4, ry=4,
                fillColor=PAPER, strokeColor=LINE, strokeWidth=1.2))
-    text(d, sys_x + 12, sys_y + sys_h - 16,
-         'ระบบร้านค้าออนไลน์ THAMMATHAD SHOP (System Boundary)', 9, INK, bold=True)
+    text(d, sys_x + 12, sys_y + sys_h - 18,
+         'ระบบร้านค้าออนไลน์ THAMMATHAD SHOP (System Boundary)', 10.5, INK, bold=True)
 
     # 2. ผู้กระทำ (Actors)
-    cust_x, cust_y = 52, 185
+    cust_x, cust_y = 36, 195
     actor_figure(d, cust_x, cust_y, 'ลูกค้า', '(Customer)')
 
-    staff_x, staff_y = 468, 185
-    actor_figure(d, staff_x, staff_y, 'เจ้าหน้าที่ / ผู้ดูแล', '(Staff / Admin)')
+    staff_x, staff_y = 404, 195
+    actor_figure(d, staff_x, staff_y, 'เจ้าหน้าที่', '(Staff / Admin)')
 
     # 3. Use Cases
-    # กลุ่มฝั่งลูกค้า (ซ้าย)
     customer_cases = [
-        ('UC-01', 'สืบค้นและดูแคตตาล็อกสินค้า', 265),
-        ('UC-02', 'จัดการตะกร้าและสั่งซื้อสินค้า', 215),
-        ('UC-03', 'ชำระเงินและแจ้งโอน (QR / สลิป)', 165),
-        ('UC-04', 'ติดตามและยืนยันการรับพัสดุ', 115),
-        ('UC-05', 'จัดการข้อมูลส่วนตัวและที่อยู่', 65),
+        ('UC-01', 'สืบค้นแคตตาล็อกสินค้า', 310),
+        ('UC-02', 'จัดการตะกร้าและสั่งซื้อ', 248),
+        ('UC-03', 'ชำระเงินและแจ้งโอน', 186),
+        ('UC-04', 'ติดตามและยืนยันรับของ', 124),
+        ('UC-05', 'จัดการข้อมูลส่วนตัว/ที่อยู่', 62),
     ]
 
-    # กลุ่มฝั่งเจ้าหน้าที่ (ขวา)
     staff_cases = [
-        ('UC-06', 'จัดการข้อมูลสินค้าและสต็อกคงคลัง', 265),
-        ('UC-07', 'ตรวจสอบยอดชำระเงินและบัญชี', 215),
-        ('UC-08', 'ปรับปรุงสถานะจัดส่งพัสดุสินค้า', 165),
-        ('UC-09', 'ตรวจสอบบันทึกการทำงาน (Audit Trail)', 115),
-        ('UC-10', 'จัดการบัญชีพนักงานและสิทธิ์เข้าใช้', 65),
+        ('UC-06', 'จัดการสินค้าและสต็อก', 310),
+        ('UC-07', 'ตรวจสอบยอดชำระเงิน', 248),
+        ('UC-08', 'จัดการสถานะจัดส่งพัสดุ', 186),
+        ('UC-09', 'ตรวจสอบบันทึกการทำงาน', 124),
+        ('UC-10', 'จัดการสิทธิ์พนักงาน', 62),
     ]
 
-    col1_cx = sys_x + 78
-    col2_cx = sys_x + sys_w - 78
-    oval_w, oval_h = 138, 36
+    col1_cx = sys_x + 72
+    col2_cx = sys_x + sys_w - 72
+    ow, oh = 126, 42
 
-    # วาด Use Cases ลูกค้า และเส้นเชื่อมโยง
     for code, label, cy in customer_cases:
-        usecase_oval(d, col1_cx, cy, oval_w, oval_h, label, code)
-        # เส้นความสัมพันธ์ (Association) จาก Customer ไป Use Case
-        d.add(Line(cust_x + 15, cust_y, col1_cx - oval_w / 2, cy,
+        usecase_oval(d, col1_cx, cy, ow, oh, label, code)
+        d.add(Line(cust_x + 18, cust_y, col1_cx - ow / 2, cy,
                    strokeColor=LINE, strokeWidth=0.8))
 
-    # วาด Use Cases เจ้าหน้าที่ และเส้นเชื่อมโยง
     for code, label, cy in staff_cases:
-        usecase_oval(d, col2_cx, cy, oval_w, oval_h, label, code)
-        # เส้นความสัมพันธ์ (Association) จาก Staff ไป Use Case
-        d.add(Line(staff_x - 15, staff_y, col2_cx + oval_w / 2, cy,
+        usecase_oval(d, col2_cx, cy, ow, oh, label, code)
+        d.add(Line(staff_x - 18, staff_y, col2_cx + ow / 2, cy,
                    strokeColor=LINE, strokeWidth=0.8))
 
     return d
@@ -277,60 +411,50 @@ def use_case_diagram(cases: dict[str, list[tuple[str, str]]],
 # ---------------------------------------------------------------------------
 def layered_architecture() -> Drawing:
     """แผนภาพสถาปัตยกรรมระบบแบบ 4 ชั้น (Layered Architecture) เชิงวิชาการ"""
-    w = 520
-    h = 330
+    w, h = 440, 360
     d = Drawing(w, h)
 
     layers = [
         ('1. ชั้นนำเสนอ (Presentation Layer)',
-         'ส่วนต่อประสานเว็บ (HTML5, Liquid Glass CSS, Motion Core JS) · ส่วนบริการ REST API (Django REST Framework)'),
-        ('2. ชั้นควบคุมและตรรกะมุมมอง (View & Logic Layer)',
-         'Django Class-Based Views (CBVs) · การควบคุมสิทธิ์ (StaffRequiredMixin, RBAC) · API ViewSets · Token Throttling'),
+         'เว็บแอปพลิเคชัน: HTML5, Apple Liquid Glass CSS, Motion Core JS\nส่วนบริการ REST API: Django REST Framework (Public & Staff Endpoints)'),
+        ('2. ชั้นควบคุมและตรรกะมุมมอง (View & Controller Layer)',
+         'Django Class-Based Views (CBVs) · สิทธิ์การเข้าถึง (StaffRequiredMixin, RBAC)\nการควบคุมความถี่และจำกัดอัตราเรียกใช้ (Rate Limiting & Token Throttling)'),
         ('3. ชั้นบริการทางธุรกิจ (Business Service Layer)',
-         'PaymentService (จุดรับเงินจุดเดียว) · OrderStatusService (เครื่องจักรสถานะคำสั่งซื้อ) · Audit · RateLimit · SlipOK · PromptPay'),
+         'PaymentService (จุดรับเงินจุดเดียว) · OrderStatusService (เครื่องจักรสถานะ 4 ขั้น)\nAudit Trail Logging · SlipOK OCR Verification · PromptPay QR Generation'),
         ('4. ชั้นการเข้าถึงและจัดเก็บข้อมูล (Data Access & Persistence Layer)',
-         'Django Object-Relational Mapping (ORM) · Custom QuerySets & Managers · ฐานข้อมูลเชิงสัมพันธ์ SQLite'),
+         'Django Object-Relational Mapping (ORM) · Custom QuerySets & Managers\nฐานข้อมูลเชิงสัมพันธ์ SQLite พร้อมระบบสำรองข้อมูล (Automated Backups)'),
     ]
 
-    box_w, box_h = 420, 52
-    box_x = 20
+    box_w, box_h = 420, 60
+    box_x = 10
     gap = 14
-    y = h - 25
+    y = h - 18
 
     for i, (title_text, desc_text) in enumerate(layers):
         cur_y = y - box_h
         # กล่องหลัก
-        d.add(Rect(box_x, cur_y, box_w, box_h, rx=2, ry=2,
+        d.add(Rect(box_x, cur_y, box_w, box_h, rx=3, ry=3,
                    fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
-        # แถบหัวข้อชั้น
-        d.add(Rect(box_x, cur_y + box_h - 18, box_w, 18, rx=2, ry=2,
-                   fillColor=HexColor('#eeeeee'), strokeColor=LINE, strokeWidth=0.8))
-        text(d, box_x + 10, cur_y + box_h - 13, title_text, 8.8, INK, bold=True)
+        # แถบหัวข้อ
+        d.add(Rect(box_x, cur_y + box_h - 22, box_w, 22, rx=3, ry=3,
+                   fillColor=HexColor('#f0f0f0'), strokeColor=LINE, strokeWidth=0.8))
+        text(d, box_x + 10, cur_y + box_h - 15, title_text, 11, INK, bold=True)
 
-        # รายละเอียดภายในชั้น
-        desc_lines = wrap(desc_text, 7.3, box_w - 20)
-        for li, line in enumerate(desc_lines):
-            text(d, box_x + 10, cur_y + box_h - 29 - li * 9.5, line, 7.3, INK)
+        # รายละเอียด 2 บรรทัด
+        lines = desc_text.split('\n')
+        text(d, box_x + 12, cur_y + 24, lines[0], 9.5, INK)
+        text(d, box_x + 12, cur_y + 9, lines[1], 9.5, INK)
 
-        # ลูกศรชี้ลงระหว่างชั้น
         if i < len(layers) - 1:
-            arrow(d, box_x + box_w / 2, cur_y - 1, box_x + box_w / 2, cur_y - gap + 3,
-                  color=INK, width=1.0)
+            arrow(d, box_x + box_w / 2, cur_y, box_x + box_w / 2, cur_y - gap,
+                  color=INK, width=1.2, head=5.5)
 
         y -= box_h + gap
 
-    # เส้นแสดงทิศทางการเรียกและการพึ่งพา (Dependency Flow)
-    flow_x = 465
-    arrow(d, flow_x, h - 35, flow_x, 60, color=INK, width=1.2, head=6.0)
-    text(d, flow_x + 6, h / 2 + 15, 'ทิศทางการเรียกใช้งาน', 7.5, INK, bold=True)
-    text(d, flow_x + 6, h / 2 + 3, '(Top-Down Invocation)', 6.8, INK)
-    text(d, flow_x + 6, h / 2 - 12, 'ห้ามขึ้นต่อกันแบบย้อนกลับ', 6.8, INK)
-
-    # หมายเหตุเชิงวิชาการ
-    note(d, box_x, 8, box_w,
-         'หลักการออกแบบ: รวมศูนย์ตรรกะทางธุรกิจไว้ที่ชั้น Service เท่านั้น (Single Source of Truth) '
-         'โดย View ทำหน้าที่เป็นเพียงตัวรับส่งคำขอและผลลัพธ์',
-         fill=PAPER, stroke=LINE, color=INK, size=7.2)
+    # หมายเหตุ
+    note(d, box_x, 6, box_w,
+         'หลักการออกแบบ: รวมศูนย์ตรรกะทางธุรกิจไว้ที่ชั้น Service (Single Source of Truth) เพื่อความปลอดภัยและความคงสภาพของข้อมูล',
+         fill=PAPER, stroke=LINE, color=INK, size=9.0)
 
     return d
 
@@ -338,79 +462,91 @@ def layered_architecture() -> Drawing:
 # ---------------------------------------------------------------------------
 # ไดอะแกรม 3: แผนภาพการเปลี่ยนสถานะของคำสั่งซื้อ (Order State Machine)
 # ---------------------------------------------------------------------------
-def order_lifecycle_diagram(statuses: list[tuple[str, str]],
-                            actors: list[str]) -> Drawing:
+def order_lifecycle_diagram(statuses: list[tuple[str, str]] | None = None,
+                            actors: list[str] | None = None) -> Drawing:
     """แผนภาพการเปลี่ยนสถานะคำสั่งซื้อตามมาตรฐาน UML State Transition"""
-    width = 520
-    height = 250
-    d = Drawing(width, height)
+    w, h = 440, 275
+    d = Drawing(w, h)
 
-    main_y = 160
-    state_w, state_h = 82, 38
+    main_y = 185
+    sw, sh = 72, 44
+    gap = 36
 
-    # 1. Initial State (วงกลมทึบ)
-    d.add(Circle(30, main_y, 6, fillColor=INK, strokeColor=None))
-    arrow(d, 36, main_y, 65, main_y, color=INK, width=1.0)
-    text(d, 50, main_y + 8, 'สั่งซื้อ', 6.8, INK, bold=True, align='center')
+    # 1. Initial State
+    d.add(Circle(12, main_y, 6, fillColor=INK, strokeColor=None))
+    arrow(d, 18, main_y, 28, main_y, color=INK, width=1.0)
+    text(d, 23, main_y + 10, 'สั่งซื้อ', 8.0, INK, bold=True, align='center')
 
-    # ลำดับสถานะหลักในบันไดทางเดียว
+    sx1 = 28
+    sx2 = sx1 + sw + gap
+    sx3 = sx2 + sw + gap
+    sx4 = sx3 + sw + gap
+
     steps = [
-        ('รอชำระเงิน', '[PENDING]', 65),
-        ('ชำระเงินแล้ว', '[PAID]', 175),
-        ('จัดส่งแล้ว', '[SHIPPED]', 285),
-        ('ถึงมือแล้ว', '[DELIVERED]', 395),
+        ('รอชำระเงิน', '[PENDING]', sx1),
+        ('ชำระเงินแล้ว', '[PAID]', sx2),
+        ('จัดส่งแล้ว', '[SHIPPED]', sx3),
+        ('ถึงมือแล้ว', '[DELIVERED]', sx4),
     ]
 
-    # วาดสถานะหลัก
     for label, code, sx in steps:
-        d.add(Rect(sx, main_y - state_h / 2, state_w, state_h, rx=4, ry=4,
+        d.add(Rect(sx, main_y - sh / 2, sw, sh, rx=3, ry=3,
                    fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
-        text(d, sx + state_w / 2, main_y + 3, label, 7.8, INK, bold=True, align='center')
-        text(d, sx + state_w / 2, main_y - 9, code, 6.8, INK, align='center')
+        text(d, sx + sw / 2, main_y + 4, label, 10, INK, bold=True, align='center')
+        text(d, sx + sw / 2, main_y - 10, code, 8.5, INK, align='center')
 
-    # เส้นเปลี่ยนสถานะระหว่างขั้นตอนหลัก
-    transitions = [
-        (65 + state_w, 175, 'ชำระเงินครบถ้วน (ระบบ)', '(PaymentService)'),
-        (175 + state_w, 285, 'จัดส่งพัสดุ', '(เจ้าหน้าที่บันทึก)'),
-        (285 + state_w, 395, 'ได้รับของเรียบร้อย', '(ลูกค้ายืนยันรับ)'),
-    ]
-    for x1, x2, tlabel, tsub in transitions:
-        arrow(d, x1, main_y, x2, main_y, color=INK, width=1.0)
-        text(d, (x1 + x2) / 2, main_y + 11, tlabel, 6.6, INK, bold=True, align='center')
-        text(d, (x1 + x2) / 2, main_y + 2, tsub, 6.0, INK, align='center')
+    # Transitions
+    def draw_trans(from_x: float, to_x: float, title_text: str, sub_text: str):
+        arrow(d, from_x, main_y, to_x, main_y, color=INK, width=1.0)
+        cx = (from_x + to_x) / 2
+        text(d, cx, main_y + 11, title_text, 8.5, INK, bold=True, align='center')
+        text(d, cx, main_y - 12, sub_text, 8.0, INK, align='center')
 
-    # ชี้ไปยัง Final State สำหรับออเดอร์ที่สำเร็จ
-    fin_x = 495
-    arrow(d, 395 + state_w, main_y, fin_x - 10, main_y, color=INK, width=1.0)
-    # Final State 1 (Bullseye: วงกลมซ้อน)
+    draw_trans(sx1 + sw, sx2, 'ชำระเงินครบ', 'จุดรับเงินเดียว')
+    draw_trans(sx2 + sw, sx3, 'จัดส่งพัสดุ', 'เจ้าหน้าที่คลัง')
+    draw_trans(sx3 + sw, sx4, 'ยืนยันรับของ', 'ลูกค้าเป็นหลัก')
+
+    # Final state
+    fin_x = sx4 + sw + 24
+    arrow(d, sx4 + sw, main_y, fin_x - 8, main_y, color=INK, width=1.0)
     d.add(Circle(fin_x, main_y, 7, fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
     d.add(Circle(fin_x, main_y, 4, fillColor=INK, strokeColor=None))
-    text(d, fin_x, main_y - 18, 'เสร็จสมบูรณ์', 6.5, INK, align='center')
+    text(d, fin_x, main_y - 18, 'เสร็จสมบูรณ์', 8.5, INK, align='center')
 
-    # กิ่งสถานะยกเลิก (Branch: CANCELLED)
-    canc_x, canc_y = 65, 60
-    # ลูกศรชี้ลงจาก รอชำระเงิน มายัง ยกเลิก
-    arrow(d, 65 + state_w / 2, main_y - state_h / 2, 65 + state_w / 2, canc_y + state_h / 2,
+    # Superuser Override
+    arch_y = main_y + 40
+    cx_s1, cx_s2 = sx1 + sw / 2, sx2 + sw / 2
+    l1 = Line(cx_s1, main_y + sh / 2, cx_s1, arch_y, strokeColor=LINE, strokeWidth=0.8)
+    l1.strokeDashArray = [3, 2]
+    d.add(l1)
+    l2 = Line(cx_s1, arch_y, cx_s2, arch_y, strokeColor=LINE, strokeWidth=0.8)
+    l2.strokeDashArray = [3, 2]
+    d.add(l2)
+    arrow(d, cx_s2, arch_y, cx_s2, main_y + sh / 2, color=INK, width=0.8, dashed=True)
+    text(d, (cx_s1 + cx_s2) / 2, arch_y + 4, 'Superuser Override (ระบุเหตุผล/เงินสดหน้าร้าน)', 8.5, INK, bold=True, align='center')
+
+    # Cancelled branch
+    canc_x, canc_y = sx1, 75
+    arrow(d, sx1 + sw / 2, main_y - sh / 2, sx1 + sw / 2, canc_y + sh / 2,
           color=INK, width=1.0)
-    text(d, 65 + state_w / 2 + 4, (main_y + canc_y) / 2 - 2, 'ลูกค้ายกเลิก', 6.5, INK)
+    text(d, sx1 + sw / 2 + 6, (main_y + canc_y) / 2 - 2, 'ลูกค้ายกเลิก', 8.5, INK)
 
-    # กล่องสถานะยกเลิก
-    d.add(Rect(canc_x, canc_y - state_h / 2, state_w, state_h, rx=4, ry=4,
+    d.add(Rect(canc_x, canc_y - sh / 2, sw, sh, rx=3, ry=3,
                fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
-    text(d, canc_x + state_w / 2, canc_y + 3, 'ยกเลิกคำสั่งซื้อ', 7.8, INK, bold=True, align='center')
-    text(d, canc_x + state_w / 2, canc_y - 9, '[CANCELLED]', 6.8, INK, align='center')
+    text(d, canc_x + sw / 2, canc_y + 4, 'ยกเลิกคำสั่งซื้อ', 10, INK, bold=True, align='center')
+    text(d, canc_x + sw / 2, canc_y - 10, '[CANCELLED]', 8.5, INK, align='center')
 
-    # ชี้จากยกเลิกไปยัง Final State 2
-    arrow(d, canc_x + state_w, canc_y, 220, canc_y, color=INK, width=1.0)
-    d.add(Circle(228, canc_y, 7, fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
-    d.add(Circle(228, canc_y, 4, fillColor=INK, strokeColor=None))
-    text(d, 228, canc_y - 17, 'ยุติคำสั่งซื้อ', 6.5, INK, align='center')
+    fin2_x = canc_x + sw + 35
+    arrow(d, canc_x + sw, canc_y, fin2_x - 8, canc_y, color=INK, width=1.0)
+    d.add(Circle(fin2_x, canc_y, 7, fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Circle(fin2_x, canc_y, 4, fillColor=INK, strokeColor=None))
+    text(d, fin2_x, canc_y - 18, 'ยุติคำสั่งซื้อ', 8.5, INK, align='center')
 
-    # หมายเหตุกฎเกณฑ์ทางธุรกิจ
-    note(d, 20, 8, width - 40,
-         'กฎเกณฑ์ความถูกต้อง (Invariants): การเปลี่ยนสถานะเป็นไปตามบันไดทิศทางเดียว (Monotonic Transition) '
-         'ห้ามข้ามขั้นตอนและห้ามย้อนกลับ สถานะ PAID เกิดขึ้นอัตโนมัติเมื่อยอดชำระครบถ้วนผ่าน PaymentService เท่านั้น',
-         fill=PAPER, stroke=LINE, color=INK, size=7.2)
+    # Note
+    note(d, 8, 8, w - 16,
+         'กฎเกณฑ์ความคงสภาพ (Invariants): การเปลี่ยนสถานะเป็นไปตามบันไดทางเดียว ห้ามข้ามขั้นตอนและห้ามย้อนกลับ '
+         'สถานะ PAID เกิดขึ้นอัตโนมัติเมื่อชำระครบถ้วนผ่าน PaymentService เท่านั้น',
+         fill=PAPER, stroke=LINE, color=INK, size=8.8)
 
     return d
 
@@ -418,95 +554,273 @@ def order_lifecycle_diagram(statuses: list[tuple[str, str]],
 # ---------------------------------------------------------------------------
 # ไดอะแกรม 4: แผนภาพแบบจำลองข้อมูลเชิงสัมพันธ์ (Relational Schema / ERD)
 # ---------------------------------------------------------------------------
-def er_diagram(models: Iterable, title: str = 'ER Diagram') -> Drawing:
-    """แผนภาพแบบจำลองข้อมูลเชิงสัมพันธ์ (Relational Schema Diagram / ERD)"""
-    models = list(models)
-    cols = 3
-    gap_x, gap_v = 24, 22
-    box_w = 152
-    rows = (len(models) + cols - 1) // cols
+def er_diagram(models: Iterable | None = None, title: str = 'ER Diagram') -> Drawing:
+    """แผนภาพแบบจำลองข้อมูลเชิงสัมพันธ์ (Relational Schema Diagram / ERD) ตามมาตรฐานวิชาการ
 
-    def _visible(m) -> list:
-        return [f for f in m.fields
-                if f.primary_key or f.is_fk
-                or f.name in ('status', 'total', 'amount', 'kind',
-                              'emp_code', 'name', 'price')][:4]
+    รูปแบบมาตรฐานสากล:
+    - รูปแบบกล่อง: แยกช่อง Primary Key (PK) ด้วยเส้นแบ่งแนวนอนชัดเจนตามมาตรฐาน Crow's Foot / Martin Notation
+    - รูปแบบความสัมพันธ์: ใช้สัญลักษณ์ตีนกา (Crow's Foot: 1, Exactly One = ||, Many = |<) ไม่มีหัวลูกศร
+    - จัดวางแบบ 3 คอลัมน์ เส้นเชื่อมโยงตรงและเป็นระเบียบ ไม่ทับซ้อน
+    """
+    w, h = 440, 590
+    d = Drawing(w, h)
 
-    heights = []
-    for m in models:
-        n = len(_visible(m))
-        heights.append(28 + max(n, 1) * 11 + 6)
+    col_w = 118
+    col1_x = 12
+    col2_x = 161
+    col3_x = 310
 
-    row_h = [max(heights[r * cols:(r + 1) * cols] or [40]) for r in range(rows)]
-    width = cols * box_w + (cols - 1) * gap_x + 36
-    legend_h = 20
-    top_pad = 28
-    height = sum(row_h) + (rows - 1) * gap_v + top_pad + legend_h + 16
+    def draw_erd_entity(x: float, y: float, w_box: float, title_text: str, subtitle: str,
+                        pk_fields: list[tuple[str, str, str, str]],
+                        other_fields: list[tuple[str, str, str, str]]) -> tuple[float, float, float, float]:
+        line_h = 13.0
+        hdr_h = 22
+        pk_h = len(pk_fields) * line_h + 4
+        other_h = len(other_fields) * line_h + 4
+        box_h = hdr_h + pk_h + other_h
 
-    d = Drawing(width, height)
+        # เส้นขอบกล่องแบบมุมฉากมาตรฐานวิศวกรรมฐานข้อมูล
+        d.add(Rect(x, y, w_box, box_h, rx=0, ry=0,
+                   fillColor=PAPER, strokeColor=LINE, strokeWidth=1.1))
 
-    positions: dict[str, tuple[float, float, float]] = {}
-    row_top: list[float] = []
-    cursor = height - top_pad
-    for h_val in row_h:
-        cursor -= h_val
-        row_top.append(cursor)
-        cursor -= gap_v
+        # แถบหัวชื่อเอนทิตี (Entity Header)
+        d.add(Rect(x, y + box_h - hdr_h, w_box, hdr_h, rx=0, ry=0,
+                   fillColor=HexColor('#e8e8e8'), strokeColor=LINE, strokeWidth=0.9))
+        text(d, x + 6, y + box_h - 15, title_text, 9.5, INK, bold=True)
+        if subtitle:
+            text(d, x + w_box - 6, y + box_h - 15, subtitle, 8.5, INK, align='right')
 
-    for i, m in enumerate(models):
-        col, row = i % cols, i // cols
-        x = 18 + col * (box_w + gap_x)
-        y = row_top[row]
-        bh = row_h[row]
-        positions[m.name] = (x, y, bh)
+        # ช่องคีย์หลัก (Primary Key Compartment)
+        cur_y = y + box_h - hdr_h
+        for i, (prefix, name, ftype, note_str) in enumerate(pk_fields):
+            fy = cur_y - 12 - i * line_h
+            text(d, x + 5, fy, prefix, 8.5, INK, bold=True)
+            text(d, x + 24, fy, f'{name} : {ftype}' if ftype else name, 8.5, INK, bold=True)
+            if note_str:
+                text(d, x + w_box - 5, fy, note_str, 7.5, INK, align='right')
 
-        # กรอบตารางหลัก
-        d.add(Rect(x, y, box_w, bh, rx=2, ry=2,
-                   fillColor=PAPER, strokeColor=LINE, strokeWidth=1.0))
-        # ส่วนหัวตาราง (เทาอ่อน)
-        d.add(Rect(x, y + bh - 16, box_w, 16, rx=2, ry=2,
-                   fillColor=HexColor('#eeeeee'), strokeColor=LINE, strokeWidth=0.8))
-        text(d, x + 8, y + bh - 12, m.name, 8.5, INK, bold=True)
+        # เส้นแบ่งระหว่าง Primary Key กับแอตทริบิวต์ทั่วไป (ERD Compartment Divider)
+        sep_y = cur_y - pk_h
+        d.add(Line(x, sep_y, x + w_box, sep_y, strokeColor=LINE, strokeWidth=1.0))
 
-        shown = _visible(m)
-        for j, f in enumerate(shown):
-            ty = y + bh - 28 - j * 11
-            prefix = '[PK] ' if f.primary_key else ('[FK] ' if f.is_fk else '     ')
-            field_str = f'{prefix}{f.name} : {f.short_type}'
-            text(d, x + 6, ty, field_str, 6.6, INK, bold=f.primary_key)
+        # ช่องแอตทริบิวต์ทั่วไปและคีย์นอก (Attributes & Foreign Keys Compartment)
+        for i, (prefix, name, ftype, note_str) in enumerate(other_fields):
+            fy = sep_y - 12 - i * line_h
+            is_fk = prefix == 'FK'
+            text(d, x + 5, fy, prefix, 8.5, INK, bold=is_fk)
+            text(d, x + 24, fy, f'{name} : {ftype}' if ftype else name, 8.5, INK, bold=is_fk)
+            if note_str:
+                text(d, x + w_box - 5, fy, note_str, 7.5, INK, align='right')
 
-    # วาดเส้นเชื่อมโยงความสัมพันธ์ (Foreign Key Lines)
-    drawn: set[tuple[str, str]] = set()
-    for m in models:
-        for f in m.fk_fields:
-            target = next((o for o in models if o.name in (f.fk_target or '')), None)
-            if target is None or (target.name, m.name) in drawn:
-                continue
-            drawn.add((target.name, m.name))
-            ax, ay = _edge_point(positions[target.name], positions[m.name],
-                                 box_w, positions[target.name][2])
-            bx, by = _edge_point(positions[m.name], positions[target.name],
-                                 box_w, positions[m.name][2])
-            arrow(d, ax, ay, bx, by, color=INK, width=0.8, dashed=True)
+        return x, y, w_box, box_h
 
-    # คำอธิบายสัญลักษณ์ทางวิชาการ
-    ly = 10
-    text(d, 20, ly, '[PK] = คีย์หลัก (Primary Key)      [FK] = คีย์นอก (Foreign Key)', 7.0, INK, bold=True)
-    arrow(d, 230, ly + 3, 260, ly + 3, color=INK, width=0.8, dashed=True)
-    text(d, 265, ly, 'เส้นประแสดงความสัมพันธ์การอ้างอิงระหว่างตาราง (FK Dependency: N -> 1)', 7.0, INK)
+    # ฟังก์ชันวาดเส้นความสัมพันธ์สัญลักษณ์ตีนกา (Crow's Foot Notation Connectors)
+    def cf_v(x: float, y1: float, y2: float, one_at_start: bool = True,
+             many_at_end: bool = True, one_at_end: bool = False) -> None:
+        """เส้นเชื่อมแนวตั้งพร้อมสัญลักษณ์ตีนกา"""
+        dy = 1 if y2 >= y1 else -1
+        d.add(Line(x, y1, x, y2, strokeColor=LINE, strokeWidth=1.0))
+
+        # ฝั่งต้นทาง (One = ||)
+        if one_at_start:
+            d.add(Line(x - 5, y1 + dy * 5, x + 5, y1 + dy * 5, strokeColor=LINE, strokeWidth=1.1))
+            d.add(Line(x - 5, y1 + dy * 9, x + 5, y1 + dy * 9, strokeColor=LINE, strokeWidth=1.1))
+
+        # ฝั่งปลายทาง
+        if many_at_end:
+            # ตีนกา 3 แฉกแผ่เข้าหากรอบเอนทิตี
+            base_y = y2 - dy * 9
+            d.add(Line(x, base_y, x - 6, y2, strokeColor=LINE, strokeWidth=1.2))
+            d.add(Line(x, base_y, x + 6, y2, strokeColor=LINE, strokeWidth=1.2))
+            d.add(Line(x - 5, y2 - dy * 12, x + 5, y2 - dy * 12, strokeColor=LINE, strokeWidth=1.1))
+        elif one_at_end:
+            d.add(Line(x - 5, y2 - dy * 5, x + 5, y2 - dy * 5, strokeColor=LINE, strokeWidth=1.1))
+            d.add(Line(x - 5, y2 - dy * 9, x + 5, y2 - dy * 9, strokeColor=LINE, strokeWidth=1.1))
+
+    def cf_h(x1: float, x2: float, y: float, one_at_start: bool = True,
+             many_at_end: bool = True, one_at_end: bool = False) -> None:
+        """เส้นเชื่อมแนวนอนพร้อมสัญลักษณ์ตีนกา"""
+        dx = 1 if x2 >= x1 else -1
+        d.add(Line(x1, y, x2, y, strokeColor=LINE, strokeWidth=1.0))
+
+        # ฝั่งต้นทาง (One = ||)
+        if one_at_start:
+            d.add(Line(x1 + dx * 5, y - 5, x1 + dx * 5, y + 5, strokeColor=LINE, strokeWidth=1.1))
+            d.add(Line(x1 + dx * 9, y - 5, x1 + dx * 9, y + 5, strokeColor=LINE, strokeWidth=1.1))
+
+        # ฝั่งปลายทาง
+        if many_at_end:
+            # ตีนกา 3 แฉกแผ่เข้าหากรอบเอนทิตี
+            base_x = x2 - dx * 9
+            d.add(Line(base_x, y, x2, y + 6, strokeColor=LINE, strokeWidth=1.2))
+            d.add(Line(base_x, y, x2, y - 6, strokeColor=LINE, strokeWidth=1.2))
+            d.add(Line(x2 - dx * 12, y - 5, x2 - dx * 12, y + 5, strokeColor=LINE, strokeWidth=1.1))
+        elif one_at_end:
+            d.add(Line(x2 - dx * 5, y - 5, x2 - dx * 5, y + 5, strokeColor=LINE, strokeWidth=1.1))
+            d.add(Line(x2 - dx * 9, y - 5, x2 - dx * 9, y + 5, strokeColor=LINE, strokeWidth=1.1))
+
+    boxes: dict[str, tuple[float, float, float, float]] = {}
+
+    # แถวที่ 1 (ด้านบน)
+    boxes['CustomerProfile'] = draw_erd_entity(col1_x, 465, col_w, 'CustomerProfile', '(โปรไฟล์)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'user_id', 'integer', '1:1'),
+         ('', 'phone', 'varchar(20)', ''),
+         ('', 'bio', 'text', '')]
+    )
+    boxes['OrderIssue'] = draw_erd_entity(col2_x, 452, col_w, 'OrderIssue', '(แจ้งปัญหา)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'order_id', 'bigint', 'N:1'),
+         ('FK', 'user_id', 'integer', 'N:1'),
+         ('', 'category', 'varchar(20)', ''),
+         ('', 'status', 'varchar(20)', '')]
+    )
+    boxes['Product'] = draw_erd_entity(col3_x, 438, col_w, 'Product', '(สินค้า/สต็อก)',
+        [('PK', 'id', 'integer', '')],
+        [('', 'sku', 'varchar(32)', 'UQ'),
+         ('', 'name', 'varchar(200)', ''),
+         ('', 'category', 'varchar(50)', ''),
+         ('', 'price', 'decimal(10,2)', ''),
+         ('', 'stock', 'integer', '')]
+    )
+
+    # แถวที่ 2 (แถวกลาง: แกนหลักของระบบ)
+    boxes['User'] = draw_erd_entity(col1_x, 275, col_w, 'User (auth_user)', '(ผู้ใช้หลัก)',
+        [('PK', 'id', 'integer', '')],
+        [('', 'username', 'varchar', 'UQ'),
+         ('', 'email', 'varchar(254)', ''),
+         ('', 'is_staff', 'boolean', ''),
+         ('', 'is_active', 'boolean', '')]
+    )
+    boxes['Order'] = draw_erd_entity(col2_x, 245, col_w, 'Order', '(คำสั่งซื้อ)',
+        [('PK', 'id', 'integer', '')],
+        [('', 'order_number', 'varchar', 'UQ'),
+         ('FK', 'user_id', 'integer', 'N:1'),
+         ('', 'total', 'decimal(10,2)', ''),
+         ('', 'status', 'varchar(20)', ''),
+         ('', 'payment_method', 'str', ''),
+         ('', 'created_at', 'datetime', '')]
+    )
+    boxes['OrderItem'] = draw_erd_entity(col3_x, 260, col_w, 'OrderItem', '(รายการสั่ง)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'order_id', 'bigint', 'N:1'),
+         ('FK', 'product_id', 'bigint', 'N:1'),
+         ('', 'price', 'decimal(10,2)', ''),
+         ('', 'quantity', 'integer', ''),
+         ('', 'line_total', 'decimal', '')]
+    )
+
+    # แถวที่ 3 (ด้านล่าง)
+    boxes['CustomerAddress'] = draw_erd_entity(col1_x, 115, col_w, 'CustomerAddress', '(ที่อยู่)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'user_id', 'integer', 'N:1'),
+         ('', 'recipient_name', 'varchar', ''),
+         ('', 'phone', 'varchar(20)', ''),
+         ('', 'province', 'varchar(50)', ''),
+         ('', 'is_default', 'boolean', '')]
+    )
+    boxes['Payment'] = draw_erd_entity(col2_x, 115, col_w, 'Payment', '(การชำระเงิน)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'order_id', 'bigint', 'N:1'),
+         ('', 'amount', 'decimal(10,2)', ''),
+         ('', 'channel', 'varchar(20)', ''),
+         ('', 'is_approved', 'boolean', ''),
+         ('', 'paid_at', 'datetime', '')]
+    )
+    boxes['Employee'] = draw_erd_entity(col3_x, 115, col_w, 'Employee', '(พนักงาน)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'user_id', 'integer', '1:1'),
+         ('', 'emp_code', 'varchar(20)', 'UQ'),
+         ('', 'name', 'varchar(100)', ''),
+         ('', 'department', 'varchar', ''),
+         ('', 'salary', 'decimal(10,2)', ''),
+         ('', 'status', 'varchar(20)', '')]
+    )
+
+    # แถวที่ 4 (แถวล่างสุด: ActivityLog)
+    boxes['ActivityLog'] = draw_erd_entity(50, 18, 340, 'ActivityLog (Audit Trail)', '(ประวัติกิจกรรม - Append Only)',
+        [('PK', 'id', 'integer', '')],
+        [('FK', 'actor_id', 'integer', 'N:1 User (SET_NULL)'),
+         ('', 'action : varchar(20)         target_model : varchar(50)         created_at : datetime', '', '')]
+    )
+
+    # ความสัมพันธ์แบบ Crow's Foot:
+    # 1. User (1) -> CustomerProfile (1): Vertical 1:1
+    cf_v(col1_x + 59, 275 + boxes['User'][3], 465, one_at_start=True, many_at_end=False, one_at_end=True)
+    text(d, col1_x + 65, (275 + boxes['User'][3] + 465) / 2 - 3, '1:1', 8.5, INK, bold=True)
+
+    # 2. User (1) -> CustomerAddress (N): Vertical 1:N
+    cf_v(col1_x + 59, 275, 115 + boxes['CustomerAddress'][3], one_at_start=True, many_at_end=True)
+    text(d, col1_x + 65, (275 + 115 + boxes['CustomerAddress'][3]) / 2 - 3, '1:N', 8.5, INK, bold=True)
+
+    # 3. User (1) -> Order (N): Horizontal 1:N
+    cf_h(col1_x + col_w, col2_x, 300, one_at_start=True, many_at_end=True)
+    text(d, (col1_x + col_w + col2_x) / 2, 306, '1:N', 8.5, INK, bold=True, align='center')
+
+    # 4. Order (1) -> OrderIssue (N): Vertical 1:N
+    cf_v(col2_x + 59, 245 + boxes['Order'][3], 452, one_at_start=True, many_at_end=True)
+    text(d, col2_x + 65, (245 + boxes['Order'][3] + 452) / 2 - 3, '1:N', 8.5, INK, bold=True)
+
+    # 5. Order (1) -> Payment (N): Vertical 1:N
+    cf_v(col2_x + 59, 245, 115 + boxes['Payment'][3], one_at_start=True, many_at_end=True)
+    text(d, col2_x + 65, (245 + 115 + boxes['Payment'][3]) / 2 - 3, '1:N', 8.5, INK, bold=True)
+
+    # 6. Order (1) -> OrderItem (N): Horizontal 1:N
+    cf_h(col2_x + col_w, col3_x, 290, one_at_start=True, many_at_end=True)
+    text(d, (col2_x + col_w + col3_x) / 2, 296, '1:N', 8.5, INK, bold=True, align='center')
+
+    # 7. Product (1) -> OrderItem (N): Vertical 1:N
+    cf_v(col3_x + 59, 438, 260 + boxes['OrderItem'][3], one_at_start=True, many_at_end=True)
+    text(d, col3_x + 65, (438 + 260 + boxes['OrderItem'][3]) / 2 - 3, '1:N', 8.5, INK, bold=True)
+
+    # 8. User (1) -> ActivityLog (N): Orthogonal stepped
+    d.add(Line(col1_x, 290, 4, 290, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(col1_x - 5, 290 - 5, col1_x - 5, 290 + 5, strokeColor=LINE, strokeWidth=1.1))
+    d.add(Line(col1_x - 9, 290 - 5, col1_x - 9, 290 + 5, strokeColor=LINE, strokeWidth=1.1))
+
+    d.add(Line(4, 290, 4, 36, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(4, 36, 50, 36, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(41, 36, 50, 36 + 6, strokeColor=LINE, strokeWidth=1.2))
+    d.add(Line(41, 36, 50, 36 - 6, strokeColor=LINE, strokeWidth=1.2))
+    d.add(Line(38, 36 - 5, 38, 36 + 5, strokeColor=LINE, strokeWidth=1.1))
+    text(d, 26, 41, '1:N', 8.0, INK, bold=True, align='center')
+
+    # 9. User (1) -> Employee (1): Stepped 1:1 via alley and lower channel
+    # ฝั่งต้นทาง User (Exactly One = ||)
+    d.add(Line(col1_x + col_w, 282, 145, 282, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(col1_x + col_w + 5, 282 - 5, col1_x + col_w + 5, 282 + 5, strokeColor=LINE, strokeWidth=1.1))
+    d.add(Line(col1_x + col_w + 9, 282 - 5, col1_x + col_w + 9, 282 + 5, strokeColor=LINE, strokeWidth=1.1))
+
+    # ลากลงผ่านช่องว่างระหว่าง Col 1 กับ Col 2 (x=145 ว่างสมบูรณ์)
+    d.add(Line(145, 282, 145, 98, strokeColor=LINE, strokeWidth=1.0))
+
+    # ลากแนวนอนใต้แถวที่ 3 (y=98 อยู่เหนือ ActivityLog และใต้ Employee)
+    d.add(Line(145, 98, col3_x + 59, 98, strokeColor=LINE, strokeWidth=1.0))
+    text(d, 245, 102, '1:1 (user_id)', 8.5, INK, bold=True, align='center')
+
+    # ลากขึ้นเข้าสู่ฐานล่างของ Employee (Exactly One = ||)
+    d.add(Line(col3_x + 59, 98, col3_x + 59, 115, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(col3_x + 59 - 5, 115 - 5, col3_x + 59 + 5, 115 - 5, strokeColor=LINE, strokeWidth=1.1))
+    d.add(Line(col3_x + 59 - 5, 115 - 9, col3_x + 59 + 5, 115 - 9, strokeColor=LINE, strokeWidth=1.1))
+
+    # คำอธิบายสัญลักษณ์ตามมาตรฐานวิชาการ (Standard ERD Crow's Foot Legend)
+    ly = 4
+    text(d, 10, ly, 'สัญลักษณ์ ERD:', 8.5, INK, bold=True)
+
+    # ตัวอย่างเส้น 1 (Exactly One)
+    d.add(Line(78, ly + 3, 108, ly + 3, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(93, ly - 2, 93, ly + 8, strokeColor=LINE, strokeWidth=1.1))
+    d.add(Line(98, ly - 2, 98, ly + 8, strokeColor=LINE, strokeWidth=1.1))
+    text(d, 113, ly, '= หนึ่ง (1)', 8.5, INK)
+
+    # ตัวอย่างเส้น N (Many)
+    d.add(Line(175, ly + 3, 205, ly + 3, strokeColor=LINE, strokeWidth=1.0))
+    d.add(Line(193, ly - 2, 193, ly + 8, strokeColor=LINE, strokeWidth=1.1))
+    d.add(Line(196, ly + 3, 205, ly + 9, strokeColor=LINE, strokeWidth=1.2))
+    d.add(Line(196, ly + 3, 205, ly - 3, strokeColor=LINE, strokeWidth=1.2))
+    text(d, 210, ly, '= หลายรายการ (N / Many)', 8.5, INK)
+
+    # ป้ายกำกับคีย์
+    text(d, 335, ly, '[PK] = คีย์หลัก     [FK] = คีย์นอก', 8.5, INK, bold=True)
 
     return d
-
-
-def _edge_point(frm: tuple[float, float], to: tuple[float, float],
-                box_w: float, box_h: float) -> tuple[float, float]:
-    """คำนวณจุดตัดบนขอบกล่องระหว่าง 2 จุด"""
-    x0, y0 = frm[0] + box_w / 2, frm[1] + box_h / 2
-    x1, y1 = to[0] + box_w / 2, to[1] + box_h / 2
-    dx, dy = x1 - x0, y1 - y0
-    if dx == 0 and dy == 0:
-        return x0, y0
-    tx = (box_w / 2) / abs(dx) if dx else float('inf')
-    ty = (box_h / 2) / abs(dy) if dy else float('inf')
-    t = min(tx, ty)
-    return x0 + dx * t, y0 + dy * t

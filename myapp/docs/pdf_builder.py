@@ -20,8 +20,10 @@ from __future__ import annotations
 import io
 import os
 import re
+from pathlib import Path
 from typing import Any
 
+from PIL import Image as PILImage
 from reportlab.lib import colors
 from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
@@ -33,7 +35,8 @@ from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, Image,
                                 TableStyle)
 
 from . import diagrams
-from .diagrams import FONT_BOLD, FONT_REGULAR
+from .content import TOTAL_TESTS
+from .diagrams import FONT_BOLD, FONT_REGULAR, adjust_thai, unshape_thai
 
 
 PAGE_W, PAGE_H = A4
@@ -51,82 +54,214 @@ THAI_NUMERALS = [
     'ย', 'ร', 'ล', 'ว', 'ศ', 'ษ', 'ส', 'ห', 'ฬ', 'อ', 'ฮ'
 ]
 
+_wrapped_patched = False
+
+
+def _install_thai_word_wrap() -> None:
+    """ติดตั้งระบบตัดคำภาษาไทยให้กับ reportlab Paragraph
+    
+    แก้ปัญหา 'คำขาดกัน' และ 'ตัวสระซ้อนกัน':
+    - แปลงโทเค็นคำด้วย pythainlp เพื่อไม่ให้ตัดกลางคำภาษาไทย
+    - ปรับตำแหน่งสระและวรรณยุกต์ (PUA) อัตโนมัติในแต่ละบรรทัด
+    """
+    global _wrapped_patched
+    if _wrapped_patched:
+        return
+
+    import pythainlp
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+    import reportlab.platypus.paragraph as rlp
+
+    def thai_word_split(word, maxWidths, fontName, fontSize, encoding='utf8'):
+        if not isinstance(maxWidths, (list, tuple)):
+            maxWidths = [maxWidths]
+        unshaped = unshape_thai(word)
+        try:
+            tokens_unshaped = pythainlp.word_tokenize(unshaped, engine='newmm', keep_whitespace=True)
+        except Exception:
+            tokens_unshaped = list(unshaped)
+
+        tokens = [adjust_thai(t) for t in tokens_unshaped]
+
+        lines = []
+        line_tokens = []
+        current_w = 0.0
+        line_idx = 0
+        max_w = maxWidths[0]
+
+        for t in tokens:
+            tw = stringWidth(t, fontName, fontSize)
+            if current_w + tw <= max_w or not line_tokens:
+                line_tokens.append(t)
+                current_w += tw
+            else:
+                line_str = ''.join(line_tokens).strip()
+                extra = max_w - current_w
+                lines.append([extra, line_str])
+                line_idx += 1
+                max_w = maxWidths[line_idx] if line_idx < len(maxWidths) else maxWidths[-1]
+                line_tokens = [t]
+                current_w = tw
+
+        if line_tokens:
+            line_str = ''.join(line_tokens).strip()
+            extra = max_w - current_w
+            lines.append([extra, line_str])
+        return lines
+
+    def thai_cjkFragSplit(frags, maxWidths, calcBounds, encoding='utf8'):
+        all_text = ''
+        for frag in frags:
+            t = frag.text
+            if rlp.isBytes(t):
+                t = t.decode(encoding)
+            all_text += t
+
+        unshaped = unshape_thai(all_text)
+        try:
+            tokens = pythainlp.word_tokenize(unshaped, engine='newmm', keep_whitespace=True)
+        except Exception:
+            tokens = list(unshaped)
+
+        boundaries = set()
+        pos = 0
+        for tok in tokens:
+            pos += len(tok)
+            boundaries.add(pos)
+
+        U = []
+        for frag in frags:
+            text = frag.text
+            if rlp.isBytes(text):
+                text = text.decode(encoding)
+            shaped_text = adjust_thai(text)
+            if shaped_text:
+                U.extend([rlp.cjkU(t, frag, encoding) for t in shaped_text])
+            else:
+                U.append(rlp.cjkU(shaped_text, frag, encoding))
+
+        lines = []
+        i = widthUsed = lineStartPos = 0
+        maxWidth = maxWidths[0]
+        nU = len(U)
+        while i < nU:
+            u = U[i]
+            i += 1
+            w = u.width
+            if hasattr(w, 'normalizedValue'):
+                w._normalizer = maxWidth
+                w = w.normalizedValue(maxWidth)
+            widthUsed += w
+            lineBreak = hasattr(u.frag, 'lineBreak')
+            endLine = (widthUsed > maxWidth + rlp._FUZZ and widthUsed > 0) or lineBreak
+            if endLine:
+                extraSpace = maxWidth - widthUsed
+                if not lineBreak:
+                    best_split = None
+                    for j in range(i - 1, lineStartPos, -1):
+                        if j in boundaries or (j < len(U) and U[j] and rlp.category(U[j]) == 'Zs'):
+                            best_split = j
+                            break
+                    if best_split is not None and best_split > lineStartPos:
+                        excess_w = sum(U[k].width for k in range(best_split, i))
+                        extraSpace += excess_w
+                        i = best_split
+                    elif u not in rlp.ALL_CANNOT_START and i > lineStartPos + 1:
+                        i -= 1
+                        extraSpace += w
+                lines.append(rlp.makeCJKParaLine(U[lineStartPos:i], maxWidth, widthUsed, extraSpace, lineBreak, calcBounds))
+                try:
+                    maxWidth = maxWidths[len(lines)]
+                except IndexError:
+                    maxWidth = maxWidths[-1]
+                lineStartPos = i
+                widthUsed = 0
+
+        if widthUsed > 0:
+            lines.append(rlp.makeCJKParaLine(U[lineStartPos:], maxWidth, widthUsed, maxWidth - widthUsed, False, calcBounds))
+        return rlp.ParaLines(kind=1, lines=lines)
+
+    rlp.wordSplit = thai_word_split
+    rlp.cjkFragSplit = thai_cjkFragSplit
+    _wrapped_patched = True
+
+
 
 def _styles() -> dict[str, ParagraphStyle]:
-    """นิยามรูปแบบข้อความทั้งหมดของเอกสารตามหลักวิชาการ (ใช้สีดำล้วนตามข้อกำหนด)"""
+    """นิยามรูปแบบข้อความทั้งหมดของเอกสารตามหลักวิชาการ (ขนาดมาตรฐาน TH Sarabun New 16pt / สีดำล้วน)"""
     base = getSampleStyleSheet()['Normal']
     s: dict[str, ParagraphStyle] = {}
 
     s['body'] = ParagraphStyle(
-        'body', parent=base, fontName=FONT_REGULAR, fontSize=10,
-        leading=16.5, alignment=TA_LEFT, spaceAfter=6,
+        'body', parent=base, fontName=FONT_REGULAR, fontSize=16,
+        leading=23, alignment=TA_LEFT, spaceAfter=8,
         wordWrap='CJK', textColor=diagrams.INK)
     s['body_indent'] = ParagraphStyle(
-        'body_indent', parent=s['body'], firstLineIndent=22, spaceAfter=6)
+        'body_indent', parent=s['body'], firstLineIndent=36, spaceAfter=8)
     s['h1'] = ParagraphStyle(
-        'h1', parent=base, fontName=FONT_BOLD, fontSize=16, leading=23,
-        spaceBefore=14, spaceAfter=12, alignment=TA_CENTER, textColor=diagrams.INK,
+        'h1', parent=base, fontName=FONT_BOLD, fontSize=18, leading=26,
+        spaceBefore=16, spaceAfter=14, alignment=TA_CENTER, textColor=diagrams.INK,
         keepWithNext=True)
     s['h2'] = ParagraphStyle(
-        'h2', parent=base, fontName=FONT_BOLD, fontSize=12.5, leading=18,
-        spaceBefore=12, spaceAfter=6, textColor=diagrams.INK,
+        'h2', parent=base, fontName=FONT_BOLD, fontSize=16, leading=23,
+        spaceBefore=14, spaceAfter=8, textColor=diagrams.INK,
         keepWithNext=True)
     s['h3'] = ParagraphStyle(
-        'h3', parent=base, fontName=FONT_BOLD, fontSize=10.5, leading=15,
-        spaceBefore=8, spaceAfter=4, textColor=diagrams.INK,
+        'h3', parent=base, fontName=FONT_BOLD, fontSize=16, leading=23,
+        spaceBefore=10, spaceAfter=6, textColor=diagrams.INK,
         keepWithNext=True)
     s['bullet'] = ParagraphStyle(
-        'bullet', parent=s['body'], leftIndent=18, bulletIndent=6,
-        spaceAfter=3, alignment=TA_LEFT, wordWrap='CJK')
+        'bullet', parent=s['body'], leftIndent=24, bulletIndent=10,
+        spaceAfter=4, alignment=TA_LEFT, wordWrap='CJK')
     s['td'] = ParagraphStyle(
-        'td', parent=base, fontName=FONT_REGULAR, fontSize=8.5, leading=12.5,
+        'td', parent=base, fontName=FONT_REGULAR, fontSize=13, leading=17.5,
         wordWrap='CJK', textColor=diagrams.INK)
     s['th'] = ParagraphStyle(
-        'th', parent=base, fontName=FONT_BOLD, fontSize=8.5, leading=12.5,
+        'th', parent=base, fontName=FONT_BOLD, fontSize=13.5, leading=18,
         wordWrap='CJK', textColor=diagrams.INK)
     s['caption'] = ParagraphStyle(
-        'caption', parent=base, fontName=FONT_BOLD, fontSize=8.5,
-        leading=12.5, alignment=TA_CENTER, textColor=diagrams.INK,
-        spaceBefore=4, spaceAfter=12)
+        'caption', parent=base, fontName=FONT_BOLD, fontSize=14,
+        leading=20, alignment=TA_CENTER, textColor=diagrams.INK,
+        spaceBefore=6, spaceAfter=14)
     s['table_caption'] = ParagraphStyle(
-        'table_caption', parent=base, fontName=FONT_BOLD, fontSize=9,
-        leading=13, alignment=TA_LEFT, textColor=diagrams.INK,
-        spaceBefore=8, spaceAfter=4, keepWithNext=True)
+        'table_caption', parent=base, fontName=FONT_BOLD, fontSize=15,
+        leading=21, alignment=TA_LEFT, textColor=diagrams.INK,
+        spaceBefore=10, spaceAfter=5, keepWithNext=True)
     s['ref_item'] = ParagraphStyle(
-        'ref_item', parent=base, fontName=FONT_REGULAR, fontSize=8.8,
-        leading=13.5, leftIndent=22, firstLineIndent=-22,
-        spaceAfter=5, wordWrap='CJK', textColor=diagrams.INK)
+        'ref_item', parent=base, fontName=FONT_REGULAR, fontSize=15,
+        leading=22, leftIndent=28, firstLineIndent=-28,
+        spaceAfter=6, wordWrap='CJK', textColor=diagrams.INK)
     s['td_mono'] = ParagraphStyle(
-        'td_mono', parent=s['td'], fontSize=8.0)
+        'td_mono', parent=s['td'], fontSize=12, leading=16)
     s['note'] = ParagraphStyle(
-        'note', parent=base, fontName=FONT_REGULAR, fontSize=8.8,
-        leading=13.5, textColor=diagrams.INK)
+        'note', parent=base, fontName=FONT_REGULAR, fontSize=14,
+        leading=20, textColor=diagrams.INK)
 
     # สไตล์สำหรับหน้าปกและหน้าอนุมัติ (สีดำล้วน)
     s['cover_institution'] = ParagraphStyle(
-        'cover_institution', parent=base, fontName=FONT_BOLD, fontSize=12,
-        leading=18, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_institution', parent=base, fontName=FONT_BOLD, fontSize=16,
+        leading=23, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_report_type'] = ParagraphStyle(
-        'cover_report_type', parent=base, fontName=FONT_BOLD, fontSize=13,
-        leading=19, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_report_type', parent=base, fontName=FONT_BOLD, fontSize=16,
+        leading=23, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_title'] = ParagraphStyle(
-        'cover_title', parent=base, fontName=FONT_BOLD, fontSize=21,
-        leading=29, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_title', parent=base, fontName=FONT_BOLD, fontSize=20,
+        leading=28, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_title_en'] = ParagraphStyle(
-        'cover_title_en', parent=base, fontName=FONT_BOLD, fontSize=12,
-        leading=17, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_title_en', parent=base, fontName=FONT_BOLD, fontSize=15,
+        leading=21, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_project'] = ParagraphStyle(
-        'cover_project', parent=base, fontName=FONT_BOLD, fontSize=14,
-        leading=20, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_project', parent=base, fontName=FONT_BOLD, fontSize=17,
+        leading=24, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_sub'] = ParagraphStyle(
-        'cover_sub', parent=base, fontName=FONT_REGULAR, fontSize=12,
-        leading=18, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_sub', parent=base, fontName=FONT_REGULAR, fontSize=15,
+        leading=21, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_meta'] = ParagraphStyle(
-        'cover_meta', parent=base, fontName=FONT_REGULAR, fontSize=10.5,
-        leading=18, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_meta', parent=base, fontName=FONT_REGULAR, fontSize=15,
+        leading=22, alignment=TA_CENTER, textColor=diagrams.INK)
     s['cover_meta_bold'] = ParagraphStyle(
-        'cover_meta_bold', parent=base, fontName=FONT_BOLD, fontSize=10.5,
-        leading=18, alignment=TA_CENTER, textColor=diagrams.INK)
+        'cover_meta_bold', parent=base, fontName=FONT_BOLD, fontSize=15,
+        leading=22, alignment=TA_CENTER, textColor=diagrams.INK)
 
     return s
 
@@ -399,22 +534,57 @@ def _lof(figure_entries: list[tuple[str, str, str | int]]) -> list:
     return [Paragraph('สารบัญภาพ', s['h1']), Spacer(1, 4 * mm), table]
 
 
-def _figure(drawing, caption: str, styles: dict, anchor: Flowable | None = None) -> list:
-    """ฝังไดอะแกรมเวกเตอร์ + คำบรรยายใต้ภาพ (ผูกติดกันด้วย KeepTogether เพื่อไม่ให้แยกหน้า)"""
+def _figure(drawing_or_img, caption: str, styles: dict, anchor: Flowable | None = None) -> list:
+    """ฝังไดอะแกรมเวกเตอร์ หรือ ภาพหน้าจอระบบ + คำบรรยายใต้ภาพ (ผูกติดกันด้วย KeepTogether เพื่อไม่ให้แยกหน้า)"""
     s = styles
-    scale = min(1.0, CONTENT_W / drawing.width)
-    img = Image(drawing, width=drawing.width * scale,
-                height=drawing.height * scale)
     elements = []
     if anchor:
         elements.append(anchor)
-    elements.extend([
-        Spacer(1, 4),
-        img,
-        Spacer(1, 3),
-        Paragraph(esc(caption), s['caption']),
-        Spacer(1, 6),
-    ])
+
+    if isinstance(drawing_or_img, (str, Path)):
+        img_path = str(drawing_or_img)
+        if not os.path.exists(img_path):
+            return elements
+
+        with PILImage.open(img_path) as pil_im:
+            w_px, h_px = pil_im.size
+        aspect = h_px / w_px
+        target_w = min(CONTENT_W, 145 * mm)
+        target_h = target_w * aspect
+        # จำกัดความสูงไม่ให้เกิน 88 มม. เพื่อให้จัดวางร่วมกับข้อความในหน้าได้อย่างลงตัว
+        if target_h > 88 * mm:
+            target_h = 88 * mm
+            target_w = target_h / aspect
+
+        img = Image(img_path, width=target_w, height=target_h)
+        img_table = Table([[img]], colWidths=[target_w])
+        img_table.setStyle(TableStyle([
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#bbbbbb')),
+            ('LEFTPADDING', (0, 0), (-1, -1), 0),
+            ('RIGHTPADDING', (0, 0), (-1, -1), 0),
+            ('TOPPADDING', (0, 0), (-1, -1), 0),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+        ]))
+        elements.extend([
+            Spacer(1, 4),
+            img_table,
+            Spacer(1, 3),
+            Paragraph(esc(caption), s['caption']),
+            Spacer(1, 6),
+        ])
+    else:
+        scale = min(1.0, CONTENT_W / drawing_or_img.width)
+        img = Image(drawing_or_img, width=drawing_or_img.width * scale,
+                    height=drawing_or_img.height * scale)
+        elements.extend([
+            Spacer(1, 4),
+            img,
+            Spacer(1, 3),
+            Paragraph(esc(caption), s['caption']),
+            Spacer(1, 6),
+        ])
     return [KeepTogether(elements)]
 
 
@@ -426,6 +596,23 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
         flowables.append(anchor)
     if 'title' in spec and spec['title']:
         flowables.append(Paragraph(esc(spec['title']), s['table_caption']))
+
+    head_cols = len(spec['head'])
+    if widths is None:
+        if head_cols == 2:
+            widths = [CONTENT_W * 0.35, CONTENT_W * 0.65]
+        elif head_cols == 3:
+            h0 = str(spec['head'][0])
+            if 'บทบาท' in h0:
+                widths = [CONTENT_W * 0.25, CONTENT_W * 0.38, CONTENT_W * 0.37]
+            elif 'ด้าน' in h0:
+                widths = [CONTENT_W * 0.24, CONTENT_W * 0.40, CONTENT_W * 0.36]
+            else:
+                widths = [CONTENT_W * 0.25, CONTENT_W * 0.40, CONTENT_W * 0.35]
+        elif head_cols == 4:
+            widths = [CONTENT_W * 0.16, CONTENT_W * 0.26, CONTENT_W * 0.28, CONTENT_W * 0.30]
+        elif head_cols == 6:
+            widths = [22 * mm, 32 * mm, 24 * mm, 24 * mm, 26 * mm, CONTENT_W - 128 * mm]
 
     head = [Paragraph(esc(h), s['th']) for h in spec['head']]
     body = [[Paragraph(esc(c), s['td']) for c in row] for row in spec['rows']]
@@ -445,12 +632,12 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
         ('RIGHTPADDING', (0, 0), (-1, -1), 5.5),
     ]))
     flowables.append(table)
-    if 'title' in spec and spec['title']:
+    if 'title' in spec and spec['title'] and len(spec['rows']) <= 3:
         return [KeepTogether(flowables)]
     return flowables
 
 
-def _block_renderer(blocks, styles: dict) -> list:
+def _block_renderer(blocks, styles: dict, page_registry: dict | None = None) -> list:
     """แปลงบล็อกเนื้อหาเป็น flowable ของ platypus"""
     s = styles
     out: list = []
@@ -482,7 +669,7 @@ def _block_renderer(blocks, styles: dict) -> list:
             out.extend(_data_table(block[1], s))
             out.append(Spacer(1, 10))
         elif kind == 'focus':
-            out.append(Paragraph('ตารางที่ 4.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', s['table_caption']))
+            out.append(Paragraph('ตารางที่ 5.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', s['table_caption']))
             rows = [[Paragraph(esc(a), s['td']), Paragraph(esc(b), s['td'])]
                     for a, b in block[1]]
             table = Table(rows, colWidths=[CONTENT_W * 0.35, CONTENT_W * 0.65])
@@ -500,6 +687,12 @@ def _block_renderer(blocks, styles: dict) -> list:
             out.append(Spacer(1, 10))
         elif kind == 'ref_item':
             out.append(Paragraph(esc(block[1]), s['ref_item']))
+        elif kind == 'image':
+            img_path = block[1]
+            caption = block[2] if len(block) > 2 else ''
+            anchor_obj = PageAnchor('fig_app_1', page_registry) if (page_registry and 'ก.1' in caption) else None
+            if os.path.exists(img_path):
+                out.extend(_figure(img_path, caption, s, anchor=anchor_obj))
     return out
 
 
@@ -524,9 +717,9 @@ def _create_doc_templates(target: str, meta: dict, current_chapter: list[str],
     def on_prelim(canvas, _doc):
         # ส่วนนำ (บทคัดย่อ, กิตติกรรมประกาศ, สารบัญ): เลขหน้าตัวอักษรไทย ก, ข, ค... มุมบนขวา
         canvas.saveState()
-        canvas.setFont(FONT_REGULAR, 9)
+        canvas.setFont(FONT_REGULAR, 14)
         canvas.setFillColor(diagrams.INK)
-        p = canvas.getPageNumber() - 4  # หัก 3 หน้าแรกออก (ปกนอก ปกใน ใบรับรอง) -> หน้าที่ 4 คือ ก
+        p = canvas.getPageNumber() - 2  # หักหน้าปก 1 หน้าออก -> หน้าที่ 2 คือ ก
         label = THAI_NUMERALS[p] if 0 <= p < len(THAI_NUMERALS) else str(p + 1)
         canvas.drawRightString(PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 12, label)
         canvas.restoreState()
@@ -538,19 +731,19 @@ def _create_doc_templates(target: str, meta: dict, current_chapter: list[str],
     def on_chapter_body(canvas, _doc):
         # หน้าเนื้อหาทั่วไป: มีเส้นหัวกระดาษสีดำบาง และเลขหน้าอารบิกมุมบนขวา
         canvas.saveState()
-        canvas.setFont(FONT_REGULAR, 8.5)
+        canvas.setFont(FONT_REGULAR, 14)
         canvas.setFillColor(diagrams.INK)
         header_text = 'รายงานโครงงาน: THAMMATHAD SHOP'
         if current_chapter and current_chapter[0]:
             header_text += f'  |  {current_chapter[0][:55]}'
-        canvas.drawString(MARGIN_L, PAGE_H - MARGIN_T + 10, header_text)
+        canvas.drawString(MARGIN_L, PAGE_H - MARGIN_T + 12, adjust_thai(header_text))
 
         arabic_page = canvas.getPageNumber() - main_start_box[0] + 1
-        canvas.drawRightString(PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 10, str(arabic_page))
+        canvas.drawRightString(PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 12, str(arabic_page))
 
         canvas.setStrokeColor(diagrams.LINE)
         canvas.setLineWidth(0.5)
-        canvas.line(MARGIN_L, PAGE_H - MARGIN_T + 5, PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 5)
+        canvas.line(MARGIN_L, PAGE_H - MARGIN_T + 6, PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 6)
         canvas.restoreState()
 
     doc.addPageTemplates([
@@ -562,53 +755,47 @@ def _create_doc_templates(target: str, meta: dict, current_chapter: list[str],
     return doc
 
 
+def _default_screenshots_pack() -> dict[str, tuple[str, str]]:
+    from django.conf import settings
+    sc_dir = Path(settings.BASE_DIR) / 'docs' / 'screenshots'
+    return {
+        'fig_4_1': (str(sc_dir / '01_home_catalog.png'),
+                    'ภาพที่ 4.1 หน้าแรกและแคตตาล็อกสินค้าพร้อมการค้นหาสด (Home & Product Catalog)'),
+        'fig_4_2': (str(sc_dir / '02_product_detail.png'),
+                    'ภาพที่ 4.2 หน้ารายละเอียดสินค้า ข้อมูลทางเทคนิค และสต็อกคงเหลือ (Product Detail & Specifications)'),
+        'fig_4_3': (str(sc_dir / '03_cart_checkout.png'),
+                    'ภาพที่ 4.3 ตะกร้าสินค้าและการสรุปรายการก่อนสั่งซื้อ (Cart & Checkout Review)'),
+        'fig_4_4': (str(sc_dir / '04_order_tracking.png'),
+                    'ภาพที่ 4.4 หน้าติดตามคำสั่งซื้อ บันไดสถานะ 4 ขั้น และประวัติการแจ้งปัญหา (Order Tracking & Issue History)'),
+        'fig_4_5': (str(sc_dir / '05_customer_account.png'),
+                    'ภาพที่ 4.5 หน้าบัญชีลูกค้า ประวัติการสั่งซื้อ และสมุดที่อยู่จัดส่ง (Customer Account & Orders)'),
+        'fig_4_6': (str(sc_dir / '06_staff_orders.png'),
+                    'ภาพที่ 4.6 ตารางจัดการคำสั่งซื้อพร้อมระบบแจ้งเตือนปัญหา (Staff Orders Management)'),
+        'fig_4_7': (str(sc_dir / '07_staff_order_detail.png'),
+                    'ภาพที่ 4.7 หน้ารายละเอียดคำสั่งซื้อ ข้อมูลการชำระเงิน และการจัดการสถานะ (Staff Order Detail & Actions)'),
+        'fig_4_8': (str(sc_dir / '08_staff_issues.png'),
+                    'ภาพที่ 4.8 ศูนย์จัดการปัญหาคำสั่งซื้อและข้อร้องเรียนของลูกค้า (Staff Order Issues Center)'),
+        'fig_4_9': (str(sc_dir / '09_staff_dashboard.png'),
+                    'ภาพที่ 4.9 แดชบอร์ดสรุปยอดขาย การวิเคราะห์ และตัวชี้วัดประสิทธิภาพ (Sales Analytics Dashboard)'),
+        'fig_4_10': (str(sc_dir / '10_staff_employees.png'),
+                     'ภาพที่ 4.10 หน้าจัดการข้อมูลพนักงานและการสืบค้นสด (Staff Directory & Live Search)'),
+    }
+
+
 def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                  appendix_blocks: list[dict], current_chapter: list[str],
                  page_registry: dict[str, int], main_start_box: list[int],
+                 screenshots_pack: dict | None = None,
                  is_pass2: bool = False) -> list:
     """สร้าง Story ทั้งเล่มรายงาน พร้อมจัดลำดับ Template สอดคล้องตามหลักวิชาการ"""
     styles = _styles()
     story: list = []
+    if screenshots_pack is None:
+        screenshots_pack = _default_screenshots_pack()
 
-    # 1. หน้าปกนอก (Outer Cover) -> Template: cover
-    story += _cover(meta, is_inner=False)
-    story.append(NextPageTemplate('cover'))
-    story.append(PageBreak())
-
-    # 2. หน้าปกใน (Inner Cover) -> Template: cover
-    story += _cover(meta, is_inner=True)
-    story.append(NextPageTemplate('cover'))
-    story.append(PageBreak())
-
-    # 3. ใบรับรองรายงานโครงงาน (Approval Page) -> Template: cover
-    story += _approval(meta)
+    # 1. หน้าปกรายงาน (Report Cover) -> Template: cover
+    story += _cover(meta)
     story.append(NextPageTemplate('prelim'))
-    story.append(PageBreak())
-
-    # 4. ส่วนนำ -> Template: prelim (เลขหน้าภาษาไทย ก, ข, ค...)
-    from .content import ABSTRACT_THAI, ABSTRACT_EN, KEYWORDS_TH, KEYWORDS_EN, ACKNOWLEDGEMENTS
-
-    # 4.1 บทคัดย่อภาษาไทย
-    story.append(PageAnchor('abstract_th', page_registry))
-    story.append(Paragraph('บทคัดย่อภาษาไทย', styles['h1']))
-    story.append(Spacer(1, 4 * mm))
-    story.append(Paragraph(esc(ABSTRACT_THAI), styles['body_indent']))
-    story.append(Spacer(1, 4 * mm))
-    story.append(Paragraph(f'<b>คำสำคัญ:</b> {esc(KEYWORDS_TH)}', styles['body']))
-    story.append(PageBreak())
-
-    # 4.2 บทคัดย่อภาษาอังกฤษ (Abstract)
-    story.append(PageAnchor('abstract_en', page_registry))
-    story.append(Paragraph('Abstract', styles['h1']))
-    story.append(Spacer(1, 4 * mm))
-    story.append(Paragraph(esc(ABSTRACT_EN), styles['body_indent']))
-    story.append(Spacer(1, 4 * mm))
-    story.append(Paragraph(f'<b>Keywords:</b> {esc(KEYWORDS_EN)}', styles['body']))
-    story.append(PageBreak())
-
-    # 4.3 กิตติกรรมประกาศ
-    story.append(PageAnchor('acknowledgements', page_registry))
-    story += _acknowledgements(meta, ACKNOWLEDGEMENTS)
     story.append(PageBreak())
 
     # ฟังก์ชันแปลงเลขหน้าตามจริง
@@ -624,85 +811,96 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         if not is_pass2 or key not in page_registry:
             return default
         raw_p = page_registry[key]
-        idx = raw_p - 4
+        idx = raw_p - 2  # ปก = หน้า 1 -> หน้า 2 คือ ก
         return THAI_NUMERALS[idx] if 0 <= idx < len(THAI_NUMERALS) else str(idx + 1)
 
-    # 4.4 สารบัญเนื้อหา (Table of Contents)
+    # 2. ส่วนนำ -> Template: prelim (สารบัญเนื้อหา สารบัญตาราง สารบัญภาพ)
+    # 2.1 สารบัญเนื้อหา (Table of Contents)
     story.append(PageAnchor('toc', page_registry))
     toc_entries = [
-        ('บทคัดย่อ', 'บทคัดย่อภาษาไทย', p_prelim('abstract_th', 'ก')),
-        ('Abstract', 'Abstract (บทคัดย่อภาษาอังกฤษ)', p_prelim('abstract_en', 'ข')),
-        ('กิตติกรรม', 'กิตติกรรมประกาศ', p_prelim('acknowledgements', 'ค')),
-        ('สารบัญ', 'สารบัญเนื้อหา', p_prelim('toc', 'ง')),
-        ('สารบัญตาราง', 'สารบัญตาราง', p_prelim('lot', 'ฉ')),
-        ('สารบัญภาพ', 'สารบัญภาพ', p_prelim('lof', 'ช')),
+        ('สารบัญ', 'สารบัญเนื้อหา', p_prelim('toc', 'ก')),
+        ('สารบัญตาราง', 'สารบัญตาราง', p_prelim('lot', 'ข')),
+        ('สารบัญภาพ', 'สารบัญภาพ', p_prelim('lof', 'ค')),
         ('บทที่ 1', 'บทนำ', p_num('ch_intro', 1)),
-        ('1.1', 'ความเป็นมาและความสำคัญของปัญหา', p_num('sec_1_1', 1)),
-        ('1.2', 'วัตถุประสงค์ของโครงการ', p_num('sec_1_2', 1)),
-        ('1.3', 'ขอบเขตของโครงการ', p_num('sec_1_3', 2)),
-        ('1.4', 'ประเภทผู้ใช้งานและระดับสิทธิ์ในระบบ', p_num('sec_1_4', 3)),
-        ('1.5', 'แผนการดำเนินงานและระเบียบวิธีพัฒนา', p_num('sec_1_5', 4)),
-        ('1.6', 'นิยามศัพท์เฉพาะ', p_num('sec_1_6', 4)),
-        ('บทที่ 2', 'ทฤษฎีและเทคโนโลยีที่เกี่ยวข้อง', p_num('ch_tools', 5)),
-        ('2.1', 'สถาปัตยกรรมซอฟต์แวร์และการออกแบบเชิงระบบ', p_num('sec_2_1', 5)),
-        ('2.2', 'การเขียนโปรแกรมเชิงวัตถุและแบบแผนการออกแบบ', p_num('sec_2_2', 5)),
-        ('2.3', 'เทคโนโลยีและเฟรมเวิร์กที่ใช้ในการพัฒนา', p_num('sec_2_3', 6)),
-        ('2.4', 'ทฤษฎีความปลอดภัยสำหรับเว็บแอปพลิเคชัน', p_num('sec_2_4', 7)),
-        ('2.5', 'เทคโนโลยีการชำระเงินดิจิทัลและมาตรฐาน QR Code', p_num('sec_2_5', 8)),
-        ('2.6', 'การวิเคราะห์เปรียบเทียบกับระบบที่เกี่ยวข้อง', p_num('sec_2_6', 8)),
-        ('บทที่ 3', 'การวิเคราะห์และการออกแบบระบบ', p_num('ch_analysis', 9)),
-        ('3.1', 'การวิเคราะห์ความต้องการของระบบ', p_num('sec_3_1', 9)),
-        ('3.2', 'การวิเคราะห์กรณีการใช้งาน (Use Case Analysis)', p_num('sec_3_2', 9)),
-        ('3.3', 'การออกแบบสถาปัตยกรรมระบบ (System Architecture)', p_num('sec_3_3', 10)),
-        ('3.4', 'การออกแบบแบบจำลองข้อมูล (Data Modeling & ERD)', p_num('sec_3_4', 11)),
-        ('3.5', 'การออกแบบเครื่องจักรสถานะคำสั่งซื้อ (Order State Machine)', p_num('sec_3_5', 12)),
-        ('3.6', 'การออกแบบส่วนต่อประสานผู้ใช้ (User Interface Design)', p_num('sec_3_6', 13)),
-        ('บทที่ 4', 'การพัฒนาและผลการทดสอบระบบ', p_num('ch_testing', 14)),
-        ('4.1', 'ระเบียบวิธีและกลยุทธ์การทดสอบ', p_num('sec_4_1', 14)),
-        ('4.2', 'สาระสำคัญของการทดสอบระบบ', p_num('sec_4_2', 14)),
-        ('4.3', 'สรุปผลการรันชุดทดสอบอัตโนมัติ (383 Test Cases)', p_num('sec_4_3', 15)),
-        ('บทที่ 5', 'บทสรุป อภิปรายผล และข้อเสนอแนะ', p_num('ch_conclusion', 16)),
-        ('5.1', 'สรุปผลการดำเนินงาน', p_num('sec_5_1', 16)),
-        ('5.2', 'อภิปรายผลการพัฒนาระบบ', p_num('sec_5_2', 16)),
-        ('5.3', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('sec_5_3', 17)),
-        ('5.4', 'ข้อจำกัดของระบบ', p_num('sec_5_4', 17)),
-        ('5.5', 'ข้อเสนอแนะและทิศทางการพัฒนาต่อยอด', p_num('sec_5_5', 18)),
-        ('เอกสารอ้างอิง', 'รายการเอกสารอ้างอิงและบรรณานุกรม', p_num('ch_references', 19)),
-        ('ภาคผนวก ก', 'พจนานุกรมข้อมูลและโครงสร้างระบบ', p_num('ch_appendix', 20)),
-        ('ภาคผนวก ข', 'ประวัติผู้จัดทำโครงงาน', p_num('ch_bio', 24)),
+        ('1.1', 'ความเป็นมาและความสำคัญของโครงงาน', p_num('sec_1_1', 1)),
+        ('1.2', 'วัตถุประสงค์ของโครงงาน', p_num('sec_1_2', 1)),
+        ('1.3', 'ขอบเขตของระบบงาน', p_num('sec_1_3', 2)),
+        ('1.4', 'ประโยชน์ที่คาดว่าจะได้รับ', p_num('sec_1_4', 3)),
+        ('บทที่ 2', 'การวิเคราะห์และออกแบบระบบ', p_num('ch_analysis', 4)),
+        ('2.1', 'การวิเคราะห์ความต้องการของระบบ (Requirements Analysis)', p_num('sec_2_1', 4)),
+        ('2.2', 'การออกแบบกรณีการใช้งานและกลุ่มผู้ใช้ (Use Case & Actor Analysis)', p_num('sec_2_2', 5)),
+        ('2.3', 'การออกแบบสถาปัตยกรรมระบบ 4 ชั้น (4-Layer Clean Architecture)', p_num('sec_2_3', 6)),
+        ('2.4', 'การออกแบบแบบจำลองข้อมูลและความสัมพันธ์ (Data Modeling & ERD)', p_num('sec_2_4', 7)),
+        ('2.5', 'เมทริกซ์ความสัมพันธ์และกฎเกณฑ์ความคงสภาพ (Relationship Matrix)', p_num('sec_2_5', 8)),
+        ('2.6', 'การออกแบบเครื่องจักรสถานะคำสั่งซื้อ (Order Lifecycle State Machine)', p_num('sec_2_6', 9)),
+        ('บทที่ 3', 'การพัฒนาระบบ', p_num('ch_development', 10)),
+        ('3.1', 'สภาพแวดล้อมและเทคโนโลยีที่ใช้ในการพัฒนาระบบ (Technology Stack & Tools)', p_num('sec_3_1', 10)),
+        ('3.2', 'โครงสร้างโปรเจกต์และโมดูลระบบ (Project Directory Structure)', p_num('sec_3_2', 11)),
+        ('3.3', 'สถาปัตยกรรมส่วนต่อประสาน 2 โซน (Dual-Zone Architecture)', p_num('sec_3_3', 12)),
+        ('3.4', 'การพัฒนาระบบการเงินและจุดรับเงินจุดเดียว (Single Point of Payment Entry)', p_num('sec_3_4', 13)),
+        ('3.5', 'การพัฒนาระบบการแจ้งปัญหาและข้อร้องเรียนของลูกค้า (Order Issue Resolution)', p_num('sec_3_5', 14)),
+        ('3.6', 'ระบบบันทึกประวัติการทำงานแบบเพิ่มต่อท้าย (Append-Only Audit Trail)', p_num('sec_3_6', 15)),
+        ('3.7', 'การรักษาความมั่นคงปลอดภัยของระบบ (System Security & RBAC)', p_num('sec_3_7', 16)),
+        ('บทที่ 4', 'ผลการพัฒนาและภาพหน้าจอระบบ', p_num('ch_results', 17)),
+        ('4.1', 'ผลการพัฒนาส่วนต่อประสานสำหรับลูกค้า (Customer Storefront Zone)', p_num('sec_4_1', 17)),
+        ('4.2', 'ผลการพัฒนาส่วนต่อประสานสำหรับเจ้าหน้าที่ (Staff Management Zone)', p_num('sec_4_2', 20)),
+        ('บทที่ 5', 'การทดสอบและสรุปผล', p_num('ch_conclusion', 23)),
+        ('5.1', 'ระเบียบวิธีและกลยุทธ์การทดสอบอัตโนมัติ', p_num('sec_5_1', 23)),
+        ('5.2', 'สาระสำคัญของการทดสอบระบบ', p_num('sec_5_2', 24)),
+        ('5.3', f'สรุปผลการรันชุดทดสอบอัตโนมัติ ({TOTAL_TESTS} Test Cases)', p_num('sec_5_3', 25)),
+        ('5.4', 'สรุปผลการดำเนินงานโครงงาน', p_num('sec_5_4', 25)),
+        ('5.5', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('sec_5_5', 26)),
+        ('5.6', 'ข้อจำกัดและข้อเสนอแนะในการพัฒนาต่อยอด', p_num('sec_5_6', 27)),
+        ('เอกสารอ้างอิง', 'เอกสารอ้างอิงและบรรณานุกรม', p_num('ch_references', 28)),
+        ('ภาคผนวก ก', 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ', p_num('ch_app_a', 29)),
+        ('ภาคผนวก ข', 'คู่มือการใช้งานระบบโดยย่อ', p_num('ch_app_b', 31)),
+        ('ภาคผนวก ค', 'พจนานุกรมข้อมูลและโครงสร้างระบบ', p_num('ch_app_c', 33)),
+        ('ภาคผนวก ง', 'ประวัติผู้จัดทำโครงงาน', p_num('ch_app_d', 42)),
     ]
     story += _toc(toc_entries)
     story.append(PageBreak())
 
-    # 4.4 สารบัญตาราง (List of Tables)
+    # 2.2 สารบัญตาราง (List of Tables)
     story.append(PageAnchor('lot', page_registry))
     lot_entries = [
         ('ตารางที่ 1.1', 'ขอบเขตของโครงการ', p_num('tab_1_1', 2)),
-        ('ตารางที่ 1.2', 'ประเภทผู้ใช้งานและระดับสิทธิ์ในระบบ', p_num('tab_1_2', 3)),
-        ('ตารางที่ 2.1', 'เทคโนโลยีและเครื่องมือที่ใช้ในการพัฒนา', p_num('tab_2_1', 6)),
-        ('ตารางที่ 2.2', 'การวิเคราะห์เปรียบเทียบกับระบบที่เกี่ยวข้อง', p_num('tab_2_2', 8)),
-        ('ตารางที่ 4.1', 'สาระสำคัญของการทดสอบระบบ (Test Focus)', p_num('tab_4_1', 14)),
-        ('ตารางที่ 4.2', 'สรุปผลการประเมินชุดการทดสอบอัตโนมัติ', p_num('tab_4_2', 15)),
-        ('ตารางที่ 5.1', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('tab_5_1', 17)),
-        ('ตารางที่ 5.2', 'ข้อจำกัดของระบบในปัจจุบัน', p_num('tab_5_2', 17)),
+        ('ตารางที่ 2.1', 'ประเภทผู้ใช้งานและระดับสิทธิ์ในระบบ (User Roles & Access Levels)', p_num('tab_2_1', 5)),
+        ('ตารางที่ 2.2', 'เมทริกซ์ความสัมพันธ์ของเอนทิตีและกฎเกณฑ์ความคงสภาพ', p_num('tab_2_2', 8)),
+        ('ตารางที่ 5.1', 'สาระสำคัญของการทดสอบระบบ (Test Focus)', p_num('tab_5_1', 24)),
+        ('ตารางที่ 5.2', 'สรุปผลการประเมินชุดการทดสอบอัตโนมัติ', p_num('tab_5_2', 25)),
+        ('ตารางที่ 5.3', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('tab_5_3', 26)),
+        ('ตารางที่ 5.4', 'ข้อจำกัดของระบบในปัจจุบัน', p_num('tab_5_4', 27)),
+        ('ตารางที่ ก.1', 'ข้อมูลแหล่งเข้าถึงระบบและรหัสต้นฉบับ', p_num('tab_app_1', 29)),
+        ('ตารางที่ ก.2', 'บัญชีผู้ใช้สำหรับการทดสอบระบบ (Test Accounts)', p_num('tab_app_2', 30)),
     ]
     story += _lot(lot_entries)
     story.append(PageBreak())
 
-    # 4.5 สารบัญภาพ (List of Figures)
+    # 2.3 สารบัญภาพ (List of Figures)
     story.append(PageAnchor('lof', page_registry))
     lof_entries = [
-        ('ภาพที่ 3.1', 'แผนภาพกรณีการใช้งานของระบบ (Use Case Diagram)', p_num('fig_3_1', 10)),
-        ('ภาพที่ 3.2', 'แผนภาพสถาปัตยกรรมระบบแบบ 4 ชั้น (4-Layer System Architecture)', p_num('fig_3_2', 11)),
-        ('ภาพที่ 3.3', 'แผนภาพความสัมพันธ์ข้อมูล (Entity-Relationship Diagram - ERD)', p_num('fig_3_3', 12)),
-        ('ภาพที่ 3.4', 'แผนผังวงจรชีวิตสถานะคำสั่งซื้อ (Order Lifecycle State Transition)', p_num('fig_3_4', 13)),
+        ('ภาพที่ 2.1', 'แผนภาพกรณีการใช้งานของระบบ (Use Case Diagram)', p_num('fig_2_1', 6)),
+        ('ภาพที่ 2.2', 'แผนภาพสถาปัตยกรรมระบบแบบ 4 ชั้น (4-Layer System Architecture)', p_num('fig_2_2', 7)),
+        ('ภาพที่ 2.3', 'แผนภาพความสัมพันธ์ข้อมูล (Entity-Relationship Diagram - ERD)', p_num('fig_2_3', 8)),
+        ('ภาพที่ 2.4', 'แผนผังวงจรชีวิตสถานะคำสั่งซื้อ (Order Lifecycle State Transition)', p_num('fig_2_4', 10)),
+        ('ภาพที่ 4.1', 'หน้าแรกและแคตตาล็อกสินค้าพร้อมการค้นหาสด (Home & Product Catalog)', p_num('fig_4_1', 17)),
+        ('ภาพที่ 4.2', 'หน้ารายละเอียดสินค้า ข้อมูลทางเทคนิค และสต็อกคงเหลือ (Product Detail & Specs)', p_num('fig_4_2', 17)),
+        ('ภาพที่ 4.3', 'ตะกร้าสินค้าและการสรุปรายการก่อนสั่งซื้อ (Cart & Checkout Review)', p_num('fig_4_3', 18)),
+        ('ภาพที่ 4.4', 'หน้าติดตามคำสั่งซื้อและประวัติการแจ้งปัญหา (Order Tracking & Issue History)', p_num('fig_4_4', 18)),
+        ('ภาพที่ 4.5', 'หน้าบัญชีลูกค้าและประวัติการสั่งซื้อ (Customer Account & Orders)', p_num('fig_4_5', 19)),
+        ('ภาพที่ 4.6', 'ตารางจัดการคำสั่งซื้อพร้อมระบบแจ้งเตือนปัญหา (Staff Orders Management)', p_num('fig_4_6', 20)),
+        ('ภาพที่ 4.7', 'หน้ารายละเอียดคำสั่งซื้อ ข้อมูลการชำระเงิน และการจัดการสถานะ (Staff Order Detail)', p_num('fig_4_7', 20)),
+        ('ภาพที่ 4.8', 'ศูนย์จัดการปัญหาคำสั่งซื้อและข้อร้องเรียนของลูกค้า (Staff Order Issues Center)', p_num('fig_4_8', 21)),
+        ('ภาพที่ 4.9', 'แดชบอร์ดสรุปยอดขาย การวิเคราะห์ และตัวชี้วัดประสิทธิภาพ (Sales Analytics Dashboard)', p_num('fig_4_9', 21)),
+        ('ภาพที่ 4.10', 'หน้าจัดการข้อมูลพนักงานและการสืบค้นสด (Staff Directory & Live Search)', p_num('fig_4_10', 22)),
+        ('ภาพผนวกที่ ก.1', 'QR Code สำหรับเข้าสู่ระบบ THAMMATHAD SHOP', p_num('fig_app_1', 29)),
     ]
     story += _lof(lof_entries)
     # เตรียมเปลี่ยนเป็น 'chapter_first' สำหรับหน้าแรกของบทที่ 1
     story.append(NextPageTemplate('chapter_first'))
     story.append(PageBreak())
 
-    # 5. ส่วนเนื้อหาหลัก 5 บท + เอกสารอ้างอิง: เริ่มนับหน้า 1
+    # 3. ส่วนเนื้อหาหลัก 5 บท + เอกสารอ้างอิง: เริ่มนับหน้า 1
     body_chapters = [c for c in chapters if c['id'] not in ('abstract',)]
     for idx, chapter in enumerate(body_chapters):
         ch_id = chapter['id']
@@ -723,8 +921,6 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                 elif '1.2' in title_text: story.append(PageAnchor('sec_1_2', page_registry))
                 elif '1.3' in title_text: story.append(PageAnchor('sec_1_3', page_registry))
                 elif '1.4' in title_text: story.append(PageAnchor('sec_1_4', page_registry))
-                elif '1.5' in title_text: story.append(PageAnchor('sec_1_5', page_registry))
-                elif '1.6' in title_text: story.append(PageAnchor('sec_1_6', page_registry))
                 elif '2.1' in title_text: story.append(PageAnchor('sec_2_1', page_registry))
                 elif '2.2' in title_text: story.append(PageAnchor('sec_2_2', page_registry))
                 elif '2.3' in title_text: story.append(PageAnchor('sec_2_3', page_registry))
@@ -737,14 +933,15 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                 elif '3.4' in title_text: story.append(PageAnchor('sec_3_4', page_registry))
                 elif '3.5' in title_text: story.append(PageAnchor('sec_3_5', page_registry))
                 elif '3.6' in title_text: story.append(PageAnchor('sec_3_6', page_registry))
+                elif '3.7' in title_text: story.append(PageAnchor('sec_3_7', page_registry))
                 elif '4.1' in title_text: story.append(PageAnchor('sec_4_1', page_registry))
                 elif '4.2' in title_text: story.append(PageAnchor('sec_4_2', page_registry))
-                elif '4.3' in title_text: story.append(PageAnchor('sec_4_3', page_registry))
                 elif '5.1' in title_text: story.append(PageAnchor('sec_5_1', page_registry))
                 elif '5.2' in title_text: story.append(PageAnchor('sec_5_2', page_registry))
                 elif '5.3' in title_text: story.append(PageAnchor('sec_5_3', page_registry))
                 elif '5.4' in title_text: story.append(PageAnchor('sec_5_4', page_registry))
                 elif '5.5' in title_text: story.append(PageAnchor('sec_5_5', page_registry))
+                elif '5.6' in title_text: story.append(PageAnchor('sec_5_6', page_registry))
 
             if kind == 'table':
                 t_title = block[1].get('title', '')
@@ -752,18 +949,16 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                 anchor_key = None
                 if '1.1' in t_title or 'ด้านขอบเขต' in t_str:
                     anchor_key = 'tab_1_1'
-                elif '1.2' in t_title or 'บทบาทผู้ใช้งาน' in t_str:
-                    anchor_key = 'tab_1_2'
-                elif '2.1' in t_title or ('Django' in t_str and len(block[1].get('rows', [])) == 8):
+                elif '2.1' in t_title or 'ประเภทผู้ใช้งาน' in t_str or 'บทบาทผู้ใช้งาน' in t_str:
                     anchor_key = 'tab_2_1'
-                elif '2.2' in t_title or 'จุดรับชำระเงิน' in t_str:
+                elif '2.2' in t_title or 'เมทริกซ์' in t_str:
                     anchor_key = 'tab_2_2'
-                elif '4.2' in t_title or '383' in t_str:
-                    anchor_key = 'tab_4_2'
-                elif '5.1' in t_title or 'Django Form' in t_str:
-                    anchor_key = 'tab_5_1'
-                elif '5.2' in t_title or 'Core Banking' in t_str:
+                elif '5.2' in t_title or 'สรุปผลการประเมิน' in t_str:
                     anchor_key = 'tab_5_2'
+                elif '5.3' in t_title or 'ปัญหา / อุปสรรค' in t_str or 'ปัญหา อุปสรรค' in t_str:
+                    anchor_key = 'tab_5_3'
+                elif '5.4' in t_title or 'ข้อจำกัด' in t_str:
+                    anchor_key = 'tab_5_4'
 
                 anchor_obj = PageAnchor(anchor_key, page_registry) if anchor_key else None
                 story += _data_table(block[1], styles, anchor=anchor_obj)
@@ -771,10 +966,10 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                 continue
 
             if kind == 'focus':
-                anchor_obj = PageAnchor('tab_4_1', page_registry)
+                anchor_obj = PageAnchor('tab_5_1', page_registry)
                 focus_flowables = [
                     anchor_obj,
-                    Paragraph('ตารางที่ 4.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', styles['table_caption'])
+                    Paragraph('ตารางที่ 5.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', styles['table_caption'])
                 ]
                 rows = [[Paragraph(esc(a), styles['td']), Paragraph(esc(b), styles['td'])]
                         for a, b in block[1]]
@@ -794,58 +989,110 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                 story.append(Spacer(1, 10))
                 continue
 
-            story += _block_renderer([block], styles)
+            story += _block_renderer([block], styles, page_registry)
 
-            # ฝังไดอะแกรมเวกเตอร์ในบทที่ 3 ให้สอดคล้องกับเนื้อหา
+            # ฝังไดอะแกรมเวกเตอร์ในบทที่ 2 ให้สอดคล้องกับเนื้อหา
             if ch_id == 'analysis' and kind == 'h2':
-                if '3.2' in block[1] and 'usecase' in diagrams_pack:
+                if '2.2' in block[1] and 'usecase' in diagrams_pack:
                     d, cap = diagrams_pack['usecase']
-                    anchor_obj = PageAnchor('fig_3_1', page_registry)
+                    anchor_obj = PageAnchor('fig_2_1', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
-                elif '3.3' in block[1] and 'layered' in diagrams_pack:
+                elif '2.3' in block[1] and 'layered' in diagrams_pack:
                     d, cap = diagrams_pack['layered']
-                    anchor_obj = PageAnchor('fig_3_2', page_registry)
+                    anchor_obj = PageAnchor('fig_2_2', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
-                elif '3.4' in block[1] and 'er' in diagrams_pack:
+                elif '2.4' in block[1] and 'er' in diagrams_pack:
                     d, cap = diagrams_pack['er']
-                    anchor_obj = PageAnchor('fig_3_3', page_registry)
+                    anchor_obj = PageAnchor('fig_2_3', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
-                elif '3.5' in block[1] and 'lifecycle' in diagrams_pack:
+                elif '2.6' in block[1] and 'lifecycle' in diagrams_pack:
                     d, cap = diagrams_pack['lifecycle']
-                    anchor_obj = PageAnchor('fig_3_4', page_registry)
+                    anchor_obj = PageAnchor('fig_2_4', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
+
+            # ฝังภาพหน้าจอระบบในบทที่ 4 ตามหัวข้อย่อย
+            if ch_id == 'results' and kind == 'p':
+                if '1. หน้าแรกและแคตตาล็อกสินค้า' in block[1]:
+                    for fig_k in ('fig_4_1', 'fig_4_2', 'fig_4_3', 'fig_4_4', 'fig_4_5'):
+                        if fig_k in screenshots_pack:
+                            img_f, cap = screenshots_pack[fig_k]
+                            anchor_obj = PageAnchor(fig_k, page_registry)
+                            story += _figure(img_f, cap, styles, anchor=anchor_obj)
+                elif '1. ตารางจัดการคำสั่งซื้อ' in block[1]:
+                    for fig_k in ('fig_4_6', 'fig_4_7', 'fig_4_8', 'fig_4_9', 'fig_4_10'):
+                        if fig_k in screenshots_pack:
+                            img_f, cap = screenshots_pack[fig_k]
+                            anchor_obj = PageAnchor(fig_k, page_registry)
+                            story += _figure(img_f, cap, styles, anchor=anchor_obj)
 
         # ก่อนจบบท เตรียมเปลี่ยนหน้าใหม่เป็น 'chapter_first'
         story.append(NextPageTemplate('chapter_first'))
         story.append(PageBreak())
 
-    # 6. ภาคผนวก
-    if appendix_blocks:
-        story.append(PageAnchor('ch_appendix', page_registry))
-        story.append(_ChapterMarker('ภาคผนวก ก ฐานข้อมูลและไดอะแกรม', current_chapter))
-        story.append(Paragraph('ภาคผนวก ก — พจนานุกรมข้อมูลและโครงสร้างระบบ', styles['h1']))
+    # 4. เอกสารอ้างอิงและบรรณานุกรม
+    from .content import REFERENCES
+    if REFERENCES:
+        story.append(PageAnchor('ch_references', page_registry))
+        story.append(_ChapterMarker('เอกสารอ้างอิงและบรรณานุกรม', current_chapter))
+        story.append(Paragraph('เอกสารอ้างอิงและบรรณานุกรม', styles['h1']))
         story.append(Spacer(1, 4 * mm))
         story.append(NextPageTemplate('chapter_body'))
+        story += _block_renderer(REFERENCES, styles, page_registry)
+        story.append(NextPageTemplate('chapter_first'))
+        story.append(PageBreak())
+
+    # 5. ภาคผนวก 4 ชุด
+    if appendix_blocks:
+        first_app = True
         for block in appendix_blocks:
             kind = block[0]
-            if kind == 'h2' and 'ภาคผนวก ข' in block[1]:
+            if kind == 'h2' and 'ภาคผนวก' in block[1]:
+                app_title = block[1]
+                app_key = 'ch_app_a'
+                if 'ภาคผนวก ข' in app_title:
+                    app_key = 'ch_app_b'
+                elif 'ภาคผนวก ค' in app_title:
+                    app_key = 'ch_app_c'
+                elif 'ภาคผนวก ง' in app_title:
+                    app_key = 'ch_app_d'
+
                 story.append(NextPageTemplate('chapter_first'))
-                story.append(PageBreak())
-                story.append(PageAnchor('ch_bio', page_registry))
-                story.append(_ChapterMarker('ภาคผนวก ข ประวัติผู้จัดทำ', current_chapter))
-                story.append(Paragraph(esc(block[1]), styles['h1']))
+                if not first_app:
+                    story.append(PageBreak())
+                first_app = False
+                story.append(PageAnchor(app_key, page_registry))
+                story.append(_ChapterMarker(app_title, current_chapter))
+                story.append(Paragraph(esc(app_title), styles['h1']))
                 story.append(Spacer(1, 4 * mm))
                 story.append(NextPageTemplate('chapter_body'))
                 continue
-            story += _block_renderer([block], styles)
+
+            if kind == 'table':
+                t_title = block[1].get('title', '')
+                t_str = str(block[1])
+                anchor_key = None
+                if 'ก.1' in t_title or 'แหล่งเข้าถึงระบบ' in t_str:
+                    anchor_key = 'tab_app_1'
+                elif 'ก.2' in t_title or 'บัญชีผู้ใช้สำหรับการทดสอบ' in t_str:
+                    anchor_key = 'tab_app_2'
+
+                anchor_obj = PageAnchor(anchor_key, page_registry) if anchor_key else None
+                story += _data_table(block[1], styles, anchor=anchor_obj)
+                story.append(Spacer(1, 10))
+                continue
+
+            story += _block_renderer([block], styles, page_registry)
 
     return story
 
 
 def build_pdf(target: str, meta: dict, chapters: list[dict], diagrams_pack: dict,
-              appendix_blocks: list[dict]) -> str:
+              appendix_blocks: list[dict], screenshots_pack: dict | None = None) -> str:
     """ประกอบเอกสารรายงาน PDF เชิงวิชาการทั้งเล่ม (Two-Pass Page Numbering)"""
+    _install_thai_word_wrap()
     diagrams.register_thai_fonts()
+    if screenshots_pack is None:
+        screenshots_pack = _default_screenshots_pack()
 
     # Pass 1: บันทึกเลขหน้าจริงของแต่ละส่วนลงใน page_registry
     page_registry: dict[str, int] = {}
@@ -855,11 +1102,12 @@ def build_pdf(target: str, meta: dict, chapters: list[dict], diagrams_pack: dict
     dummy_target = io.BytesIO()
     doc1 = _create_doc_templates(dummy_target, meta, current_chapter, main_start_box)
     story1 = _build_story(meta, chapters, diagrams_pack, appendix_blocks,
-                          current_chapter, page_registry, main_start_box, is_pass2=False)
+                          current_chapter, page_registry, main_start_box,
+                          screenshots_pack=screenshots_pack, is_pass2=False)
     doc1.build(story1)
 
     # กำหนดหมายเลขหน้าที่บทที่ 1 เริ่มต้น (เพื่อใช้คำนวณเลขอารบิก)
-    main_start_page = page_registry.get('ch_intro', 11)
+    main_start_page = page_registry.get('ch_intro', 5)
     main_start_box[0] = main_start_page
 
     # Pass 2: สร้างเอกสารฉบับสมบูรณ์พร้อมเลขหน้าจริงในสารบัญ
@@ -867,7 +1115,8 @@ def build_pdf(target: str, meta: dict, chapters: list[dict], diagrams_pack: dict
     current_chapter = ['']
     doc2 = _create_doc_templates(target, meta, current_chapter, main_start_box)
     story2 = _build_story(meta, chapters, diagrams_pack, appendix_blocks,
-                          current_chapter, page_registry, main_start_box, is_pass2=True)
+                          current_chapter, page_registry, main_start_box,
+                          screenshots_pack=screenshots_pack, is_pass2=True)
     doc2.build(story2)
 
     return target

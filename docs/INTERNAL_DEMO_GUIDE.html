@@ -1,0 +1,1173 @@
+<!DOCTYPE html>
+<html lang="th" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>คัมภีร์เตรียมสอบ & คู่มือทดสอบสาธิตระบบ THAMMATHAD SHOP</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --surface: #111827;
+      --surface-card: #1f2937;
+      --surface-hover: #374151;
+      --border: #374151;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --primary-light: rgba(59, 130, 246, 0.15);
+      --success: #10b981;
+      --success-light: rgba(16, 185, 129, 0.15);
+      --warning: #f59e0b;
+      --warning-light: rgba(245, 158, 11, 0.15);
+      --danger: #ef4444;
+      --danger-light: rgba(239, 68, 68, 0.15);
+      --code-bg: #030712;
+      --badge-bg: #1e293b;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      --radius: 12px;
+      --radius-sm: 6px;
+    }
+
+    [data-theme="light"] {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-card: #f1f5f9;
+      --surface-hover: #e2e8f0;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --primary: #2563eb;
+      --primary-hover: #1d4ed8;
+      --primary-light: rgba(37, 99, 235, 0.1);
+      --success: #059669;
+      --success-light: rgba(5, 150, 105, 0.1);
+      --warning: #d97706;
+      --warning-light: rgba(217, 119, 6, 0.1);
+      --danger: #dc2626;
+      --danger-light: rgba(220, 38, 38, 0.1);
+      --code-bg: #0f172a;
+      --badge-bg: #e2e8f0;
+      --shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Leelawadee UI', 'Sarabun', 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      font-size: 15px;
+      padding-bottom: 80px;
+    }
+
+    /* Top Sticky Navigation */
+    .top-bar {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(17, 24, 39, 0.85);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    [data-theme="light"] .top-bar {
+      background: rgba(255, 255, 255, 0.85);
+    }
+
+    .brand-title {
+      font-size: 16px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--text);
+    }
+
+    .badge-confidential {
+      background: var(--danger);
+      color: #fff;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+
+    .nav-actions {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn-toggle {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 12px;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 13px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-toggle:hover {
+      background: var(--surface-hover);
+    }
+
+    /* Container Layout */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 24px;
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 32px;
+    }
+
+    @media (max-width: 900px) {
+      .container {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        display: none;
+      }
+    }
+
+    /* Sidebar Navigation */
+    .sidebar {
+      position: sticky;
+      top: 80px;
+      height: calc(100vh - 100px);
+      overflow-y: auto;
+      padding-right: 12px;
+    }
+
+    .sidebar h4 {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+      padding-left: 8px;
+    }
+
+    .sidebar ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .sidebar a {
+      display: block;
+      padding: 8px 12px;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: var(--radius-sm);
+      font-size: 13.5px;
+      transition: all 0.2s;
+    }
+
+    .sidebar a:hover, .sidebar a.active {
+      color: var(--primary);
+      background: var(--primary-light);
+      font-weight: 600;
+    }
+
+    /* Main Content */
+    .main-content {
+      display: flex;
+      flex-direction: column;
+      gap: 36px;
+    }
+
+    .header-hero {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--surface-card) 100%);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .header-hero::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 300px;
+      height: 300px;
+      background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .header-hero h1 {
+      font-size: 26px;
+      font-weight: 800;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .header-hero p {
+      color: var(--text-muted);
+      font-size: 15px;
+      max-width: 800px;
+    }
+
+    .meta-pills {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .pill {
+      background: var(--badge-bg);
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    .pill.blue { background: var(--primary-light); border-color: var(--primary); color: var(--primary); }
+    .pill.green { background: var(--success-light); border-color: var(--success); color: var(--success); }
+    .pill.orange { background: var(--warning-light); border-color: var(--warning); color: var(--warning); }
+
+    /* Section Cards */
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      box-shadow: var(--shadow);
+    }
+
+    .section-card h2 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+      color: var(--text);
+    }
+
+    .section-card h3 {
+      font-size: 16px;
+      font-weight: 700;
+      margin: 20px 0 10px 0;
+      color: var(--text);
+    }
+
+    /* Steps and Timeline */
+    .step-box {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      transition: all 0.2s;
+    }
+
+    .step-box:hover {
+      border-color: var(--primary);
+    }
+
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+
+    .step-badge {
+      background: var(--primary);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      padding: 3px 10px;
+      border-radius: 6px;
+    }
+
+    .step-time {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .step-desc {
+      color: var(--text);
+      font-size: 14.5px;
+      margin-bottom: 14px;
+    }
+
+    /* Checkbox interactive list */
+    .checklist {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 12px 0;
+    }
+
+    .checklist-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      background: var(--surface);
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      border: 1px solid var(--border);
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s;
+    }
+
+    .checklist-item:hover {
+      background: var(--surface-hover);
+    }
+
+    .checklist-item input[type="checkbox"] {
+      margin-top: 3px;
+      width: 16px;
+      height: 16px;
+      accent-color: var(--primary);
+      cursor: pointer;
+    }
+
+    .checklist-item.checked span {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    /* Script & Code Blocks */
+    .code-container {
+      position: relative;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      margin: 12px 0;
+      overflow-x: auto;
+    }
+
+    .code-container pre {
+      font-family: 'Consolas', 'Fira Code', 'Monaco', monospace;
+      font-size: 13.5px;
+      color: #e5e7eb;
+      margin: 0;
+    }
+
+    .btn-copy {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      font-size: 11px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-copy:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+    }
+
+    /* Callout & Alerts */
+    .callout {
+      border-left: 4px solid var(--primary);
+      background: var(--primary-light);
+      padding: 14px 18px;
+      border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+      margin: 14px 0;
+      font-size: 14px;
+    }
+
+    .callout.danger {
+      border-left-color: var(--danger);
+      background: var(--danger-light);
+    }
+
+    .callout.success {
+      border-left-color: var(--success);
+      background: var(--success-light);
+    }
+
+    .callout.warning {
+      border-left-color: var(--warning);
+      background: var(--warning-light);
+    }
+
+    .callout strong {
+      display: block;
+      margin-bottom: 4px;
+    }
+
+    /* Dialogue Q&A box */
+    .qa-box {
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 16px;
+      overflow: hidden;
+      background: var(--surface-card);
+    }
+
+    .qa-question {
+      padding: 14px 18px;
+      font-weight: 700;
+      font-size: 15px;
+      cursor: pointer;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: var(--surface-card);
+      user-select: none;
+    }
+
+    .qa-question:hover {
+      background: var(--surface-hover);
+    }
+
+    .qa-question .q-icon {
+      color: var(--primary);
+      font-size: 18px;
+      margin-right: 8px;
+    }
+
+    .qa-answer {
+      padding: 18px;
+      background: var(--surface);
+      border-top: 1px solid var(--border);
+      font-size: 14.5px;
+      line-height: 1.7;
+    }
+
+    .qa-answer .say-this {
+      background: var(--success-light);
+      border-left: 3px solid var(--success);
+      padding: 10px 14px;
+      border-radius: 0 4px 4px 0;
+      margin: 10px 0;
+      font-style: italic;
+      color: var(--text);
+    }
+
+    .qa-answer .why-this {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Tables */
+    .custom-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 13.5px;
+    }
+
+    .custom-table th, .custom-table td {
+      border: 1px solid var(--border);
+      padding: 10px 14px;
+      text-align: left;
+    }
+
+    .custom-table th {
+      background: var(--surface-card);
+      font-weight: 700;
+    }
+
+    .custom-table tr:hover {
+      background: var(--surface-card);
+    }
+
+    /* Progress bar */
+    .demo-progress {
+      height: 8px;
+      background: var(--surface-card);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 14px 0 24px 0;
+    }
+
+    .demo-progress-bar {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width 0.3s ease;
+    }
+
+    /* Floating quick tools */
+    .quick-tools {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      display: flex;
+      gap: 8px;
+      z-index: 99;
+    }
+
+    .btn-floating {
+      background: var(--primary);
+      color: #fff;
+      border: none;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s;
+    }
+    .btn-floating:hover {
+      background: var(--primary-hover);
+      transform: translateY(-2px);
+    }
+
+    /* Ladder visualization */
+    .ladder-flow {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 16px 0;
+      flex-wrap: wrap;
+    }
+
+    .ladder-step {
+      background: var(--surface-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      text-align: center;
+      flex: 1;
+      min-width: 140px;
+    }
+
+    .ladder-step.active {
+      border-color: var(--primary);
+      background: var(--primary-light);
+    }
+
+    .ladder-step .title {
+      font-weight: 700;
+      font-size: 14px;
+    }
+
+    .ladder-step .sub {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    .ladder-arrow {
+      color: var(--text-muted);
+      font-weight: 800;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Sticky Navigation Bar -->
+  <div class="top-bar">
+    <div class="brand-title">
+      <span>🛡️ คัมภีร์ลับเตรียมสอบ &amp; คู่มือการทดสอบระบบ THAMMATHAD SHOP</span>
+      <span class="badge-confidential">INTERNAL STUDENT RUNBOOK (ห้ามส่งอาจารย์)</span>
+    </div>
+    <div class="nav-actions">
+      <button class="btn-toggle" onclick="toggleTheme()" id="themeBtn">🌙 สลับธีม</button>
+      <button class="btn-toggle" onclick="window.print()">🖨️ พิมพ์เป็น PDF</button>
+    </div>
+  </div>
+
+  <div class="container">
+    <!-- Sidebar Quick Navigation -->
+    <nav class="sidebar">
+      <h4>หัวข้อนำทาง</h4>
+      <ul>
+        <li><a href="#overview" class="active">1. ภาพรวม &amp; ตัวเลขวิศวกรรม</a></li>
+        <li><a href="#invariants">2. 3 กฎเหล็กของระบบ (หัวใจ)</a></li>
+        <li><a href="#accounts">3. ข้อมูลบัญชีสำหรับล็อกอิน</a></li>
+        <li><a href="#demo-flow">4. ลำดับการสาธิต 15 นาที</a></li>
+        <li><a href="#security-demo">5. สาธิตความปลอดภัย (หมัดเด็ด)</a></li>
+        <li><a href="#qa-defense">6. รวมคำถามอาจารย์ &amp; บทตอบ</a></li>
+        <li><a href="#commands">7. รวมคำสั่งสำคัญ (Cheat Sheet)</a></li>
+      </ul>
+
+      <div style="margin-top: 28px; padding: 14px; background: var(--surface-card); border-radius: 8px; border: 1px solid var(--border); font-size: 12px;">
+        <strong style="display:block; margin-bottom: 6px; color: var(--text);">ความคืบหน้าการซ้อม:</strong>
+        <div class="demo-progress">
+          <div class="demo-progress-bar" id="progressBar"></div>
+        </div>
+        <span id="progressText">0 / 14 ขั้นตอน</span>
+      </div>
+    </nav>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+
+      <!-- Header Hero -->
+      <section class="header-hero" id="overview">
+        <h1>คัมภีร์เตรียมสอบ &amp; บททดสอบระบบสำหรับผู้จัดทำ</h1>
+        <p>
+          คู่มือสำหรับ <strong>671320104 นายธรรมธัช รูปไธสง</strong> ใช้เปิดดูขณะนำเสนอโครงงานวิชา 
+          <em>4123713 หัวข้อเฉพาะเรื่องทางวิทยาการคอมพิวเตอร์</em> เสนอ <strong>ผศ.สุรินทร์ เพชรไทย</strong> 
+          สรุปวิธีรันระบบ ขั้นตอนคลิกสาธิตทีละหน้าจอ พร้อมบทตอบคำถามระดับวิศวกรรมซอฟต์แวร์ที่การันตีความเข้าใจเชิงลึก
+        </p>
+        <div class="meta-pills">
+          <span class="pill blue">สถาปัตยกรรม 4 ชั้น (Clean 4-Layer)</span>
+          <span class="pill green">412 Test Cases (100% Pass)</span>
+          <span class="pill orange">9 Models (Normalized 3NF)</span>
+          <span class="pill">138 Routes (All CBV)</span>
+          <span class="pill">17 Domain Services</span>
+        </div>
+      </section>
+
+      <!-- Section 1: Invariants & Mechanics -->
+      <section class="section-card" id="invariants">
+        <h2>⚖️ 1. กฎเหล็ก 3 ประการของระบบที่ต้องท่องให้ขึ้นใจ</h2>
+        <p style="color: var(--text-muted); margin-bottom: 16px;">
+          ถ้าอาจารย์ถามเรื่องความสมเหตุสมผล ความปลอดภัย หรือความถูกต้องของเงิน ให้ตอบโดยอิง 3 ข้อนี้เสมอ:
+        </p>
+
+        <div class="callout success">
+          <strong>1. จุดรับเงินจุดเดียว (Single Point of Payment Entry)</strong>
+          ไม่ว่าเงินจะเข้าทางใด (สลิปโอนเงิน OCR จาก SlipOK หรือปุ่มจำลองการโอน 1-คลิก) ต้องส่งเข้ามาที่ฟังก์ชัน 
+          <code>PaymentService.record_payment()</code> เท่านั้น! โดยระบบจะตรวจสอบยอดเงินสะสม ถ้ามียอดครบตามราคาออเดอร์ 
+          ระบบจะปรับสถานะเป็น <code>paid (ชำระเงินแล้ว)</code> <strong>โดยอัตโนมัติ</strong> 
+          <em>(เจ้าหน้าที่ทั่วไปไม่สามารถกดปุ่มตั้งเป็นชำระเงินเองได้ เพื่อป้องกันหนี้สูญและการทุจริต)</em>
+        </div>
+
+        <div class="callout warning">
+          <strong>2. บันไดสถานะ 4 ขั้นทิศทางเดียว (One-Way State Ladder)</strong>
+          สถานะของออเดอร์ถูกควบคุมด้วย Finite State Machine ผ่าน <code>OrderStatusService</code>:
+          <div class="ladder-flow">
+            <div class="ladder-step">
+              <div class="title">1. รอชำระเงิน</div>
+              <div class="sub">Pending (ระบบ)</div>
+            </div>
+            <div class="ladder-arrow">➜</div>
+            <div class="ladder-step active">
+              <div class="title">2. ชำระเงินแล้ว</div>
+              <div class="sub">Paid (ระบบอัตโนมัติ)</div>
+            </div>
+            <div class="ladder-arrow">➜</div>
+            <div class="ladder-step">
+              <div class="title">3. จัดส่งแล้ว</div>
+              <div class="sub">Shipped (เจ้าหน้าที่คลัง)</div>
+            </div>
+            <div class="ladder-arrow">➜</div>
+            <div class="ladder-step">
+              <div class="title">4. ถึงมือแล้ว</div>
+              <div class="sub">Delivered (ลูกค้ายืนยัน)</div>
+            </div>
+          </div>
+          <em>*กฎเหล็ก: ห้ามข้ามขั้น (ห้ามรอชำระแล้วกระโดดไปจัดส่ง) และ ห้ามถอยหลัง (ห้ามจัดส่งแล้วถอยกลับมาค้างชำระ)</em>
+        </div>
+
+        <div class="callout danger">
+          <strong>3. ความเป็นส่วนตัวและการปิดเรื่องร้องเรียน (Issue &amp; Privacy Isolation)</strong>
+          การแจ้งปัญหา (<code>OrderIssue</code>) ถูกออกแบบรัดกุมมาก:
+          <ul>
+            <li>ลูกค้าที่ล็อกอิน <strong>ห้ามผูกเรื่องกับออเดอร์ของคนอื่นเด็ดขาด</strong> แม้จะรู้เบอร์โทรศัพท์ก็ตาม</li>
+            <li>เจ้าหน้าที่ในโซนหลังบ้าน <strong>จะปิดเรื่อง (Resolved) โดยไม่กรอกแนวทางแก้ไข (Resolution) ไม่ได้</strong> (ระบบบังคับในระดับโมเดล <code>OrderIssue.mark()</code> ไม่ใช่แค่ HTML required)</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 2: Demo Accounts -->
+      <section class="section-card" id="accounts">
+        <h2>🔑 2. ตารางบัญชีและรหัสผ่านสำหรับสาธิต (Cheat Sheet)</h2>
+        <p style="color: var(--text-muted); margin-bottom: 14px;">
+          เตรียมเปิด Browser 2 หน้าต่าง (หน้าต่างปกติ = ลูกค้า, หน้าต่างไม่ระบุตัวตน/Incognito = เจ้าหน้าที่)
+        </p>
+
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th>ประเภทผู้ใช้</th>
+              <th>Username</th>
+              <th>Password</th>
+              <th>URL สำหรับเข้าใช้งาน</th>
+              <th>จุดประสงค์การสาธิต</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Superuser (อาจารย์)</strong></td>
+              <td><code>teacher</code></td>
+              <td><code>Shop2026!</code></td>
+              <td><code>/staff/login/</code> หรือ <code>/admin/</code></td>
+              <td>ผู้ดูแลระบบสูงสุด มีสิทธิ์พิเศษ Superuser Override แก้ไขกรณีเงินเข้าผิดทาง</td>
+            </tr>
+            <tr>
+              <td><strong>Staff (เจ้าหน้าที่คลัง)</strong></td>
+              <td><code>EMP001</code></td>
+              <td><code>Shop2026!</code></td>
+              <td><code>/staff/login/</code></td>
+              <td>สาธิตการตรวจออเดอร์, บันทึกเลขพัสดุ (Tracking No.), ปิดเรื่องแจ้งปัญหา</td>
+            </tr>
+            <tr>
+              <td><strong>Customer (ลูกค้าหลัก)</strong></td>
+              <td><code>ohm</code></td>
+              <td><code>Shop2026!</code> / <code>Demo2026!</code></td>
+              <td><code>/account/login/</code></td>
+              <td>ลูกค้าหลัก มีประวัติสั่งซื้อและที่อยู่บันทึกไว้ในระบบเรียบร้อย</td>
+            </tr>
+            <tr>
+              <td><strong>Customer (ลูกค้ารายอื่น)</strong></td>
+              <td><code>wichai.s</code></td>
+              <td><code>Demo2026!</code></td>
+              <td><code>/account/login/</code></td>
+              <td>มีออเดอร์ค้างชำระ และมีประวัติแจ้งเรื่องร้องเรียนพร้อมให้ตรวจ</td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Section 3: Live Demo Script (15 Minutes) -->
+      <section class="section-card" id="demo-flow">
+        <h2>🎬 3. ขั้นตอนการสาธิตให้อาจารย์ดูทีละขั้น (15 นาที จบสวย ได้ A แน่นอน)</h2>
+        <p style="color: var(--text-muted); margin-bottom: 20px;">
+          ติ๊กเครื่องหมายถูกทีละช่องขณะทดสอบ เพื่อไม่ให้ลืมขั้นตอนสำคัญ:
+        </p>
+
+        <!-- Phase 0 -->
+        <div class="step-box">
+          <div class="step-header">
+            <span class="step-badge">Phase 0: การเตรียมตัวก่อนอาจารย์เดินมาตรวจ</span>
+            <span class="step-time">2 นาที</span>
+          </div>
+          <div class="step-desc">
+            เปิด PowerShell ในโฟลเดอร์โปรเจกต์ <code>d:\django_project\my_django_app</code> แล้วรันคำสั่งรีเซ็ตข้อมูลตัวอย่างให้สะอาดหมดจด
+          </div>
+          <div class="code-container">
+            <button class="btn-copy" onclick="copyCode(this)">คัดลอก</button>
+            <pre><code>.venv\Scripts\activate
+python manage.py seed_catalog
+python manage.py seed_demo_data
+python manage.py runserver</code></pre>
+          </div>
+          <ul class="checklist">
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span>เซิร์ฟเวอร์เปิดอยู่ที่ <code>http://127.0.0.1:8000/</code> พร้อมใช้งาน</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span>เปิดเบราว์เซอร์หน้าต่างปกติ 1 จอ (หน้าร้าน) และจอ Incognito 1 จอ (โซนเจ้าหน้าที่)</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Phase 1 -->
+        <div class="step-box">
+          <div class="step-header">
+            <span class="step-badge">Phase 1: สาธิตประสบการณ์ลูกค้า (Customer Journey)</span>
+            <span class="step-time">4 นาที</span>
+          </div>
+          <div class="step-desc">
+            พาอาจารย์ดูความลื่นไหลของการเลือกซื้อสินค้า และการสั่งซื้อที่คำนวณเงินถูกต้อง
+          </div>
+          <ul class="checklist">
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>1. ค้นหาสินค้าสด (Live Search):</strong> เปิด <code>http://127.0.0.1:8000/</code> พิมพ์ "เมาส์" หรือ "คีย์บอร์ด" ให้เห็นว่าหน้าเว็บกรองข้อมูลสดทันทีด้วย AJAX ไม่ต้องกดค้นหา</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>2. สวิตช์ปุ่มสายฟ้า (⚡ Motion Toggle):</strong> ชี้ให้อาจารย์ดูปุ่ม ⚡ บนขวา สลับเปิด/ปิดแอนิเมชัน Liquid Glass (ระบบใช้ Motion Core Bus ตัวเดียวคุมทั้งระบบ)</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>3. หน้ารายละเอียดสินค้า:</strong> คลิกดูเมาส์ไร้สาย Glide ชี้ให้ดูสเปกสินค้า และจำนวนสต็อกคงเหลือ</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>4. ตะกร้าสินค้า (Cart):</strong> กดใส่ตะกร้า 2 ชิ้น ชี้ให้เห็นแถบ Progress Bar ส่งฟรี เมื่อยอดถึง 600 บาท</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>5. ชำระเงิน &amp; สลิป OCR:</strong> ดำเนินการสั่งซื้อ กรอกชื่อที่อยู่ แล้วคลิก "จำลองการโอนเงิน 1-คลิก" หรืออัปโหลดสลิป -> ระบบคำนวณยอดเงินครบ แล้วเปลี่ยนสถานะเป็น <strong>"ชำระเงินแล้ว" อัตโนมัติทันที</strong></span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Phase 2 -->
+        <div class="step-box">
+          <div class="step-header">
+            <span class="step-badge">Phase 2: สาธิตบันไดสถานะ &amp; โซนเจ้าหน้าที่ (Staff Ladder)</span>
+            <span class="step-time">4 นาที</span>
+          </div>
+          <div class="step-desc">
+            สลับไปที่หน้าต่าง Incognito เข้าสู่ระบบในฐานะเจ้าหน้าที่เพื่อจัดการออเดอร์
+          </div>
+          <ul class="checklist">
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>1. เข้าสู่ระบบเจ้าหน้าที่:</strong> เข้า <code>http://127.0.0.1:8000/staff/login/</code> ด้วย Username: <code>EMP001</code> / รหัสผ่าน: <code>Shop2026!</code></span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>2. ดูตารางออเดอร์ <code>/orders/</code>:</strong> ชี้ให้อาจารย์เห็นว่ามีป้ายเตือนปัญหา (Issue badge สีแดง) แสดงจำนวนเรื่องที่ลูกค้าแจ้ง</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>3. สาธิตจุดรับเงิน:</strong> เปิดออเดอร์ที่เพิ่งซื้อ ชี้ให้อาจารย์เห็นว่า <strong>"ไม่มีปุ่มให้เจ้าหน้าที่กดชำระเงินเอง"</strong> เพราะสถานะนี้ต้องเกิดจากการรับเงินจริงผ่าน PaymentService เท่านั้น</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>4. จัดส่งพัสดุ:</strong> กรอกเลขพัสดุ เช่น <code>TH0123456789</code> แล้วกดปุ่ม <strong>"บันทึกและจัดส่งพัสดุ"</strong> -> สถานะเลื่อนเป็น <strong>"จัดส่งแล้ว"</strong></span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>5. ลูกค้ายืนยันรับของ:</strong> สลับกลับไปจอฝั่งลูกค้า ที่หน้าติดตามออเดอร์ คลิกปุ่ม <strong>"ยืนยันว่าได้รับสินค้าแล้ว"</strong> -> สถานะเลื่อนเป็น <strong>"ถึงมือแล้ว" (จบสมบูรณ์)</strong> อธิบายว่าของจะถึงมือก็ต่อเมื่อผู้รับเป็นคนบอกว่าได้รับแล้ว</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Phase 3 -->
+        <div class="step-box">
+          <div class="step-header">
+            <span class="step-badge">Phase 3: ศูนย์จัดการปัญหาและการปิดเรื่อง (Issue Center)</span>
+            <span class="step-time">3 นาที</span>
+          </div>
+          <div class="step-desc">
+            แสดงระบบบริการลูกค้าและกระบวนการปิดเรื่องร้องเรียนที่มีความรับผิดชอบ
+          </div>
+          <ul class="checklist">
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>1. ลูกค้าแจ้งปัญหา:</strong> เปิดหน้า <code>/issue/</code> ลูกค้าเลือกหัวข้อ (เช่น ขอเปลี่ยนสินค้า/ยอดไม่ตรง) กรอกรายละเอียดแล้วส่งเรื่อง</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>2. เจ้าหน้าที่รับเรื่อง:</strong> ฝั่งเจ้าหน้าที่เปิด <code>/orders/issues/</code> เห็นเรื่องค้างอยู่ กด "รับเรื่องดำเนินการ"</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>3. ปิดเรื่องโดยบังคับระบุแนวทางแก้ไข:</strong> ลองกดปิดเรื่องโดยไม่พิมพ์ข้อความ -> ระบบจะไม่ยอม ต้องกรอกข้อความในช่อง Resolution (เช่น "โอนเงินส่วนต่างคืนแล้ว") แล้วกดยืนยันปิดเรื่อง จึงจะสำเร็จ</span>
+            </li>
+          </ul>
+        </div>
+
+        <!-- Phase 4 -->
+        <div class="step-box">
+          <div class="step-header">
+            <span class="step-badge">Phase 4: แดชบอร์ดสรุปยอดขาย &amp; รายงานผู้บริหาร</span>
+            <span class="step-time">2 นาที</span>
+          </div>
+          <div class="step-desc">
+            เปิดหน้า <code>/dashboard/</code> ในโซนเจ้าหน้าที่เพื่อดูการวิเคราะห์ข้อมูล
+          </div>
+          <ul class="checklist">
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>1. ตรวจ KPI Cards:</strong> ชี้ให้เห็นยอดขายรวม ยอดคำสั่งซื้อ จำนวนสินค้าขายดี และอัตราการชำระเงิน</span>
+            </li>
+            <li class="checklist-item" onclick="toggleCheck(this)">
+              <input type="checkbox">
+              <span><strong>2. ส่งออกไฟล์ CSV:</strong> กดปุ่ม "ส่งออก CSV" แสดงให้อาจารย์เห็นว่าระบบสามารถดาวน์โหลดประวัติการทำงานและยอดขายนำไปใช้ต่อใน Excel ได้ทันที</span>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 4: Security Demo -->
+      <section class="section-card" id="security-demo">
+        <h2>🛡️ 4. หมัดเด็ด! สาธิตความปลอดภัยและการทดสอบเชิงลบ (Negative Testing)</h2>
+        <p style="color: var(--text-muted); margin-bottom: 14px;">
+          ถ้าอาจารย์เริ่มถามว่า <em>"ระบบนี้ปลอดภัยแค่ไหน? มีช่องโหว่ไหม?"</em> ให้ทำ 3 ข้อนี้โชว์ทันที:
+        </p>
+
+        <div class="step-box">
+          <h3>1. ทดสอบการปฏิเสธ HTTP GET บนเส้นทางที่อันตราย (HTTP 405 Method Not Allowed)</h3>
+          <p class="step-desc">
+            ลองพิมพ์ URL <code>http://127.0.0.1:8000/cart/add/</code> หรือ <code>http://127.0.0.1:8000/staff/logout/</code> ลงใน Address Bar ตรง ๆ
+          </p>
+          <div class="callout success">
+            <strong>ผลลัพธ์ที่ระบบตอบสนอง:</strong>
+            เซิร์ฟเวอร์จะตอบกลับด้วยรหัส <code>405 Method Not Allowed</code> ทันที! 
+            อธิบายอาจารย์ว่า: <em>"ระบบถูกออกแบบตามหลัก OWASP ป้องกันการโจมตีแบบ CSRF และป้องกันเว็บเบราว์เซอร์หรือ Web Crawler แอบยิงคำสั่งเปลี่ยนข้อมูลผ่านคำขอ GET"</em>
+          </div>
+        </div>
+
+        <div class="step-box">
+          <h3>2. ทดสอบการควบคุมสิทธิ์ตามบทบาท (Role-Based Access Control - RBAC)</h3>
+          <p class="step-desc">
+            ในหน้าต่างเบราว์เซอร์ของลูกค้าทั่วไป (ล็อกอินด้วยบัญชี <code>ohm</code>) ลองพิมพ์ URL โซนเจ้าหน้าที่ เช่น <code>http://127.0.0.1:8000/employees/</code> หรือ <code>/orders/</code>
+          </p>
+          <div class="callout success">
+            <strong>ผลลัพธ์ที่ระบบตอบสนอง:</strong>
+            ระบบจะตรวจพบว่าไม่ใช่ Staff และดีด (Redirect) กลับมาที่หน้าล็อกอินเจ้าหน้าที่ทันที ไม่เปิดเผยข้อมูลพนักงานหรือออเดอร์ให้คนนอกเห็น
+          </div>
+        </div>
+
+        <div class="step-box">
+          <h3>3. โชว์ผลการรันชุดทดสอบอัตโนมัติ (Automated Unit Tests)</h3>
+          <p class="step-desc">
+            เปิดหน้าต่าง Terminal แล้วรันชุดทดสอบเพื่อโชว์ความสมบูรณ์แบบของโค้ด:
+          </p>
+          <div class="code-container">
+            <button class="btn-copy" onclick="copyCode(this)">คัดลอก</button>
+            <pre><code>python manage.py test myapp</code></pre>
+          </div>
+          <div class="callout success">
+            <strong>ผลลัพธ์:</strong>
+            <code>Ran 412 tests in ~35s ... OK</code> (ผ่าน 100% ครบทุกโมเดล, ทุกวิว, ทุกเซอร์วิส และทุกเทมเพลต)
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 5: Q&A Defense Guide -->
+      <section class="section-card" id="qa-defense">
+        <h2>💡 5. แนวคำถามที่อาจารย์น่าจะถาม &amp; บทตอบแบบวิชาการ (Q&amp;A Defense)</h2>
+        <p style="color: var(--text-muted); margin-bottom: 20px;">
+          คลิกที่คำถามเพื่อดูแนวทางการตอบที่ถูกต้องตามหลักวิศวกรรมซอฟต์แวร์:
+        </p>
+
+        <!-- Q1 -->
+        <div class="qa-box">
+          <div class="qa-question" onclick="toggleQA(this)">
+            <span><span class="q-icon">❓</span> 1. ทำไมถึงไม่ให้เจ้าหน้าที่กดเปลี่ยนสถานะเป็น "ชำระเงินแล้ว" ด้วยตัวเอง?</span>
+            <span>▼</span>
+          </div>
+          <div class="qa-answer">
+            <div class="say-this">
+              "ตอบ: เพราะระบบของเรายึดหลัก <strong>Single Point of Payment Entry</strong> ครับอาจารย์ ในระบบพาณิชย์อิเล็กทรอนิกส์ การที่เจ้าหน้าที่สามารถกดเปลี่ยนสถานะเงินได้ตามใจชอบคือช่องโหว่ร้ายแรงที่ทำให้เกิดการทุจริตและหนี้สูญ ระบบของเราจึงบังคับว่าสถานะ 'ชำระเงินแล้ว' จะเกิดขึ้นได้ต่อเมื่อมีประวัติการชำระเงินจริงในตาราง <code>Payment</code> ผ่านฟังก์ชัน <code>PaymentService.record_payment()</code> และมียอดเงินสะสมครบตามราคาสินค้าเท่านั้นครับ"
+            </div>
+            <div class="why-this">
+              💡 <strong>เสริมถ้าอาจารย์ถามต่อ:</strong> แล้วถ้าเงินสดมาหน้าร้านล่ะ? -> ตอบว่า "เรามีระบบ <code>Superuser Override</code> สำหรับผู้ดูแลระบบสูงสุดเท่านั้น ที่สามารถบันทึกเงินสดพร้อมระบุเหตุผลในการตรวจสอบย้อนหลังได้ครับ"
+            </div>
+          </div>
+        </div>
+
+        <!-- Q2 -->
+        <div class="qa-box">
+          <div class="qa-question" onclick="toggleQA(this)">
+            <span><span class="q-icon">❓</span> 2. ทำไมขั้นตอนสุดท้าย "ถึงมือแล้ว" ถึงต้องให้ลูกค้ายืนยันเอง ไม่ให้เจ้าหน้าที่เป็นคนกด?</span>
+            <span>▼</span>
+          </div>
+          <div class="qa-answer">
+            <div class="say-this">
+              "ตอบ: ตามหลักการ <strong>Proof of Delivery และ Two-Party Consensus</strong> ครับ ของจะถือว่าถึงมืออย่างสมบูรณ์ก็ต่อเมื่อผู้รับยืนยันว่าได้รับของแล้ว ไม่ใช่ผู้ส่งทึกทักเอาเองว่าส่งสำเร็จ การให้ลูกค้ายืนยันเองช่วยลดข้อพิพาทเรื่องพัสดุสูญหายได้อย่างเด็ดขาดครับ"
+            </div>
+            <div class="why-this">
+              💡 <strong>เสริมถ้าอาจารย์ถามต่อ:</strong> แล้วถ้าลูกค้าไม่ยอมกดยืนยันล่ะ? -> ตอบว่า "ในหน้าเจ้าหน้าที่มีปุ่มสำรองสำหรับกรณีฉุกเฉิน (เช่น ติดต่อลูกค้าไม่ได้ หรือสินค้าเป็นแบบเก็บเงินปลายทาง COD) แต่ระบบจะติดป้ายเตือนว่าเป็นทางเลือกสำรองและบันทึกประวัติการกดไว้ใน Audit Log ครับ"
+            </div>
+          </div>
+        </div>
+
+        <!-- Q3 -->
+        <div class="qa-box">
+          <div class="qa-question" onclick="toggleQA(this)">
+            <span><span class="q-icon">❓</span> 3. การออกแบบฐานข้อมูลนี้เป็นแบบบรรทัดฐานขั้นที่ 3 (3NF) หรือไม่ อย่างไร?</span>
+            <span>▼</span>
+          </div>
+          <div class="qa-answer">
+            <div class="say-this">
+              "ตอบ: เป็น <strong>3NF (Third Normal Form)</strong> อย่างสมบูรณ์ครับอาจารย์:
+              <ul>
+                <li><strong>1NF:</strong> ทุกคอลัมน์เก็บค่าเชิงอะตอม (Atomic Value) ไม่มีค่าซ้ำซ้อนในฟิลด์เดียว</li>
+                <li><strong>2NF:</strong> ทุกคอลัมน์ที่ไม่ได้เป็นคีย์ ขึ้นตรงกับ Primary Key หลักอย่างสมบูรณ์ เช่น แยก <code>OrderItem</code> ออกมาเพื่อเก็บรายการสินค้าแต่ละแถว</li>
+                <li><strong>3NF:</strong> กำจัด Transitive Dependency ทั้งหมด ที่สำคัญคือเราแยก <code>OrderItem.price</code> ไว้เก็บราคา ณ วันที่ซื้อ (Price Snapshot) ต่างหากจาก <code>Product.price</code> ทำให้เวลาปรับราคาสินค้าในปัจจุบัน จะไม่กระทบต่อประวัติยอดขายและรายงานการเงินย้อนหลังครับ"
+              </ul>
+            </div>
+          </div>
+        </div>
+
+        <!-- Q4 -->
+        <div class="qa-box">
+          <div class="qa-question" onclick="toggleQA(this)">
+            <span><span class="q-icon">❓</span> 4. สถาปัตยกรรมแบบ 4 ชั้น (Clean 4-Layer) ในระบบนี้ทำงานอย่างไร?</span>
+            <span>▼</span>
+          </div>
+          <div class="qa-answer">
+            <div class="say-this">
+              "ตอบ: เราแบ่งออกเป็น 4 ชั้นชัดเจนครับ:
+              <ol>
+                <li><strong>Presentation Layer:</strong> เทมเพลต HTML/CSS และ JavaScript ที่รองรับการเคลื่อนไหวแบบ Apple Liquid Glass</li>
+                <li><strong>Controller Layer:</strong> Class-Based Views (CBV) ใน <code>views.py</code> ทำหน้าที่รับคำขอ ตรวจสอบสิทธิ์ (StaffRequiredMixin) และส่งต่อข้อมูล โดย<strong>ไม่มี Business Logic อยู่ใน View เลย</strong></li>
+                <li><strong>Service Layer:</strong> รวมตรรกะทางธุรกิจ 17 คลาสใน <code>services.py</code> เช่น Cart, PaymentService, OrderStatusService, SlipOK, RateLimit เพื่อความสามารถในการทดสอบซ้ำ</li>
+                <li><strong>Domain &amp; Model Layer:</strong> 9 โมเดลใน <code>models.py</code> ควบคุมความสมบูรณ์ของข้อมูลและนโยบาย Foreign Key ครับ"
+              </ol>
+            </div>
+          </div>
+        </div>
+
+        <!-- Q5 -->
+        <div class="qa-box">
+          <div class="qa-question" onclick="toggleQA(this)">
+            <span><span class="q-icon">❓</span> 5. ทำไมระบบถึงไม่ใช้ CDN ภายนอก (เช่น cdn.jsdelivr.net สำหรับ Bootstrap)?</span>
+            <span>▼</span>
+          </div>
+          <div class="qa-answer">
+            <div class="say-this">
+              "ตอบ: เราออกแบบด้วยปรัชญา <strong>Local-First &amp; Zero External CDN Dependency</strong> ครับอาจารย์ เพื่อความมั่นคงปลอดภัย (Security), ความเป็นส่วนตัวของลูกค้า (Privacy), และเสถียรภาพในการทำงาน แม้เซิร์ฟเวอร์จะออฟไลน์หรือเน็ตภายนอกมีปัญหา เว็บไซต์ก็ยังสามารถเรนเดอร์ได้ 100% เต็มรูปแบบ ไม่พัง ไม่กระตุก และไม่มีปัญหา Single Point of Failure จาก CDN ภายนอกครับ"
+            </div>
+          </div>
+        </div>
+
+        <!-- Q6 -->
+        <div class="qa-box">
+          <div class="qa-question" onclick="toggleQA(this)">
+            <span><span class="q-icon">❓</span> 6. ตารางบันทึกประวัติ `ActivityLog` ออกแบบอย่างไรเพื่อความโปร่งใส?</span>
+            <span>▼</span>
+          </div>
+          <div class="qa-answer">
+            <div class="say-this">
+              "ตอบ: ออกแบบเป็น <strong>Append-Only Audit Trail</strong> ครับ อนุญาตให้กระทำเฉพาะคำสั่ง INSERT เพิ่มเรคคอร์ดใหม่เท่านั้น ไม่อนุญาตให้แก้ไข (UPDATE) หรือลบ (DELETE) ทุกการกระทำที่สำคัญ เช่น การชำระเงิน การเปลี่ยนสถานะออเดอร์ หรือการเข้าสู่ระบบ จะถูกบันทึกพร้อมวันเวลา ผู้กระทำ และรายละเอียดการเปลี่ยนแปลง เพื่อใช้เป็นหลักฐานทางนิติวิทยาศาสตร์คอมพิวเตอร์ (Computer Forensics) ได้ครับ"
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Section 6: Commands Cheat Sheet -->
+      <section class="section-card" id="commands">
+        <h2>💻 6. รวมคำสั่งสำคัญสำหรับโปรเจกต์ (Cheat Sheet)</h2>
+
+        <table class="custom-table">
+          <thead>
+            <tr>
+              <th>สิ่งที่ต้องการทำ</th>
+              <th>คำสั่ง PowerShell ที่ต้องใช้</th>
+              <th>คำอธิบาย</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>รันเซิร์ฟเวอร์</strong></td>
+              <td><code>python manage.py runserver</code></td>
+              <td>เปิดระบบที่ <code>http://127.0.0.1:8000/</code></td>
+            </tr>
+            <tr>
+              <td><strong>รีเซ็ตข้อมูลตัวอย่าง</strong></td>
+              <td><code>python manage.py seed_demo_data</code></td>
+              <td>ล้างข้อมูลขยะ แล้วใส่ข้อมูลตัวอย่างจริง (13 พนักงาน, 6 ลูกค้า, 10 ออเดอร์)</td>
+            </tr>
+            <tr>
+              <td><strong>ใส่สินค้าตัวอย่าง</strong></td>
+              <td><code>python manage.py seed_catalog</code></td>
+              <td>เพิ่มสินค้าตัวอย่าง 12 รายการ ครบ 4 หมวดหมู่</td>
+            </tr>
+            <tr>
+              <td><strong>รันการทดสอบทั้งหมด</strong></td>
+              <td><code>python manage.py test myapp</code></td>
+              <td>รัน 412 test cases เพื่อยืนยันความสมบูรณ์</td>
+            </tr>
+            <tr>
+              <td><strong>ตรวจความพร้อมระบบ</strong></td>
+              <td><code>python manage.py preflight</code></td>
+              <td>ตรวจเช็คความปลอดภัยและการตั้งค่า 16 รายการ</td>
+            </tr>
+            <tr>
+              <td><strong>สร้างเล่มรายงาน PDF/Word</strong></td>
+              <td><code>python manage.py build_report</code></td>
+              <td>สร้างเอกสารรายงานวิชาการส่งอาจารย์ไว้ที่โฟลเดอร์ <code>docs/รายงาน/</code></td>
+            </tr>
+          </tbody>
+        </table>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Floating Help Tools -->
+  <div class="quick-tools">
+    <button class="btn-floating" onclick="window.scrollTo({top: 0, behavior: 'smooth'})">⬆ กลับขึ้นบน</button>
+  </div>
+
+  <script>
+    // Theme Toggle
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const next = current === 'dark' ? 'light' : 'dark';
+      html.setAttribute('data-theme', next);
+      document.getElementById('themeBtn').innerText = next === 'dark' ? '🌙 สลับธีม' : '☀️ สลับธีม';
+    }
+
+    // QA Accordion Toggle
+    function toggleQA(element) {
+      const answer = element.nextElementSibling;
+      const arrow = element.querySelector('span:last-child');
+      if (answer.style.display === 'block') {
+        answer.style.display = 'none';
+        arrow.innerText = '▼';
+      } else {
+        answer.style.display = 'block';
+        arrow.innerText = '▲';
+      }
+    }
+
+    // Copy to clipboard helper
+    function copyCode(btn) {
+      const code = btn.nextElementSibling.innerText;
+      navigator.clipboard.writeText(code).then(() => {
+        const originalText = btn.innerText;
+        btn.innerText = 'คัดลอกแล้ว!';
+        btn.style.background = 'var(--success)';
+        setTimeout(() => {
+          btn.innerText = originalText;
+          btn.style.background = '';
+        }, 1500);
+      });
+    }
+
+    // Checklist Progress Counter
+    function toggleCheck(item) {
+      const checkbox = item.querySelector('input[type="checkbox"]');
+      // If clicked on list item rather than direct checkbox
+      if (event.target !== checkbox) {
+        checkbox.checked = !checkbox.checked;
+      }
+      if (checkbox.checked) {
+        item.classList.add('checked');
+      } else {
+        item.classList.remove('checked');
+      }
+      updateProgress();
+    }
+
+    function updateProgress() {
+      const all = document.querySelectorAll('.checklist-item input[type="checkbox"]');
+      let checked = 0;
+      all.forEach(cb => { if (cb.checked) checked++; });
+      const percent = (checked / all.length) * 100;
+      document.getElementById('progressBar').style.width = percent + '%';
+      document.getElementById('progressText').innerText = `${checked} / ${all.length} ขั้นตอน (${Math.round(percent)}%)`;
+    }
+
+    // Initial QA hide
+    document.querySelectorAll('.qa-answer').forEach(ans => ans.style.display = 'none');
+  </script>
+</body>
+</html>

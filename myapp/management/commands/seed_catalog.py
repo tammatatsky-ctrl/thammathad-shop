@@ -113,7 +113,7 @@ class Command(BaseCommand):
                 defaults = {k: v for k, v in row.items() if k != 'id'}
                 Product.objects.update_or_create(id=row['id'], defaults=defaults)
 
-        cats = ' · '.join(Product.objects.category_choices())
+        cats = ' / '.join(Product.objects.category_choices())
         self.stdout.write(self.style.SUCCESS(
             'เขียนสินค้า {n} ชิ้น | หมวด: {cats}'.format(
                 n=Product.objects.count(), cats=cats)))

@@ -525,6 +525,14 @@ class Employee(models.Model):
         ('leave', 'ลาพัก'),
         ('resigned', 'ลาออกแล้ว'),
     ]
+    user = models.OneToOneField(
+        dj_settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='employee_profile',
+        verbose_name='บัญชีผู้ใช้ระบบ',
+    )
     emp_code = models.CharField(max_length=20, unique=True, verbose_name="รหัสพนักงาน")
     name = models.CharField(max_length=150, verbose_name="ชื่อ-นามสกุล")
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, default='M', verbose_name="เพศ")

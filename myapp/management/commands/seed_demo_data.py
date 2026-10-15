@@ -309,11 +309,11 @@ class Command(BaseCommand):
 
         self.stdout.write('')
         self.stdout.write(self.style.SUCCESS(
-            'ข้อมูลตัวอย่างพร้อม: พนักงาน {e} · ลูกค้า {c} · ออเดอร์ {o} · แจ้งปัญหา {i}'.format(
+            'ข้อมูลตัวอย่างพร้อม: พนักงาน {e} | ลูกค้า {c} | ออเดอร์ {o} | แจ้งปัญหา {i}'.format(
                 e=len(EMPLOYEES), c=len(CUSTOMERS),
                 o=len(ORDERS), i=len(ISSUES))))
         self.stdout.write(
-            'บัญชีทดสอบสำหรับเข้าใช้: teacher/Shop2026! (staff) · ohm (ลูกค้าตัวอย่าง)')
+            'บัญชีทดสอบสำหรับเข้าใช้: teacher/Shop2026! (staff) | ohm (ลูกค้าตัวอย่าง)')
         self.stdout.write(
             'ลูกค้าตัวอย่าง (รหัสผ่าน Demo2026!): ' +
             ', '.join(c['username'] for c in CUSTOMERS))
@@ -496,15 +496,24 @@ class Command(BaseCommand):
 
         for code, name, gender, dept, phone, salary, hire, status in EMPLOYEES:
             email = f'{code.lower()}@thammathadshop.com'
+            defaults = {
+                'name': name, 'gender': gender, 'department': dept,
+                'phone': phone, 'email': email,
+                'salary': Decimal(salary),
+                'hire_date': date.fromisoformat(hire),
+                'status': status, 'address': EMPLOYEE_ADDRESS,
+            }
+            if code == 'EMP001':
+                u = User.objects.filter(username='admin').first()
+                if u:
+                    defaults['user'] = u
+            elif code == 'EMP002':
+                u = User.objects.filter(username='teacher').first()
+                if u:
+                    defaults['user'] = u
             Employee.objects.update_or_create(
                 emp_code=code,
-                defaults={
-                    'name': name, 'gender': gender, 'department': dept,
-                    'phone': phone, 'email': email,
-                    'salary': Decimal(salary),
-                    'hire_date': date.fromisoformat(hire),
-                    'status': status, 'address': EMPLOYEE_ADDRESS,
-                },
+                defaults=defaults,
             )
             if dry_run:
                 continue

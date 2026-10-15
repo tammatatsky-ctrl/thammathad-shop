@@ -81,7 +81,7 @@ class Command(BaseCommand):
             user.set_password(DEMO_PASSWORD)
             user.save(update_fields=['password'])
             self.stdout.write(self.style.SUCCESS(
-                f'  ✓ ตั้งรหัส "{DEMO_PASSWORD}" ให้ {user.username} แล้ว'))
+                f'  [OK] ตั้งรหัส "{DEMO_PASSWORD}" ให้ {user.username} แล้ว'))
 
         if dry_run:
             self.stdout.write(self.style.WARNING(
@@ -93,7 +93,7 @@ class Command(BaseCommand):
             user.refresh_from_db()
             ok = user.check_password(DEMO_PASSWORD)
             self.stdout.write(
-                f'  {"✓" if ok else "✗"} ตรวจซ้ำ {user.username}: '
+                f'  {"[OK]" if ok else "[X]"} ตรวจซ้ำ {user.username}: '
                 f'{"เข้าด้วยรหัสที่เอกสารระบุ" if ok else "ยังเข้าไม่ได้!"}')
 
         self.stdout.write('')
