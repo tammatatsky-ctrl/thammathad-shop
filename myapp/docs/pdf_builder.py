@@ -187,6 +187,17 @@ def _install_thai_word_wrap() -> None:
 
 
 
+def _split_appendix_title(title: str) -> tuple[str, str, str]:
+    """แยกชื่อหัวข้อภาคผนวกเป็น (ส่วนหัวภาคผนวก, ชื่อภาษาไทย, ชื่อภาษาอังกฤษ) เพื่อจัดวางตามหลักวิชาการ"""
+    m = re.match(r'^(ภาคผนวก\s+[ก-ฮA-Z])\s+(.+?)(?:\s*\((.+?)\))?$', title.strip())
+    if m:
+        app_label = m.group(1)
+        th_title = m.group(2)
+        en_title = f'({m.group(3)})' if m.group(3) else ''
+        return app_label, th_title, en_title
+    return title.strip(), '', ''
+
+
 def _styles() -> dict[str, ParagraphStyle]:
     """นิยามรูปแบบข้อความทั้งหมดของเอกสารตามหลักวิชาการ (ขนาดมาตรฐาน TH Sarabun New 16pt / สีดำล้วน)"""
     base = getSampleStyleSheet()['Normal']
@@ -213,6 +224,9 @@ def _styles() -> dict[str, ParagraphStyle]:
     s['bullet'] = ParagraphStyle(
         'bullet', parent=s['body'], leftIndent=24, bulletIndent=10,
         spaceAfter=4, alignment=TA_LEFT, wordWrap='CJK')
+    s['numbered_item'] = ParagraphStyle(
+        'numbered_item', parent=s['body'], leftIndent=24, firstLineIndent=-24,
+        spaceAfter=5, alignment=TA_LEFT, wordWrap='CJK')
     s['td'] = ParagraphStyle(
         'td', parent=base, fontName=FONT_REGULAR, fontSize=13, leading=17.5,
         wordWrap='CJK', textColor=diagrams.INK)
@@ -236,6 +250,28 @@ def _styles() -> dict[str, ParagraphStyle]:
     s['note'] = ParagraphStyle(
         'note', parent=base, fontName=FONT_REGULAR, fontSize=14,
         leading=20, textColor=diagrams.INK)
+
+    # สไตล์สำหรับหัวเรื่องภาคผนวก และหน้าคั่นบอกตอนภาคผนวกตามหลักวิชาการ
+    s['app_label'] = ParagraphStyle(
+        'app_label', parent=base, fontName=FONT_BOLD, fontSize=18, leading=24,
+        spaceBefore=6, spaceAfter=2, alignment=TA_CENTER, textColor=diagrams.INK,
+        keepWithNext=True)
+    s['app_title'] = ParagraphStyle(
+        'app_title', parent=base, fontName=FONT_BOLD, fontSize=16, leading=22,
+        spaceBefore=0, spaceAfter=2, alignment=TA_CENTER, textColor=diagrams.INK,
+        keepWithNext=True)
+    s['app_subtitle'] = ParagraphStyle(
+        'app_subtitle', parent=base, fontName=FONT_BOLD, fontSize=14, leading=18,
+        spaceBefore=0, spaceAfter=8, alignment=TA_CENTER, textColor=diagrams.INK,
+        keepWithNext=True)
+    s['appendix_fly_title'] = ParagraphStyle(
+        'appendix_fly_title', parent=base, fontName=FONT_BOLD, fontSize=24, leading=34,
+        spaceBefore=0, spaceAfter=6, alignment=TA_CENTER, textColor=diagrams.INK,
+        keepWithNext=True)
+    s['appendix_fly_subtitle'] = ParagraphStyle(
+        'appendix_fly_subtitle', parent=base, fontName=FONT_BOLD, fontSize=16, leading=24,
+        spaceBefore=0, spaceAfter=0, alignment=TA_CENTER, textColor=diagrams.INK,
+        keepWithNext=True)
 
     # สไตล์สำหรับหน้าปกและหน้าอนุมัติ (สีดำล้วน)
     s['cover_institution'] = ParagraphStyle(
@@ -445,9 +481,9 @@ def _toc(entries: list[tuple[str, str, str | int]]) -> list:
          Paragraph('<b>หน้า</b>', s['th'])],
     ]
     for num, title, page in entries:
-        is_major = not num or num.startswith('บทที่') or num.startswith('ภาค') or num in ('บทคัดย่อ', 'เอกสารอ้างอิง') or title in ('สารบัญเนื้อหา', 'สารบัญตาราง', 'สารบัญภาพ', 'เอกสารอ้างอิงและบรรณานุกรม')
+        is_major = not num or num.startswith('บทที่') or title in ('สารบัญเนื้อหา', 'สารบัญตาราง', 'สารบัญภาพ', 'เอกสารอ้างอิงและบรรณานุกรม', 'ภาคผนวก', 'บทคัดย่อ')
         cell_style = s['td']
-        num_text = f'<b>{esc(num)}</b>' if is_major and num else esc(num)
+        num_text = f'<b>{esc(num)}</b>' if (is_major or num.startswith('ภาคผนวก')) and num else esc(num)
         title_text = f'<b>{esc(title)}</b>' if is_major else f'&nbsp;&nbsp;&nbsp;&nbsp;{esc(title)}'
         rows.append([
             Paragraph(num_text, cell_style),
@@ -549,12 +585,17 @@ def _figure(drawing_or_img, caption: str, styles: dict, anchor: Flowable | None 
         with PILImage.open(img_path) as pil_im:
             w_px, h_px = pil_im.size
         aspect = h_px / w_px
-        target_w = min(CONTENT_W, 145 * mm)
-        target_h = target_w * aspect
-        # จำกัดความสูงไม่ให้เกิน 88 มม. เพื่อให้จัดวางร่วมกับข้อความในหน้าได้อย่างลงตัว
-        if target_h > 88 * mm:
-            target_h = 88 * mm
-            target_w = target_h / aspect
+        is_qr = 'qr' in img_path.lower() or 'qr' in caption.lower()
+        if is_qr:
+            target_w = 36 * mm
+            target_h = 36 * mm
+        else:
+            target_w = min(CONTENT_W, 145 * mm)
+            target_h = target_w * aspect
+            # จำกัดความสูงไม่ให้เกิน 88 มม. เพื่อให้จัดวางร่วมกับข้อความในหน้าได้อย่างลงตัว
+            if target_h > 88 * mm:
+                target_h = 88 * mm
+                target_w = target_h / aspect
 
         img = Image(img_path, width=target_w, height=target_h)
         img_table = Table([[img]], colWidths=[target_w])
@@ -567,13 +608,22 @@ def _figure(drawing_or_img, caption: str, styles: dict, anchor: Flowable | None 
             ('TOPPADDING', (0, 0), (-1, -1), 0),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ]))
-        elements.extend([
-            Spacer(1, 4),
-            img_table,
-            Spacer(1, 3),
-            Paragraph(esc(caption), s['caption']),
-            Spacer(1, 6),
-        ])
+        if is_qr:
+            elements.extend([
+                Spacer(1, 2),
+                img_table,
+                Spacer(1, 2),
+                Paragraph(esc(caption), s['caption']),
+                Spacer(1, 3),
+            ])
+        else:
+            elements.extend([
+                Spacer(1, 4),
+                img_table,
+                Spacer(1, 3),
+                Paragraph(esc(caption), s['caption']),
+                Spacer(1, 6),
+            ])
     else:
         scale = min(1.0, CONTENT_W / drawing_or_img.width)
         img = Image(drawing_or_img, width=drawing_or_img.width * scale,
@@ -600,24 +650,35 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
         flowables.append(Paragraph(esc(spec['title']), s['table_caption']))
 
     head_cols = len(spec['head'])
+    title = spec.get('title', '')
     if widths is None:
         if head_cols == 2:
-            widths = [CONTENT_W * 0.35, CONTENT_W * 0.65]
+            if 'ประวัติผู้จัดทำ' in title:
+                widths = [45 * mm, CONTENT_W - 45 * mm]
+            else:
+                widths = [CONTENT_W * 0.35, CONTENT_W * 0.65]
         elif head_cols == 3:
             h0 = str(spec['head'][0])
-            if 'บทบาท' in h0:
+            if 'ก.1' in title or 'แหล่งเข้าถึงระบบ' in title:
+                widths = [44 * mm, 68 * mm, 43 * mm]
+            elif 'ข.1' in title or 'สิทธิ์การเข้าถึง' in title:
+                widths = [45 * mm, 48 * mm, 62 * mm]
+            elif 'บทบาท' in h0:
                 widths = [CONTENT_W * 0.25, CONTENT_W * 0.38, CONTENT_W * 0.37]
             elif 'ด้าน' in h0:
                 widths = [CONTENT_W * 0.24, CONTENT_W * 0.40, CONTENT_W * 0.36]
             else:
                 widths = [CONTENT_W * 0.25, CONTENT_W * 0.40, CONTENT_W * 0.35]
         elif head_cols == 4:
-            widths = [CONTENT_W * 0.16, CONTENT_W * 0.26, CONTENT_W * 0.28, CONTENT_W * 0.30]
+            if 'ก.2' in title or 'บัญชีผู้ใช้' in title:
+                widths = [28 * mm, 28 * mm, 45 * mm, 54 * mm]
+            else:
+                widths = [CONTENT_W * 0.16, CONTENT_W * 0.26, CONTENT_W * 0.28, CONTENT_W * 0.30]
         elif head_cols == 6:
             widths = [31 * mm, 21 * mm, 24 * mm, 24 * mm, 26 * mm, CONTENT_W - 126 * mm]
 
     head = [Paragraph(esc(h), s['th']) for h in spec['head']]
-    body = [[Paragraph(esc(c), s['td']) for c in row] for row in spec['rows']]
+    body = [[Paragraph(esc(c).replace('\n', '<br/>'), s['td']) for c in row] for row in spec['rows']]
     table = Table([head] + body, colWidths=widths, repeatRows=1)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f0f0f0')),
@@ -628,10 +689,10 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
         ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#d0d0d0')),
         ('ROWBACKGROUNDS', (0, 1), (-1, -1),
          [colors.white, colors.HexColor('#fafafa')]),
-        ('TOPPADDING', (0, 0), (-1, -1), 4.5),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4.5),
-        ('LEFTPADDING', (0, 0), (-1, -1), 5.5),
-        ('RIGHTPADDING', (0, 0), (-1, -1), 5.5),
+        ('TOPPADDING', (0, 0), (-1, -1), 3.5),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 3.5),
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
     ]))
     flowables.append(table)
     if 'title' in spec and spec['title'] and len(spec['rows']) <= 3:
@@ -663,10 +724,18 @@ def _block_renderer(blocks, styles: dict, page_registry: dict | None = None) -> 
             for item in block[1]:
                 text, detail = (item if isinstance(item, tuple)
                                 else (item, ''))
-                out.append(Paragraph(
-                    f'<bullet>&bull;</bullet>{esc(text)}{esc(detail)}',
-                    s['bullet']))
+                clean_text = text.strip()
+                if re.match(r'^\d+\.', clean_text):
+                    out.append(Paragraph(
+                        f'<b>{esc(clean_text)}</b> {esc(detail.strip())}',
+                        s['numbered_item']))
+                else:
+                    out.append(Paragraph(
+                        f'<bullet>&bull;</bullet>{esc(text)}{esc(detail)}',
+                        s['bullet']))
             out.append(Spacer(1, 5))
+        elif kind == 'page_break':
+            out.append(PageBreak())
         elif kind == 'table':
             out.extend(_data_table(block[1], s))
             out.append(Spacer(1, 10))
@@ -692,7 +761,7 @@ def _block_renderer(blocks, styles: dict, page_registry: dict | None = None) -> 
         elif kind == 'image':
             img_path = block[1]
             caption = block[2] if len(block) > 2 else ''
-            anchor_obj = PageAnchor('fig_app_1', page_registry) if (page_registry and 'ก.1' in caption) else None
+            anchor_obj = PageAnchor('fig_app_1', page_registry) if (page_registry is not None and 'ก.1' in caption) else None
             if os.path.exists(img_path):
                 out.extend(_figure(img_path, caption, s, anchor=anchor_obj))
     return out
@@ -845,10 +914,11 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         ('5.5', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('sec_5_5', 26)),
         ('5.6', 'ข้อจำกัดและข้อเสนอแนะในการพัฒนาต่อยอด', p_num('sec_5_6', 27)),
         ('', 'เอกสารอ้างอิงและบรรณานุกรม', p_num('ch_references', 28)),
-        ('ภาคผนวก ก', 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ', p_num('ch_app_a', 29)),
-        ('ภาคผนวก ข', 'คู่มือการใช้งานระบบโดยย่อ', p_num('ch_app_b', 31)),
-        ('ภาคผนวก ค', 'พจนานุกรมข้อมูลและโครงสร้างระบบ', p_num('ch_app_c', 33)),
-        ('ภาคผนวก ง', 'ประวัติผู้จัดทำโครงงาน', p_num('ch_app_d', 42)),
+        ('', 'ภาคผนวก', p_num('ch_appendix', 29)),
+        ('ภาคผนวก ก', 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ', p_num('ch_app_a', 30)),
+        ('ภาคผนวก ข', 'คู่มือการใช้งานระบบโดยย่อ', p_num('ch_app_b', 32)),
+        ('ภาคผนวก ค', 'พจนานุกรมข้อมูลและโครงสร้างระบบ', p_num('ch_app_c', 34)),
+        ('ภาคผนวก ง', 'ประวัติผู้จัดทำโครงงาน', p_num('ch_app_d', 44)),
     ]
     story += _toc(toc_entries)
     story.append(PageBreak())
@@ -863,8 +933,10 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         ('ตารางที่ 5.2', 'สรุปผลการประเมินชุดการทดสอบอัตโนมัติ', p_num('tab_5_2', 25)),
         ('ตารางที่ 5.3', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('tab_5_3', 26)),
         ('ตารางที่ 5.4', 'ข้อจำกัดของระบบในปัจจุบัน', p_num('tab_5_4', 27)),
-        ('ตารางที่ ก.1', 'ข้อมูลแหล่งเข้าถึงระบบและรหัสต้นฉบับ', p_num('tab_app_1', 29)),
-        ('ตารางที่ ก.2', 'บัญชีผู้ใช้สำหรับการทดสอบระบบ (Test Accounts)', p_num('tab_app_2', 30)),
+        ('ตารางที่ ก.1', 'ข้อมูลแหล่งเข้าถึงระบบและรหัสต้นฉบับ', p_num('tab_app_1', 30)),
+        ('ตารางที่ ก.2', 'บัญชีผู้ใช้สำหรับการทดสอบระบบ (Test Accounts)', p_num('tab_app_2', 31)),
+        ('ตารางที่ ข.1', 'สรุปหน้าที่และสิทธิ์การเข้าถึงเมนูของเจ้าหน้าที่แต่ละบทบาท', p_num('tab_app_3', 33)),
+        ('ตารางที่ ง.1', 'ประวัติผู้จัดทำโครงงาน (Curriculum Vitae)', p_num('tab_app_4', 44)),
     ]
     story += _lot(lot_entries)
     story.append(PageBreak())
@@ -1034,8 +1106,18 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         story.append(NextPageTemplate('chapter_first'))
         story.append(PageBreak())
 
-    # 5. ภาคผนวก 4 ชุด
+    # 5. หน้าบอกตอนภาคผนวก และภาคผนวก 4 ชุด
     if appendix_blocks:
+        # หน้าบอกตอน "ภาคผนวก" (แผ่นคั่นตอนตามหลักวิชาการ)
+        story.append(NextPageTemplate('chapter_first'))
+        story.append(PageAnchor('ch_appendix', page_registry))
+        story.append(_ChapterMarker('ภาคผนวก', current_chapter))
+        story.append(Spacer(1, 95 * mm))
+        story.append(Paragraph('<b>ภาคผนวก</b>', styles['appendix_fly_title']))
+        story.append(Spacer(1, 3 * mm))
+        story.append(Paragraph('<b>(APPENDICES)</b>', styles['appendix_fly_subtitle']))
+        story.append(PageBreak())
+
         first_app = True
         for block in appendix_blocks:
             kind = block[0]
@@ -1055,9 +1137,21 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                 first_app = False
                 story.append(PageAnchor(app_key, page_registry))
                 story.append(_ChapterMarker(app_title, current_chapter))
-                story.append(Paragraph(esc(app_title), styles['h1']))
-                story.append(Spacer(1, 4 * mm))
+
+                app_label, th_title, en_title = _split_appendix_title(app_title)
+                story.append(Paragraph(esc(app_label), styles['app_label']))
+                if th_title:
+                    story.append(Spacer(1, 2 * mm))
+                    story.append(Paragraph(esc(th_title), styles['app_title']))
+                if en_title:
+                    story.append(Spacer(1, 1 * mm))
+                    story.append(Paragraph(esc(en_title), styles['app_subtitle']))
+                story.append(Spacer(1, 6 * mm))
                 story.append(NextPageTemplate('chapter_body'))
+                continue
+
+            if kind == 'page_break':
+                story.append(PageBreak())
                 continue
 
             if kind == 'table':
@@ -1068,6 +1162,10 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
                     anchor_key = 'tab_app_1'
                 elif 'ก.2' in t_title or 'บัญชีผู้ใช้สำหรับการทดสอบ' in t_str:
                     anchor_key = 'tab_app_2'
+                elif 'ข.1' in t_title or 'สิทธิ์การเข้าถึง' in t_str:
+                    anchor_key = 'tab_app_3'
+                elif 'ง.1' in t_title or 'ประวัติผู้จัดทำ' in t_title or 'ประวัติผู้จัดทำ' in t_str:
+                    anchor_key = 'tab_app_4'
 
                 anchor_obj = PageAnchor(anchor_key, page_registry) if anchor_key else None
                 story += _data_table(block[1], styles, anchor=anchor_obj)

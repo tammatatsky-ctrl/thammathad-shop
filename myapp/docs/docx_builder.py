@@ -37,6 +37,17 @@ MARGIN_CM = 2.2
 CONTENT_CM = PAGE_W_CM - 2 * MARGIN_CM
 
 
+def _split_appendix_title(title: str) -> tuple[str, str, str]:
+    """แยกชื่อหัวข้อภาคผนวกเป็น (ส่วนหัวภาคผนวก, ชื่อภาษาไทย, ชื่อภาษาอังกฤษ) เพื่อจัดวางตามหลักวิชาการ"""
+    m = re.match(r'^(ภาคผนวก\s+[ก-ฮA-Z])\s+(.+?)(?:\s*\((.+?)\))?$', title.strip())
+    if m:
+        app_label = m.group(1)
+        th_title = m.group(2)
+        en_title = f'({m.group(3)})' if m.group(3) else ''
+        return app_label, th_title, en_title
+    return title.strip(), '', ''
+
+
 def render_diagram_png(drawing, dpi: int = 200) -> bytes:
     """แปลง Drawing เป็น PNG ในหน่วยความจำ
 
@@ -257,13 +268,36 @@ def _render_blocks(doc, blocks: list) -> None:
         elif kind == 'bullets':
             for item in block[1]:
                 text, detail = (item if isinstance(item, tuple) else (item, ''))
-                p = doc.add_paragraph(style='List Bullet')
-                p.paragraph_format.space_after = Pt(4)
-                p.paragraph_format.line_spacing = 1.35
-                _style_run(p.add_run(text + detail), 16, False, (0, 0, 0))
+                clean_text = text.strip()
+                if re.match(r'^\d+\.', clean_text):
+                    p = doc.add_paragraph()
+                    p.paragraph_format.left_indent = Cm(0.75)
+                    p.paragraph_format.first_line_indent = Cm(-0.75)
+                    p.paragraph_format.space_after = Pt(4)
+                    p.paragraph_format.line_spacing = 1.35
+                    _style_run(p.add_run(clean_text + ' '), 16, True, (0, 0, 0))
+                    _style_run(p.add_run(detail.strip()), 16, False, (0, 0, 0))
+                else:
+                    p = doc.add_paragraph(style='List Bullet')
+                    p.paragraph_format.space_after = Pt(4)
+                    p.paragraph_format.line_spacing = 1.35
+                    _style_run(p.add_run(text + detail), 16, False, (0, 0, 0))
             doc.add_paragraph()
+        elif kind == 'page_break':
+            _page_break(doc)
         elif kind == 'table':
-            _table(doc, block[1])
+            spec = block[1]
+            title = spec.get('title', '')
+            widths_cm = None
+            if 'ก.1' in title or 'แหล่งเข้าถึงระบบ' in title:
+                widths_cm = [4.4, 6.8, 4.3]
+            elif 'ก.2' in title or 'บัญชีผู้ใช้' in title:
+                widths_cm = [2.8, 2.8, 4.5, 5.4]
+            elif 'ข.1' in title or 'สิทธิ์การเข้าถึง' in title:
+                widths_cm = [4.0, 5.0, 6.5]
+            elif 'ง.1' in title or 'ประวัติผู้จัดทำ' in title:
+                widths_cm = [4.5, 11.0]
+            _table(doc, spec, widths_cm=widths_cm)
         elif kind == 'focus':
             _para(doc, 'ตารางที่ 5.1 สาระสำคัญของการทดสอบระบบ (Test Focus)', 15, bold=True, space_after=4, color=(0, 0, 0))
             _table(doc, {'head': ('สิ่งที่ตรวจ', 'รายละเอียดการทดสอบ'),
@@ -280,8 +314,10 @@ def _render_blocks(doc, blocks: list) -> None:
             img_path = block[1]
             caption = block[2] if len(block) > 2 else ''
             if os.path.exists(img_path):
+                is_qr = 'qr' in img_path.lower() or 'qr' in caption.lower()
+                w_cm = 4.0 if is_qr else 8.0
                 with open(img_path, 'rb') as f:
-                    _picture(doc, f.read(), caption, width_cm=8.0)
+                    _picture(doc, f.read(), caption, width_cm=w_cm)
 
 
 def _default_screenshots_pack() -> dict[str, tuple[str, str]]:
@@ -354,10 +390,11 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
         ('บทที่ 4', 12, 'ผลการพัฒนาและภาพหน้าจอระบบ'),
         ('บทที่ 5', 16, 'การทดสอบและสรุปผล'),
         ('เอกสารอ้างอิง', 19, 'เอกสารอ้างอิงและบรรณานุกรม'),
-        ('ภาคผนวก ก', 20, 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ'),
-        ('ภาคผนวก ข', 22, 'คู่มือการใช้งานระบบโดยย่อ'),
-        ('ภาคผนวก ค', 24, 'พจนานุกรมข้อมูลและโครงสร้างระบบ'),
-        ('ภาคผนวก ง', 32, 'ประวัติผู้จัดทำโครงงาน'),
+        ('ภาคผนวก', 20, 'ภาคผนวก (APPENDICES)'),
+        ('ภาคผนวก ก', 21, 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ'),
+        ('ภาคผนวก ข', 23, 'คู่มือการใช้งานระบบโดยย่อ'),
+        ('ภาคผนวก ค', 25, 'พจนานุกรมข้อมูลและโครงสร้างระบบ'),
+        ('ภาคผนวก ง', 35, 'ประวัติผู้จัดทำโครงงาน'),
     ]
     _toc(doc, toc_rows)
 
@@ -405,6 +442,14 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
         _page_break(doc)
 
     if appendix_blocks:
+        _page_break(doc)
+        # หน้าบอกตอน "ภาคผนวก" ตามหลักวิชาการ
+        for _ in range(8):
+            doc.add_paragraph()
+        _para(doc, 'ภาคผนวก', 24, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=6)
+        _para(doc, '(APPENDICES)', 16, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14)
+        _page_break(doc)
+
         first_app = True
         for block in appendix_blocks:
             kind = block[0]
@@ -412,7 +457,15 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
                 if not first_app:
                     _page_break(doc)
                 first_app = False
-                _para(doc, block[1], 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=14)
+                app_label, th_title, en_title = _split_appendix_title(block[1])
+                _para(doc, app_label, 18, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3)
+                if th_title:
+                    _para(doc, th_title, 16, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=3)
+                if en_title:
+                    _para(doc, en_title, 14, bold=True, align=WD_ALIGN_PARAGRAPH.CENTER, space_after=12)
+                continue
+            if kind == 'page_break':
+                _page_break(doc)
                 continue
             _render_blocks(doc, [block])
 
