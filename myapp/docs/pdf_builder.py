@@ -29,7 +29,7 @@ from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY, TA_LEFT, TA_RIGHT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
-from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, Image,
+from reportlab.platypus import (BaseDocTemplate, CondPageBreak, Flowable, Frame, Image,
                                 KeepTogether, NextPageTemplate, PageBreak,
                                 PageTemplate, Paragraph, Spacer, Table,
                                 TableStyle)
@@ -226,7 +226,7 @@ def _styles() -> dict[str, ParagraphStyle]:
     s['table_caption'] = ParagraphStyle(
         'table_caption', parent=base, fontName=FONT_BOLD, fontSize=15,
         leading=21, alignment=TA_LEFT, textColor=diagrams.INK,
-        spaceBefore=10, spaceAfter=5, keepWithNext=True)
+        spaceBefore=10, spaceAfter=5, keepWithNext=False)
     s['ref_item'] = ParagraphStyle(
         'ref_item', parent=base, fontName=FONT_REGULAR, fontSize=15,
         leading=22, leftIndent=28, firstLineIndent=-28,
@@ -445,17 +445,17 @@ def _toc(entries: list[tuple[str, str, str | int]]) -> list:
          Paragraph('<b>หน้า</b>', s['th'])],
     ]
     for num, title, page in entries:
-        is_chapter = num.startswith('บทที่') or num.startswith('ภาค') or num in ('บทคัดย่อ', 'เอกสารอ้างอิง')
+        is_major = not num or num.startswith('บทที่') or num.startswith('ภาค') or num in ('บทคัดย่อ', 'เอกสารอ้างอิง') or title in ('สารบัญเนื้อหา', 'สารบัญตาราง', 'สารบัญภาพ', 'เอกสารอ้างอิงและบรรณานุกรม')
         cell_style = s['td']
-        num_text = f'<b>{esc(num)}</b>' if is_chapter else esc(num)
-        title_text = f'<b>{esc(title)}</b>' if is_chapter else f'&nbsp;&nbsp;&nbsp;&nbsp;{esc(title)}'
+        num_text = f'<b>{esc(num)}</b>' if is_major and num else esc(num)
+        title_text = f'<b>{esc(title)}</b>' if is_major else f'&nbsp;&nbsp;&nbsp;&nbsp;{esc(title)}'
         rows.append([
             Paragraph(num_text, cell_style),
             Paragraph(title_text, cell_style),
             Paragraph(str(page), cell_style),
         ])
 
-    table = Table(rows, colWidths=[20 * mm, CONTENT_W - 36 * mm, 16 * mm], repeatRows=1)
+    table = Table(rows, colWidths=[24 * mm, CONTENT_W - 40 * mm, 16 * mm], repeatRows=1)
     table.setStyle(TableStyle([
         ('FONTNAME', (0, 0), (-1, -1), FONT_REGULAR),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
@@ -592,6 +592,8 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
     """ตารางข้อมูลพร้อมคำอธิบายหัวตาราง (Table Caption ด้านบนตามหลักวิชาการ)"""
     s = styles
     flowables = []
+    # ป้องกันคำอธิบายหัวตารางตกค้างเดี่ยว ๆ ท้ายหน้า ถ้าพื้นที่เหลือน้อยกว่า 50 มม. ให้ยกไปหน้าถัดไปพร้อมหัวตาราง
+    flowables.append(CondPageBreak(50 * mm))
     if anchor:
         flowables.append(anchor)
     if 'title' in spec and spec['title']:
@@ -612,7 +614,7 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
         elif head_cols == 4:
             widths = [CONTENT_W * 0.16, CONTENT_W * 0.26, CONTENT_W * 0.28, CONTENT_W * 0.30]
         elif head_cols == 6:
-            widths = [22 * mm, 32 * mm, 24 * mm, 24 * mm, 26 * mm, CONTENT_W - 128 * mm]
+            widths = [31 * mm, 21 * mm, 24 * mm, 24 * mm, 26 * mm, CONTENT_W - 126 * mm]
 
     head = [Paragraph(esc(h), s['th']) for h in spec['head']]
     body = [[Paragraph(esc(c), s['td']) for c in row] for row in spec['rows']]
@@ -818,9 +820,9 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
     # 2.1 สารบัญเนื้อหา (Table of Contents)
     story.append(PageAnchor('toc', page_registry))
     toc_entries = [
-        ('สารบัญ', 'สารบัญเนื้อหา', p_prelim('toc', 'ก')),
-        ('สารบัญตาราง', 'สารบัญตาราง', p_prelim('lot', 'ข')),
-        ('สารบัญภาพ', 'สารบัญภาพ', p_prelim('lof', 'ค')),
+        ('', 'สารบัญเนื้อหา', p_prelim('toc', 'ก')),
+        ('', 'สารบัญตาราง', p_prelim('lot', 'ค')),
+        ('', 'สารบัญภาพ', p_prelim('lof', 'ง')),
         ('บทที่ 1', 'บทนำ', p_num('ch_intro', 1)),
         ('1.1', 'ความเป็นมาและความสำคัญของโครงงาน', p_num('sec_1_1', 1)),
         ('1.2', 'วัตถุประสงค์ของโครงงาน', p_num('sec_1_2', 1)),
@@ -851,7 +853,7 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
         ('5.4', 'สรุปผลการดำเนินงานโครงงาน', p_num('sec_5_4', 25)),
         ('5.5', 'ปัญหา อุปสรรค และแนวทางการแก้ไข', p_num('sec_5_5', 26)),
         ('5.6', 'ข้อจำกัดและข้อเสนอแนะในการพัฒนาต่อยอด', p_num('sec_5_6', 27)),
-        ('เอกสารอ้างอิง', 'เอกสารอ้างอิงและบรรณานุกรม', p_num('ch_references', 28)),
+        ('', 'เอกสารอ้างอิงและบรรณานุกรม', p_num('ch_references', 28)),
         ('ภาคผนวก ก', 'ข้อมูลการเข้าใช้งานระบบและแหล่งเก็บรหัสต้นฉบับ', p_num('ch_app_a', 29)),
         ('ภาคผนวก ข', 'คู่มือการใช้งานระบบโดยย่อ', p_num('ch_app_b', 31)),
         ('ภาคผนวก ค', 'พจนานุกรมข้อมูลและโครงสร้างระบบ', p_num('ch_app_c', 33)),
@@ -991,21 +993,21 @@ def _build_story(meta: dict, chapters: list[dict], diagrams_pack: dict,
 
             story += _block_renderer([block], styles, page_registry)
 
-            # ฝังไดอะแกรมเวกเตอร์ในบทที่ 2 ให้สอดคล้องกับเนื้อหา
-            if ch_id == 'analysis' and kind == 'h2':
-                if '2.2' in block[1] and 'usecase' in diagrams_pack:
+            # ฝังไดอะแกรมเวกเตอร์ในบทที่ 2 ให้สอดคล้องกับเนื้อหา (วางต่อจากย่อหน้าที่อ้างอิงถึงภาพ)
+            if ch_id == 'analysis' and kind == 'p':
+                if 'ภาพที่ 2.1' in block[1] and 'usecase' in diagrams_pack:
                     d, cap = diagrams_pack['usecase']
                     anchor_obj = PageAnchor('fig_2_1', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
-                elif '2.3' in block[1] and 'layered' in diagrams_pack:
+                elif 'ภาพที่ 2.2' in block[1] and 'layered' in diagrams_pack:
                     d, cap = diagrams_pack['layered']
                     anchor_obj = PageAnchor('fig_2_2', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
-                elif '2.4' in block[1] and 'er' in diagrams_pack:
+                elif 'ภาพที่ 2.3' in block[1] and 'er' in diagrams_pack:
                     d, cap = diagrams_pack['er']
                     anchor_obj = PageAnchor('fig_2_3', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)
-                elif '2.6' in block[1] and 'lifecycle' in diagrams_pack:
+                elif 'ภาพที่ 2.4' in block[1] and 'lifecycle' in diagrams_pack:
                     d, cap = diagrams_pack['lifecycle']
                     anchor_obj = PageAnchor('fig_2_4', page_registry)
                     story += _figure(d, cap, styles, anchor=anchor_obj)

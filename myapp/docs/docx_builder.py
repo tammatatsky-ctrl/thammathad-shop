@@ -369,17 +369,17 @@ def build_docx(target: str, meta: dict, chapters: list[dict],
         for block in chapter['blocks']:
             _render_blocks(doc, [block])
             kind = block[0]
-            if chapter['id'] == 'analysis' and kind == 'h2':
-                if '2.2' in block[1] and 'usecase' in diagrams_pack:
+            if chapter['id'] == 'analysis' and kind == 'p':
+                if 'ภาพที่ 2.1' in block[1] and 'usecase' in diagrams_pack:
                     d, cap = diagrams_pack['usecase']
                     _picture(doc, render_diagram_png(d), cap)
-                elif '2.3' in block[1] and 'layered' in diagrams_pack:
+                elif 'ภาพที่ 2.2' in block[1] and 'layered' in diagrams_pack:
                     d, cap = diagrams_pack['layered']
                     _picture(doc, render_diagram_png(d), cap)
-                elif '2.4' in block[1] and 'er' in diagrams_pack:
+                elif 'ภาพที่ 2.3' in block[1] and 'er' in diagrams_pack:
                     d, cap = diagrams_pack['er']
                     _picture(doc, render_diagram_png(d), cap)
-                elif '2.6' in block[1] and 'lifecycle' in diagrams_pack:
+                elif 'ภาพที่ 2.4' in block[1] and 'lifecycle' in diagrams_pack:
                     d, cap = diagrams_pack['lifecycle']
                     _picture(doc, render_diagram_png(d), cap)
 
