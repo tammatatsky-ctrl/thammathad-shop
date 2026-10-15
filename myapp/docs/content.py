@@ -480,14 +480,14 @@ TESTING_CONCLUSION = [
 # เอกสารอ้างอิงและบรรณานุกรม
 # ===========================================================================
 REFERENCES = [
-    ('ref_item', '[1] Django Software Foundation. (2026). Django documentation (Release 6.0). Retrieved from https://docs.djangoproject.com/'),
-    ('ref_item', '[2] Python Software Foundation. (2026). Python 3.14 Documentation and Language Reference. Retrieved from https://docs.python.org/3/'),
-    ('ref_item', '[3] Martin, R. C. (2018). Clean Architecture: A Craftsman\'s Guide to Software Structure and Design. Prentice Hall.'),
-    ('ref_item', '[4] Fowler, M. (2002). Patterns of Enterprise Application Architecture. Addison-Wesley Professional.'),
-    ('ref_item', '[5] Gamma, E., Helm, R., Johnson, R., & Vlissides, J. (1994). Design Patterns: Elements of Reusable Object-Oriented Software. Addison-Wesley.'),
-    ('ref_item', '[6] Open Web Application Security Project. (2021). OWASP Top 10: 2021 The Ten Most Critical Web Application Security Risks. Retrieved from https://owasp.org/Top10/'),
-    ('ref_item', '[7] Bank of Thailand. (2017). Thai QR Payment Standard Specifications based on EMVCo Standard. Bangkok: Bank of Thailand.'),
-    ('ref_item', '[8] Greenfield, D., & Greenfeld, A. R. (2022). Two Scoops of Django 3.x: Best Practices for the Django Web Framework. Two Scoops Press.'),
+    ('ref_item', 'Bank of Thailand. (2017). Thai QR Payment Standard Specifications based on EMVCo Standard. Bank of Thailand.'),
+    ('ref_item', 'Django Software Foundation. (2026). Django Web Framework Documentation (Release 6.0). https://docs.djangoproject.com/'),
+    ('ref_item', 'Fowler, M. (2002). Patterns of Enterprise Application Architecture. Addison-Wesley Professional.'),
+    ('ref_item', 'Gamma, E., Helm, R., Johnson, R., & Vlissides, J. (1994). Design Patterns: Elements of Reusable Object-Oriented Software. Addison-Wesley.'),
+    ('ref_item', 'Greenfield, D., & Greenfeld, A. R. (2022). Two Scoops of Django 3.x: Best Practices for the Django Web Framework. Two Scoops Press.'),
+    ('ref_item', 'Martin, R. C. (2018). Clean Architecture: A Craftsman\'s Guide to Software Structure and Design. Prentice Hall.'),
+    ('ref_item', 'Open Web Application Security Project. (2021). OWASP Top 10: 2021 The Ten Most Critical Web Application Security Risks. https://owasp.org/Top10/'),
+    ('ref_item', 'Python Software Foundation. (2026). Python 3.14 Documentation and Language Reference. https://docs.python.org/3/'),
 ]
 
 STUDENT_TODO = [
