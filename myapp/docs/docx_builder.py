@@ -400,7 +400,7 @@ def _render_blocks(doc, blocks: list) -> None:
             if 'ก.1' in title or 'แหล่งเข้าถึงระบบ' in title:
                 widths_cm = [4.4, 6.8, 4.3]
             elif 'ก.2' in title or 'บัญชีผู้ใช้' in title:
-                widths_cm = [2.2, 2.5, 4.0, 6.8]
+                widths_cm = [3.8, 2.0, 3.6, 6.1]
             elif 'ข.1' in title or 'สิทธิ์การเข้าถึง' in title:
                 widths_cm = [4.0, 5.0, 6.5]
             elif 'ง.1' in title or 'ประวัติผู้จัดทำ' in title:

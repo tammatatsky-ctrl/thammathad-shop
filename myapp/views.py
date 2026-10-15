@@ -191,6 +191,13 @@ class CustomerLoginView(View):
 
         user = authenticate(request, username=username, password=password)
         if not user:
+            # รองรับการล็อกอินด้วยอีเมล (สำหรับบัญชีตัวอย่างหรือผู้ใช้ที่จำอีเมลแทน username)
+            from django.contrib.auth.models import User
+            user_by_email = User.objects.filter(email__iexact=username).first()
+            if user_by_email:
+                user = authenticate(request, username=user_by_email.username, password=password)
+
+        if not user:
             LoginThrottle.fail(username)
             return render(request, self.template_name, {
                 'form': form,

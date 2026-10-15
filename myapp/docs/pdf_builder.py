@@ -726,7 +726,7 @@ def _data_table(spec: dict, styles: dict, widths=None, anchor: Flowable | None =
                 widths = [CONTENT_W * 0.25, CONTENT_W * 0.40, CONTENT_W * 0.35]
         elif head_cols == 4:
             if 'ก.2' in title or 'บัญชีผู้ใช้' in title:
-                widths = [22 * mm, 25 * mm, 40 * mm, 68 * mm]
+                widths = [38 * mm, 20 * mm, 36 * mm, 61 * mm]
             else:
                 widths = [CONTENT_W * 0.16, CONTENT_W * 0.26, CONTENT_W * 0.28, CONTENT_W * 0.30]
         elif head_cols == 6:

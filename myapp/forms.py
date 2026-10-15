@@ -260,9 +260,9 @@ class CustomerRegistrationForm(forms.Form):
 
 class CustomerLoginForm(forms.Form):
     """ฟอร์มเข้าสู่ระบบลูกค้า พร้อมตัวเลือก Remember Me"""
-    username = forms.EmailField(
-        label='อีเมล',
-        widget=forms.EmailInput(attrs={'class': 'form-control', 'placeholder': 'you@example.com', 'autocomplete': 'username'}),
+    username = forms.CharField(
+        label='อีเมลหรือชื่อผู้ใช้',
+        widget=forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'you@example.com หรือชื่อผู้ใช้', 'autocomplete': 'username'}),
     )
     password = forms.CharField(
         label='รหัสผ่าน',
