@@ -732,6 +732,8 @@ h6 {
   color: var(--ink);
   font-weight: 600;
   letter-spacing: -0.01em;
+  white-space: nowrap;
+  flex-shrink: 0;
   transition: opacity 0.3s var(--ease-apple);
 }
 .navbar .navbar-brand:hover {
@@ -744,6 +746,12 @@ h6 {
   padding: 0.45rem 0.85rem !important;
   border-radius: 980px;
   border: 1px solid transparent;
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  word-break: keep-all;
+  flex-shrink: 0;
+  gap: 0.35rem;
   transition:
     background 0.3s var(--ease-apple),
     color 0.3s var(--ease-apple),
@@ -752,8 +760,9 @@ h6 {
     transform 0.3s var(--ease-apple);
 }
 .navbar .nav-link .bi {
-  margin-right: 0.3rem;
+  margin-right: 0;
   opacity: 0.82;
+  flex-shrink: 0;
 }
 .navbar .nav-link:hover {
   color: var(--ink);
@@ -832,6 +841,49 @@ h6 {
   font-weight: 600;
   padding: 2px 7px;
   margin-left: 4px;
+}
+
+/* ---- Navbar Responsive Adjustments ---- */
+@media (min-width: 992px) and (max-width: 1249.98px) {
+  .navbar .nav-link {
+    padding: 0.35rem 0.52rem !important;
+    font-size: 0.82rem;
+    gap: 0.25rem;
+  }
+  .navbar .navbar-brand {
+    font-size: 0.95rem;
+    padding-right: 0.2rem;
+  }
+  .navbar-nav {
+    gap: 0.1rem;
+  }
+  .navbar .account-chip,
+  .navbar .zone-switch {
+    font-size: 0.8rem;
+    padding: 0.3rem 0.55rem;
+  }
+  .navbar .account-chip {
+    max-width: 145px;
+  }
+}
+
+@media (max-width: 991.98px) {
+  .navbar-collapse {
+    padding: 0.75rem 0 1rem;
+    border-top: 1px solid var(--gray-border-soft);
+    margin-top: 0.5rem;
+  }
+  .navbar .navbar-nav {
+    margin-bottom: 0.75rem;
+    gap: 0.2rem;
+  }
+  .navbar .nav-link {
+    display: flex;
+    width: 100%;
+    padding: 0.55rem 0.85rem !important;
+    border-radius: 12px;
+    font-size: 0.9rem;
+  }
 }
 
 /* =========================================
