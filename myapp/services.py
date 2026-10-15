@@ -496,7 +496,7 @@ class ThaiCalendar:
 
 
 class ExchangeRate:
-    """อัตราแลกเปลี่ยน THB→USD จาก external API (open.er-api.com — ฟรี ไม่ต้องใช้ key)
+    """อัตราแลกเปลี่ยน THB ต่อ USD จาก external API (open.er-api.com — ฟรี ไม่ต้องใช้ key)
 
     - Cache ในหน่วยความจำแบบ TTL 6 ชม. → เรียก API เฉพาะเมื่อหมดอายุ (ไม่ช้าหน้าเว็บ)
     - Timeout 5 วินาที + fallback: ถ้า API ล่ม/ออกเน็ตไม่ได้ ใช้ rate ล่าสุดที่เคยได้
@@ -612,7 +612,7 @@ class GeoIP:
 
 
 class Translate:
-    """แปลข้อความด้วย MyMemory (ฟรี ไม่ต้องใช้ key/สมัคร) — ตัวช่วยฟอร์มสินค้า EN→TH.
+    """แปลข้อความด้วย MyMemory (ฟรี ไม่ต้องใช้ key/สมัคร) — ตัวช่วยฟอร์มสินค้า EN เป็น TH.
 
     กรณีใช้จริง: สตาฟวางสเปก/คำอธิบายอังกฤษจากผู้ผลิต → กดปุ่มแปลได้คำอธิบายไทย
     โดยไม่ต้องมี GEMINI_API_KEY (เป็นคู่หูของ GeminiAI ไม่ใช่ตัวแทน).
@@ -711,7 +711,7 @@ class PromptPay:
 
 
 class QrCode:
-    """QR จากข้อความทั่วไป → data URI (PNG) ด้วยไลบรารี qrcode ฝั่งเซิร์ฟเวอร์.
+    """สร้าง QR code จากข้อความทั่วไปเป็น data URI (PNG) ด้วยไลบรารี qrcode ฝั่งเซิร์ฟเวอร์.
 
     ใช้แทนการโหลดไลบรารี QR จาก CDN ภายนอก — ทำงานได้แม้ออฟไลน์ และไม่พึ่ง third-party
     (dashboard ใช้สร้าง QR "เปิดระบบบนมือถือ" จาก URL จริงที่ build_absolute_uri).

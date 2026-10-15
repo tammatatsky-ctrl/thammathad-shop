@@ -86,7 +86,8 @@ def adjust_thai(text: str) -> str:
     """ปรับวรรณยุกต์และสระภาษาไทยให้อยู่ในตำแหน่งที่ถูกต้อง (PUA) ไม่ซ้อนทับกัน"""
     if not text:
         return ''
-    chars = list(str(text))
+    text = str(text).replace('\u2192', '->').replace('\u2194', '<->').replace('\u2190', '<-')
+    chars = list(text)
     n = len(chars)
     out: list[str] = []
     prev_cons = ''
