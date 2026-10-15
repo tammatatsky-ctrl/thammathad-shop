@@ -167,22 +167,19 @@ def _page_break(doc):
 
 
 def _header_footer(section, chapter: str = '') -> None:
+    section.different_first_page_header_footer = True
     header = section.header.paragraphs[0]
     header.text = ''
-    header.alignment = WD_ALIGN_PARAGRAPH.LEFT
-    _style_run(header.add_run(f'THAMMATHAD SHOP — รายงานโครงงาน'
-                              + (f'  |  {chapter}' if chapter else '')),
-               14, False, (0, 0, 0))
-
-    footer = section.footer.paragraphs[0]
-    footer.text = ''
-    footer.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-    # เลขหน้ามุมล่างขวา
-    run = footer.add_run()
+    header.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+    # เลขหน้ามุมบนขวา
+    run = header.add_run()
     _style_run(run, 14, False, (0, 0, 0))
     fld = OxmlElement('w:fldSimple')
     fld.set(qn('w:instr'), 'PAGE')
     run._r.append(fld)
+
+    footer = section.footer.paragraphs[0]
+    footer.text = ''
 
 
 def _cover(doc, meta: dict) -> None:

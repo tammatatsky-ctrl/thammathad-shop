@@ -731,21 +731,12 @@ def _create_doc_templates(target: str, meta: dict, current_chapter: list[str],
         pass
 
     def on_chapter_body(canvas, _doc):
-        # หน้าเนื้อหาทั่วไป: มีเส้นหัวกระดาษสีดำบาง และเลขหน้าอารบิกมุมบนขวา
+        # หน้าเนื้อหาทั่วไป: แสดงเฉพาะเลขหน้าอารบิกมุมบนขวาตามมาตรฐานวิชาการ
         canvas.saveState()
         canvas.setFont(FONT_REGULAR, 14)
         canvas.setFillColor(diagrams.INK)
-        header_text = 'รายงานโครงงาน: THAMMATHAD SHOP'
-        if current_chapter and current_chapter[0]:
-            header_text += f'  |  {current_chapter[0][:55]}'
-        canvas.drawString(MARGIN_L, PAGE_H - MARGIN_T + 12, adjust_thai(header_text))
-
         arabic_page = canvas.getPageNumber() - main_start_box[0] + 1
         canvas.drawRightString(PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 12, str(arabic_page))
-
-        canvas.setStrokeColor(diagrams.LINE)
-        canvas.setLineWidth(0.5)
-        canvas.line(MARGIN_L, PAGE_H - MARGIN_T + 6, PAGE_W - MARGIN_R, PAGE_H - MARGIN_T + 6)
         canvas.restoreState()
 
     doc.addPageTemplates([
